@@ -15,7 +15,8 @@ func _run() -> void:
 	await process_frame  # let the root viewport enter the tree
 	_test_route_json_is_valid()
 	_test_alert_gating()
-	_test_pick_by_lane()
+	_test_pick_edge()
+	_test_route_rules()
 	_test_swipe_direction()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
@@ -45,11 +46,34 @@ func _test_alert_gating() -> void:
 	_check(g.available_next(&"rooftops", 2).size() == 1, "tunnel sealed at alert 2")
 
 
-func _test_pick_by_lane() -> void:
-	_check(RouteGraph.pick_by_lane(0, 5, 2) == 0, "far-left lane picks left route")
-	_check(RouteGraph.pick_by_lane(4, 5, 2) == 1, "far-right lane picks right route")
-	_check(RouteGraph.pick_by_lane(2, 5, 3) == 1, "centre lane picks middle of three")
-	_check(RouteGraph.pick_by_lane(3, 5, 1) == 0, "single route always taken")
+func _test_pick_edge() -> void:
+	var straight := {"to": "a"}
+	var left := {"to": "b", "side": "left", "via": "corridor"}
+	var right := {"to": "c", "side": "right", "via": "stairs"}
+	var three: Array[Dictionary] = [straight, left, right]
+	_check(RouteGraph.pick_edge(0, 5, three) == left, "far-left lane takes the left exit")
+	_check(RouteGraph.pick_edge(4, 5, three) == right, "far-right lane takes the right exit")
+	for lane in [1, 2, 3]:
+		_check(RouteGraph.pick_edge(lane, 5, three) == straight, "middle lane %d carries straight on" % lane)
+	var no_left: Array[Dictionary] = [straight, right]
+	_check(RouteGraph.pick_edge(0, 5, no_left) == straight, "far-left with no left exit carries straight on")
+	var ladders: Array[Dictionary] = [left, right]
+	_check(RouteGraph.pick_edge(2, 5, ladders).is_empty(), "middle lane with no straight exit: no way on (capture)")
+	var only_straight: Array[Dictionary] = [straight]
+	_check(not RouteGraph.is_choice(only_straight), "a single straight road is not a choice")
+	_check(RouteGraph.is_choice(ladders), "ladders are a choice")
+
+
+func _test_route_rules() -> void:
+	var bad := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "next": [{"to": "b", "side": "left", "via": "corridor"}, {"to": "c"}]},
+		{"id": "b", "tier": "roof", "end": "extract"},
+		{"id": "c", "tier": "ground", "next": [{"to": "a", "side": "right", "via": "ladder"}]},
+	]})
+	var problems := " ".join(bad.validate())
+	_check("use stairs" in problems, "a corridor that changes height is rejected")
+	_check("ladder must change height" in problems, "a ladder on one level is rejected")
+	_check("ladders only lead to the end" in problems, "a ladder that isn't to the end is rejected")
 
 
 func _test_swipe_direction() -> void:

@@ -38,6 +38,25 @@ enum TargetingMode {
 ## LOCKED: junctions may slow the game but never pause it.
 @export_range(0.4, 1.0) var junction_time_scale: float = 0.7
 
+@export_group("Route splits")
+## How far a side exit (corridor or stairs) turns off toward its side.
+@export_range(0.0, 60.0) var fork_turn_degrees: float = 30.0
+## Height between tiers (underground, ground, roof), in metres.
+@export var tier_height: float = 4.0
+## Stairs cover this many metres forward per metre of height.
+@export var stairs_run: float = 3.0
+## Ladders are a short, steep climb: this many metres forward.
+@export var ladder_length: float = 3.0
+## How much of each branch you can see before you commit.
+@export var fork_preview_length: float = 30.0
+
+@export_group("Capture")
+## Missing the exit at a no-way-on end stops the player this far from the end.
+@export var capture_stop_distance: float = 2.0
+@export_range(1, 6) var capture_guards: int = 4
+## Hands up, guards arrive, then the run ends after this many seconds.
+@export var capture_duration: float = 1.8
+
 @export_group("Shadows")
 ## How dark the centre of a blob shadow is (0 = none, 1 = black).
 @export_range(0.0, 1.0) var shadow_opacity: float = 0.55

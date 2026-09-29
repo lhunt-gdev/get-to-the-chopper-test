@@ -13,7 +13,7 @@ Every push to `main` runs the tests, exports a web build and publishes it to Git
 2. For fullscreen: Share → **Add to Home Screen**, then launch it from the icon.
 3. After a new push, wait for the Action to go green (~2–3 min), then reload.
 
-Controls: swipe left/right to change lane, up to jump, down to slide. At a fork, be on that side of the road. Tap to start and to retry. On desktop: arrow keys, Enter.
+Controls: swipe left/right to change lane, up to jump, down to slide. At a fork, the far-left or far-right lane takes that side exit (corridor, stairs or ladder); the middle 3 lanes carry straight on. Tap to start and to retry. On desktop: arrow keys, Enter.
 
 ## Run it on your computer
 
@@ -27,9 +27,9 @@ Controls: swipe left/right to change lane, up to jump, down to slide. At a fork,
 |---|---|
 | Auto-run, 5 lanes, swipe dodge/jump/slide | Enemies, FIRE, tap-to-target in play |
 | Authored branching route from `route.json` | Contextual cover |
-| Junction prompt + brief slowdown (never a pause); lanes painted per route, sign over the fork | Alarm boxes |
+| Junction prompt + brief slowdown (never a pause); the road physically splits (turns, stairs, end-of-level ladders); lanes painted per exit, sign over the fork | Alarm boxes |
 | Alert level; tripwire raises it; TUNNEL route sealed above Alert 1 | Chopper countdown / leaving |
-| Death, extraction, route summary, discovery saved between sessions | Real route-map screen, art, audio |
+| Death, capture (missed the ladder), extraction, route summary, discovery saved between sessions | Real route-map screen, art, audio |
 | PS1 look: low-res, vertex wobble, affine textures, fog; placeholder textures generated in code, one look per area | |
 
 ## Layout
@@ -58,5 +58,5 @@ Conventions: snake_case files, PascalCase `class_name`s, one feature per folder 
 ```
 GODOT=/path/to/godot tests/run_all.sh
 ```
-- Unit tests: route validity, alert gating, lane→route mapping, swipe direction, targeting priority.
-- Bot playthroughs: a scripted player runs four routes and must die, extract via MOTOR POOL, extract via TUNNEL at Alert 1, and be forced via GATE at Alert 2. If you edit `route.json` and make it unwinnable, CI fails.
+- Unit tests: route validity, alert gating, lane→exit rule, route geometry rules, swipe direction, targeting priority.
+- Bot playthroughs: a scripted player runs five routes and must die, extract straight on via MOTOR POOL, take stairs up then down to the TUNNEL at Alert 1 and ladder out, find the TUNNEL sealed at Alert 2 and ladder down from ROOF EDGE, and be captured for missing the ladder. If you edit `route.json` and make it unwinnable, CI fails.

@@ -17,7 +17,8 @@ expect() {  # scenario, expected substring
   if [[ "$out" == *"$2"* ]]; then echo "PASS $out"; else echo "FAIL [$1] expected '$2', got: ${out:-no result}"; fail=1; fi
 }
 expect naive       "reason=killed"
-expect left        "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL"
-expect right_quiet "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > SERVICE TUNNEL"
-expect right_loud  "reason=extracted alert=2 route=COMPOUND EXIT > ROOFTOPS > AIRFIELD GATE"
+expect ground      "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD"
+expect roof_quiet  "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > SERVICE TUNNEL > HELIPAD"
+expect roof_loud   "reason=extracted alert=2 route=COMPOUND EXIT > ROOFTOPS > ROOF EDGE > HELIPAD"
+expect miss_ladder "reason=captured alert=2 route=COMPOUND EXIT > ROOFTOPS > ROOF EDGE"
 exit $fail

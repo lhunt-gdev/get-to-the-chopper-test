@@ -50,9 +50,14 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   1. **Corridor:** a branch turns off left or right (~15° to start; the angle goes in `Tuning` to test).
   2. **Stairs:** one branch goes up, another goes down.
 - Three height tiers: **roof**, **ground** and **underground** (e.g. sewers). The exit is reached via the roof or ground. From underground the player must get back up, or they hit a dead end or get caught.
-- User's lane idea for a 3-way corridor split: far-left lane turns left, middle 3 go straight on, far-right lane turns right.
-- Watch: LOCKED routing says true trap/dead-end routes should be rare, so most sewer routes need a way back up. "Get caught" ties into OPEN "Who captures the player?".
-- Still to decide: lane mapping for 2-way forks and for stairs. Should doing nothing (centre lane) always mean straight on?
+- **Lane rule (user decision):** only the outer lanes take a split. Far-left lane takes the left exit and far-right lane takes the right exit, whether that exit is a corridor or stairs. The middle 3 lanes always carry straight on. Doing nothing means straight on.
+- **End-of-level ladders (user decision):** the level's dead ends are only at the very end, and each has a ladder to the helicopter: up from the sewer, down from the roof. Ladders are only ever in the outer left or right lanes.
+- This covers the LOCKED "dead ends should be rare" rule, since the underground and roof routes aren't traps as long as you're in the right lane at the end. "Get caught" still ties into OPEN "Who captures the player?".
+- **Missing the ladder = CAPTURED (user decision):** the player stops and puts their hands up, and 3–4 guards appear from behind. This gives capture its first trigger (see OPEN "Who captures the player?").
+- **Geometry (agreed):** a side exit turns off by `Tuning.fork_turn_degrees` (15° to start) toward its side. Stairs are a ramp with steps, and ladders are a short steep climb. Heights: ground 0, roof +`tier_height`, underground −`tier_height`. Both branches are visible before you commit, and the one you don't take disappears after. The run logic stays "distance along the route + lane"; only how it's drawn changes.
+- **Prototype layout (agreed):** COMPOUND EXIT: straight → MOTOR POOL → AIRFIELD GATE → HELIPAD; right lane: stairs up → ROOFTOPS. ROOFTOPS: straight → ROOF EDGE; left lane: stairs down → SERVICE TUNNEL (sealed above Alert 1). ROOF EDGE and SERVICE TUNNEL end in outer-lane ladders to HELIPAD.
+- **Refinement after first look (user):** 15° looked confusing, because the branch swept across the middle 3 lanes. Now a side branch joins the main road **only at the outer lane**. It starts beside the road, through an opening in the side wall, and the main road keeps its full width going straight on. The outer lane you're in becomes the branch's nearest lane, so you run straight in. Default turn is now 30°.
+- Lock after the first playtest of the built split.
 
 ### OPEN — Who captures the player?
 - Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).

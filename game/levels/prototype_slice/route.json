@@ -6,6 +6,7 @@
     {
       "id": "compound_exit",
       "theme": "compound",
+      "tier": "ground",
       "length": 82,
       "obstacles": [
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 30},
@@ -15,12 +16,13 @@
       ],
       "next": [
         {"to": "motor_pool", "label": "MOTOR POOL"},
-        {"to": "rooftops", "label": "ROOFTOPS"}
+        {"to": "rooftops", "label": "ROOFTOPS", "side": "right", "via": "stairs"}
       ]
     },
     {
       "id": "motor_pool",
       "theme": "motor_pool",
+      "tier": "ground",
       "length": 70,
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1], "at": 14},
@@ -36,30 +38,47 @@
     {
       "id": "rooftops",
       "theme": "rooftops",
+      "tier": "roof",
       "length": 60,
       "obstacles": [
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 16},
+        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 18},
         {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30}
       ],
       "next": [
-        {"to": "service_tunnel", "label": "TUNNEL", "max_alert": 1},
-        {"to": "airfield_gate", "label": "GATE"}
+        {"to": "roof_edge", "label": "ROOF EDGE"},
+        {"to": "service_tunnel", "label": "TUNNEL", "side": "left", "via": "stairs", "max_alert": 1}
+      ]
+    },
+    {
+      "id": "roof_edge",
+      "theme": "rooftops",
+      "tier": "roof",
+      "length": 45,
+      "obstacles": [
+        {"kind": "barrier", "lanes": [1, 2, 3], "at": 14}
+      ],
+      "next": [
+        {"to": "helipad", "label": "LADDER", "side": "left", "via": "ladder"},
+        {"to": "helipad", "label": "LADDER", "side": "right", "via": "ladder"}
       ]
     },
     {
       "id": "service_tunnel",
       "theme": "tunnel",
-      "length": 45,
+      "tier": "underground",
+      "length": 60,
       "obstacles": [
-        {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 20}
+        {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 34}
       ],
       "next": [
-        {"to": "helipad", "label": "HELIPAD"}
+        {"to": "helipad", "label": "LADDER", "side": "left", "via": "ladder"},
+        {"to": "helipad", "label": "LADDER", "side": "right", "via": "ladder"}
       ]
     },
     {
       "id": "airfield_gate",
       "theme": "gate",
+      "tier": "ground",
       "length": 60,
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1, 2], "at": 15},
@@ -73,6 +92,7 @@
     {
       "id": "helipad",
       "theme": "helipad",
+      "tier": "ground",
       "length": 30,
       "obstacles": [],
       "end": "extract"

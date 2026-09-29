@@ -32,6 +32,21 @@ static func concrete() -> Texture2D:
 	return _finish("concrete", img)
 
 
+## Stairs: four concrete steps per tile, each with a light nosing and a dark riser.
+static func stairs() -> Texture2D:
+	if _cache.has("stairs"):
+		return _cache["stairs"]
+	var img := _start("stairs", Color("6e6e66"), 0.035)
+	for step in 4:
+		var y0 := step * 8
+		for x in SIZE:
+			img.set_pixel(x, y0, Color("a8a898"))
+			img.set_pixel(x, y0 + 1, Color("8c8c82"))
+			img.set_pixel(x, y0 + 6, Color("3c3c38"))
+			img.set_pixel(x, y0 + 7, Color("2c2c29"))
+	return _finish("stairs", img)
+
+
 ## A road lane painted in its route colour, with an arrow pointing to where it goes.
 ## dir: -1 left, 0 straight on, 1 right.
 static func fork_lane(dir: int, color: Color) -> Texture2D:

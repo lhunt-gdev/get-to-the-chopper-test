@@ -3,8 +3,9 @@ extends CanvasLayer
 ## Deliberately minimal, retro HUD. The helicopter should carry the urgency, not a big timer.
 
 const ALERT_COLORS := {1: Color("9fd36b"), 2: Color("f0c040"), 3: Color("ff4b3a")}
-## Each open route at a fork gets a colour, left to right. The road paint and sign use the same ones.
-const ROUTE_COLORS: Array[Color] = [Color("d9a032"), Color("4f9fd0"), Color("b06ad0"), Color("8fc46a")]
+## Each side of a fork has a colour. The road paint, sign and this prompt all use the same ones.
+const SIDE_COLORS := {"left": Color("d9a032"), "straight": Color("a8a898"), "right": Color("4f9fd0")}
+const SIDE_DIRS := {"left": -1, "straight": 0, "right": 1}
 const END_TEXT := {
 	&"extracted": "EXTRACTED",
 	&"killed": "KILLED IN ACTION",
@@ -19,13 +20,13 @@ var _end: Label
 var _title: Label
 
 
-static func route_color(idx: int) -> Color:
-	return ROUTE_COLORS[idx % ROUTE_COLORS.size()]
+static func side_color(side: String) -> Color:
+	return SIDE_COLORS.get(side, Color.WHITE)
 
 
-## -1 left, 0 straight on, 1 right, from a route's left-to-right position among the open routes.
-static func route_dir(idx: int, count: int) -> int:
-	return signi(idx * 2 - (count - 1))
+## -1 left, 0 straight on, 1 right.
+static func side_dir(side: String) -> int:
+	return SIDE_DIRS.get(side, 0)
 
 
 ## dir: -1 left, 0 straight on, 1 right.
@@ -68,10 +69,11 @@ func hide_title() -> void:
 
 func show_junction(options: Array[Dictionary]) -> void:
 	var parts := PackedStringArray()
-	for i in options.size():
-		var o := options[i]
-		parts.append("[color=#%s]%s[/color]" % [route_color(i).lightened(0.3).to_html(false),
-				route_prompt(String(o.get("label", o["to"])), route_dir(i, options.size()))])
+	for side in RouteGraph.SIDES:  # left to right, whatever order they were authored in
+		for o in options:
+			if RouteGraph.side_of(o) == side:
+				parts.append("[color=#%s]%s[/color]" % [side_color(side).lightened(0.3).to_html(false),
+						route_prompt(String(o.get("label", o["to"])), side_dir(side))])
 	_junction.text = "[center]%s[/center]" % "    ".join(parts)
 
 

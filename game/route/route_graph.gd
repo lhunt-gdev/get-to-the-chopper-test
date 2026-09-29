@@ -5,8 +5,20 @@ extends RefCounted
 ##
 ## JSON format (see game/levels/prototype_slice/route.json):
 ##   start: node id
-##   nodes: [{ id, length, obstacles: [...], next: [{ to, label, min_alert, max_alert }], end }]
+##   nodes: [{ id, length, tier, obstacles: [...], next: [edge, ...], end }]
+##   edge:  { to, label, side, via, min_alert, max_alert }
 ## An edge can be gated by alert level, so the routes on offer change with alert (LOCKED).
+##
+## Splits: only the outer lanes take a split. The far-left lane takes the "left" edge and the
+## far-right lane the "right" edge. The middle lanes always carry "straight" on (the default side).
+## A side edge goes via "corridor" (turns off), "stairs" (turns off and changes tier) or "ladder"
+## (end-of-level climb to the chopper). A node with no straight edge captures a player who is
+## in the middle lanes when they reach its end.
+
+const SIDES := ["left", "straight", "right"]
+const VIAS := ["corridor", "stairs", "ladder"]
+## Height tiers, in tier steps (Tuning.tier_height metres each).
+const TIERS := {"roof": 1, "ground": 0, "underground": -1}
 
 var start_id: StringName = &""
 var _nodes: Dictionary = {}  # StringName -> Dictionary
@@ -45,7 +57,12 @@ func end_type(id: StringName) -> String:
 	return String(node_data(id).get("end", ""))
 
 
-## The outgoing edges open at this alert level, in authored left-to-right order.
+## -1 underground, 0 ground, 1 roof.
+func tier_of(id: StringName) -> int:
+	return int(TIERS.get(node_data(id).get("tier", "ground"), 0))
+
+
+## The outgoing edges open at this alert level, in authored order.
 func available_next(id: StringName, alert_level: int) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for edge: Dictionary in node_data(id).get("next", []):
@@ -55,6 +72,47 @@ func available_next(id: StringName, alert_level: int) -> Array[Dictionary]:
 			continue
 		out.append(edge)
 	return out
+
+
+## Every authored edge, whatever the alert level.
+func all_next(id: StringName) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for edge: Dictionary in node_data(id).get("next", []):
+		out.append(edge)
+	return out
+
+
+static func side_of(edge: Dictionary) -> String:
+	return String(edge.get("side", "straight"))
+
+
+static func via_of(edge: Dictionary) -> String:
+	return String(edge.get("via", "corridor")) if side_of(edge) != "straight" else ""
+
+
+## Which side a lane takes: only the outer lanes split off.
+static func lane_side(lane: int, lane_count: int) -> String:
+	if lane <= 0:
+		return "left"
+	if lane >= lane_count - 1:
+		return "right"
+	return "straight"
+
+
+## The edge a player in this lane takes. An outer lane takes its side's edge if that is open,
+## otherwise straight on. Empty means there is no way on from here: the player is captured.
+static func pick_edge(lane: int, lane_count: int, options: Array[Dictionary]) -> Dictionary:
+	var side := lane_side(lane, lane_count)
+	for want in [side, "straight"]:
+		for edge in options:
+			if side_of(edge) == want:
+				return edge
+	return {}
+
+
+## True when the open options are a real choice worth showing (anything but a single straight road).
+static func is_choice(options: Array[Dictionary]) -> bool:
+	return options.size() >= 2 or (options.size() == 1 and side_of(options[0]) != "straight")
 
 
 ## Returns a list of problems. Empty means the graph is valid.
@@ -67,15 +125,31 @@ func validate() -> PackedStringArray:
 		var edges: Array = n.get("next", [])
 		if edges.is_empty() and String(n.get("end", "")) == "":
 			problems.append("node '%s' has no exits and is not an end" % id)
+		if not TIERS.has(n.get("tier", "ground")):
+			problems.append("node '%s' has unknown tier '%s'" % [id, n.get("tier")])
+		var sides_seen := {}
 		for edge: Dictionary in edges:
-			if not _nodes.has(StringName(edge.get("to", ""))):
-				problems.append("node '%s' points to missing node '%s'" % [id, edge.get("to", "")])
+			var to := StringName(edge.get("to", ""))
+			if not _nodes.has(to):
+				problems.append("node '%s' points to missing node '%s'" % [id, to])
+				continue
+			var side := side_of(edge)
+			var via := via_of(edge)
+			if not side in SIDES:
+				problems.append("%s -> %s: unknown side '%s'" % [id, to, side])
+			if side != "straight" and not via in VIAS:
+				problems.append("%s -> %s: unknown via '%s'" % [id, to, via])
+			# Two edges on one side are fine only if alert gates them apart; keep it simple and forbid it.
+			if sides_seen.has(side):
+				problems.append("node '%s' has two '%s' exits" % [id, side])
+			sides_seen[side] = true
+			var changes_tier := tier_of(to) != tier_of(id)
+			if via == "corridor" and changes_tier:
+				problems.append("%s -> %s: a corridor can't change height; use stairs" % [id, to])
+			if side == "straight" and changes_tier:
+				problems.append("%s -> %s: straight on can't change height" % [id, to])
+			if via in ["stairs", "ladder"] and not changes_tier:
+				problems.append("%s -> %s: %s must change height" % [id, to, via])
+			if via == "ladder" and String(node_data(to).get("end", "")) == "":
+				problems.append("%s -> %s: ladders only lead to the end of the level" % [id, to])
 	return problems
-
-
-## Maps the player's lane onto one of the open routes: the lanes are split
-## evenly left to right. With 2 routes and 5 lanes, lanes 0-2 go left and 3-4 go right.
-static func pick_by_lane(lane: int, lane_count: int, option_count: int) -> int:
-	if option_count <= 1:
-		return 0
-	return clampi(floori(float(lane) * option_count / lane_count), 0, option_count - 1)
