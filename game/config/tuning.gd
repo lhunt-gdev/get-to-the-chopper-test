@@ -38,6 +38,19 @@ enum TargetingMode {
 ## LOCKED: junctions may slow the game but never pause it.
 @export_range(0.4, 1.0) var junction_time_scale: float = 0.7
 
+@export_group("Shadows")
+## How dark the centre of a blob shadow is (0 = none, 1 = black).
+@export_range(0.0, 1.0) var shadow_opacity: float = 0.55
+## How much of the shadow, from the edge in, is dithered away.
+@export_range(0.05, 1.0) var shadow_softness: float = 0.5
+## How far an obstacle's shadow spreads past its footprint, in metres.
+@export var shadow_margin: float = 0.3
+@export var player_shadow_size: float = 0.9
+## The player's shadow shrinks to this scale at the top of a jump...
+@export_range(0.1, 1.0) var player_shadow_min_scale: float = 0.5
+## ...reached at this height in metres.
+@export var player_shadow_fade_height: float = 2.0
+
 @export_group("Combat")
 @export var targeting_mode: TargetingMode = TargetingMode.HYBRID
 @export var target_cone_degrees: float = 35.0

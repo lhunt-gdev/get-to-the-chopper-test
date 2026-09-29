@@ -8,6 +8,7 @@ extends Node3D
 var lane: int = 0
 var _y_velocity: float = 0.0
 var _slide_left: float = 0.0
+var _shadow: MeshInstance3D
 
 @onready var _body: MeshInstance3D = $Body
 
@@ -16,6 +17,12 @@ func _ready() -> void:
 	lane = tuning.lane_count / 2
 	position.x = lane_x(lane)
 	_body.material_override = PsxMaterials.flat(Color("5b6b3a"))
+	_shadow = MeshInstance3D.new()
+	_shadow.name = "Shadow"
+	_shadow.mesh = PsxMaterials.shadow_mesh(Vector2(tuning.player_shadow_size, tuning.player_shadow_size * 0.8))
+	_shadow.material_override = PsxMaterials.shadow(false, tuning)
+	add_child(_shadow)
+	_update_shadow()
 
 
 func _physics_process(delta: float) -> void:
@@ -35,6 +42,7 @@ func _physics_process(delta: float) -> void:
 	var target_scale := 0.45 if is_sliding() else 1.0
 	_body.scale.y = move_toward(_body.scale.y, target_scale, delta * 10.0)
 	_body.position.y = 0.8 * _body.scale.y
+	_update_shadow()
 
 
 func handle_swipe(dir: Vector2i) -> void:
@@ -71,3 +79,10 @@ func is_sliding() -> bool:
 
 func distance_run() -> float:
 	return -position.z
+
+
+## The shadow stays on the ground and shrinks as the player rises, so jump height is readable.
+func _update_shadow() -> void:
+	_shadow.position.y = 0.03 - position.y
+	var t := clampf(position.y / tuning.player_shadow_fade_height, 0.0, 1.0)
+	_shadow.scale = Vector3.ONE * lerpf(1.0, tuning.player_shadow_min_scale, t)

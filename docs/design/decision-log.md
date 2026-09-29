@@ -35,6 +35,25 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Speed, swipe and junction slowdown are unchanged. The user said they feel good.
 - Real art replaces these textures later. This is only to make the prototype readable.
 
+### PROPOSED — Blob shadows with dithered edges
+- Playtest: "hard to read what to duck under and jump over". Nothing tied obstacles to the ground.
+- PS1-style blob shadows, not engine shadow maps (cheaper on iPhone web, truer to the look). The edges fade out with an ordered dither pattern at the game's low resolution, so they look soft but pixel-crisp.
+- Each shadow is directly below its object. Under an overhead pipe you see a gap between the pipe and its shadow ("duck"). A barrier's shadow touches it ("jump"). The player's shadow shrinks as they rise, so you can judge jump height.
+- Numbers in `Tuning` (Shadows group).
+
+### OPEN — Ambient lighting pass
+- User wants a general lighting pass later. Not now.
+
+### PROPOSED — Route splits change the actual geometry (user direction, not built yet)
+- The level physically splits at a fork and the player runs down the branch they chose. No more straight road with a label.
+- Two kinds of split:
+  1. **Corridor:** a branch turns off left or right (~15° to start; the angle goes in `Tuning` to test).
+  2. **Stairs:** one branch goes up, another goes down.
+- Three height tiers: **roof**, **ground** and **underground** (e.g. sewers). The exit is reached via the roof or ground. From underground the player must get back up, or they hit a dead end or get caught.
+- User's lane idea for a 3-way corridor split: far-left lane turns left, middle 3 go straight on, far-right lane turns right.
+- Watch: LOCKED routing says true trap/dead-end routes should be rare, so most sewer routes need a way back up. "Get caught" ties into OPEN "Who captures the player?".
+- Still to decide: lane mapping for 2-way forks and for stairs. Should doing nothing (centre lane) always mean straight on?
+
 ### OPEN — Who captures the player?
 - Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).
 

@@ -12,7 +12,7 @@ const KINDS := {
 	"barrier": {"size": Vector3(0.9, 0.5, 0.3), "y": 0.25, "tex": "hazard", "pass": "jump"},
 	"pipe": {"size": Vector3(0.9, 0.3, 0.3), "y": 1.3, "tex": "rust_pipe", "pass": "slide"},
 	"truck": {"size": Vector3(0.95, 2.2, 3.0), "y": 1.1, "tex": "truck", "pass": "dodge"},
-	"tripwire": {"size": Vector3(1.0, 0.05, 0.05), "y": 0.3, "color": Color("ff3030"), "pass": "jump_or_alert"},
+	"tripwire": {"size": Vector3(1.0, 0.05, 0.05), "y": 0.3, "color": Color("ff3030"), "pass": "jump_or_alert", "shadow": false},
 }
 
 ## How each area looks, picked by "theme" in route.json. Placeholder art, so you can tell where you are.
@@ -144,6 +144,8 @@ func _spawn_segment(id: StringName, start: float) -> void:
 				# BoxMesh lays its six faces out on a 3x2 grid, so this puts one tile on each face.
 				mesh.material_override = PsxMaterials.textured(_obstacle_texture(kind["tex"]), Vector2(3, 2))
 			_obstacles.append({"x": x, "at": at, "depth": size.z, "kind": ob["kind"], "pass": kind["pass"], "done": false, "mesh": mesh})
+		if kind.get("shadow", true):
+			_obstacle_shadows(seg, lanes.keys(), start + float(ob["at"]), kind["size"] * Vector3(tuning.lane_width, 1, 1))
 
 	if _graph.end_type(id) == "extract":
 		_spawn_chopper(seg, start + length + 3.0)
@@ -222,6 +224,26 @@ func _theme(id: StringName) -> Dictionary:
 
 func _ground(id: StringName) -> Texture2D:
 	return PsxTextures.asphalt() if _theme(id)["ground"] == "asphalt" else PsxTextures.concrete()
+
+
+## A blob shadow directly under an obstacle, one per run of neighbouring lanes, because
+## overlapping shadows multiply into dark seams. Under an overhead pipe the gap to its shadow says "duck".
+func _obstacle_shadows(parent: Node3D, lanes: Array, at: float, size: Vector3) -> void:
+	lanes.sort()
+	var runs: Array[Array] = []
+	for lane: int in lanes:
+		if runs.is_empty() or lane != runs[-1][-1] + 1:
+			runs.append([lane])
+		else:
+			runs[-1].append(lane)
+	for run in runs:
+		var x0 := _player.lane_x(run[0]) - size.x / 2.0
+		var x1 := _player.lane_x(run[-1]) + size.x / 2.0
+		var s := MeshInstance3D.new()
+		s.mesh = PsxMaterials.shadow_mesh(Vector2(x1 - x0, size.z) + Vector2.ONE * tuning.shadow_margin * 2.0)
+		s.material_override = PsxMaterials.shadow(true, tuning)
+		s.position = Vector3((x0 + x1) / 2.0, 0.03, -at)
+		parent.add_child(s)
 
 
 func _obstacle_texture(name: String) -> Texture2D:
