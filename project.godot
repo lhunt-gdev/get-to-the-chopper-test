@@ -1,0 +1,39 @@
+; Engine configuration file.
+; Edit through Project > Project Settings where possible.
+
+config_version=5
+
+[application]
+
+config/name="Get to the Chopper!"
+config/description="PS1-style mobile escape action game. Proof-of-concept build."
+run/main_scene="res://game/levels/prototype_slice/prototype_slice.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+RunLog="*res://game/autoload/run_log.gd"
+GameState="*res://game/autoload/game_state.gd"
+
+[display]
+
+window/size/viewport_width=270
+window/size/viewport_height=480
+window/size/window_width_override=405
+window/size/window_height_override=720
+window/stretch/mode="viewport"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
+textures/default_filters/use_nearest_mipmap_filter=true
+anti_aliasing/quality/msaa_3d=0

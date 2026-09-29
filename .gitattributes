@@ -1,0 +1,12 @@
+# Normalise line endings so Godot files diff cleanly across Mac/Windows/Linux.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.wav binary
+*.ogg binary
+*.glb binary
+*.ttf binary
+
+# Git LFS is deliberately NOT on yet: PS1-scale assets are tiny, and LFS on
+# GitHub has bandwidth quotas that CI checkouts eat. Revisit if art/audio > ~200 MB.
+# *.png filter=lfs diff=lfs merge=lfs -text

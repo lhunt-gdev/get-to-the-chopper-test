@@ -1,0 +1,18 @@
+# Godot 4 cache / imports (regenerated on open)
+.godot/
+*.import~
+# Builds
+build/
+*.apk
+*.aab
+*.ipa
+# Export credentials (Godot keeps these in .godot/, but never commit signing files)
+*.p12
+*.mobileprovision
+*.keystore
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+.vscode/
+.idea/
