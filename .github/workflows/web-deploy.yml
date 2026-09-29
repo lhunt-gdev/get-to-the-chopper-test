@@ -49,7 +49,7 @@ jobs:
           rm templates.tpz
 
       - name: Tests (unit + bot playthroughs)
-        run: GODOT=~/godot/godot tests/run_all.sh
+        run: GODOT=~/godot/godot bash tests/run_all.sh
 
       - name: Export web build
         run: |
