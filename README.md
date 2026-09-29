@@ -27,10 +27,10 @@ Controls: swipe left/right to change lane, up to jump, down to slide. At a fork,
 |---|---|
 | Auto-run, 5 lanes, swipe dodge/jump/slide | Enemies, FIRE, tap-to-target in play |
 | Authored branching route from `route.json` | Contextual cover |
-| Junction prompt + brief slowdown (never a pause) | Alarm boxes |
+| Junction prompt + brief slowdown (never a pause); lanes painted per route, sign over the fork | Alarm boxes |
 | Alert level; tripwire raises it; TUNNEL route sealed above Alert 1 | Chopper countdown / leaving |
 | Death, extraction, route summary, discovery saved between sessions | Real route-map screen, art, audio |
-| PS1 look: low-res, vertex wobble, affine textures, fog | |
+| PS1 look: low-res, vertex wobble, affine textures, fog; placeholder textures generated in code, one look per area | |
 
 ## Layout
 

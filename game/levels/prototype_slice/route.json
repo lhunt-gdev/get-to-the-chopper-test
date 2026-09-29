@@ -5,6 +5,7 @@
   "nodes": [
     {
       "id": "compound_exit",
+      "theme": "compound",
       "length": 82,
       "obstacles": [
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 30},
@@ -19,6 +20,7 @@
     },
     {
       "id": "motor_pool",
+      "theme": "motor_pool",
       "length": 70,
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1], "at": 14},
@@ -33,6 +35,7 @@
     },
     {
       "id": "rooftops",
+      "theme": "rooftops",
       "length": 60,
       "obstacles": [
         {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 16},
@@ -45,6 +48,7 @@
     },
     {
       "id": "service_tunnel",
+      "theme": "tunnel",
       "length": 45,
       "obstacles": [
         {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 20}
@@ -55,6 +59,7 @@
     },
     {
       "id": "airfield_gate",
+      "theme": "gate",
       "length": 60,
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1, 2], "at": 15},
@@ -67,6 +72,7 @@
     },
     {
       "id": "helipad",
+      "theme": "helipad",
       "length": 30,
       "obstacles": [],
       "end": "extract"

@@ -33,6 +33,8 @@ enum TargetingMode {
 @export var decision_lead: float = 18.0
 ## The junction prompt and slowdown start this far before the decision point.
 @export var approach_window: float = 14.0
+## Each lane is painted in its route's colour for this many metres before the decision point.
+@export var fork_cue_length: float = 30.0
 ## LOCKED: junctions may slow the game but never pause it.
 @export_range(0.4, 1.0) var junction_time_scale: float = 0.7
 
