@@ -24,6 +24,8 @@ const KINDS := {
 	"pipe": {"size": Vector3(0.9, 0.3, 0.3), "y": 1.3, "tex": "rust_pipe", "pass": "slide"},
 	"truck": {"size": Vector3(0.95, 2.2, 3.0), "y": 1.1, "tex": "truck", "pass": "dodge"},
 	"tripwire": {"size": Vector3(1.0, 0.05, 0.05), "y": 0.3, "color": Color("ff3030"), "pass": "jump_or_alert", "shadow": false},
+	## Contextual cover (LOCKED): run into it and you take cover; swipe early to go round it.
+	"cover": {"size": Vector3(0.95, 1.2, 0.8), "y": 0.6, "tex": "cover", "pass": "cover"},
 }
 
 ## How each area looks, picked by "theme" in route.json. Placeholder art, so you can tell where you are.
@@ -52,6 +54,13 @@ var _obstacles: Array[Dictionary] = []
 var _segments: Array[Dictionary] = []
 ## The segment the player is on, whose split is still ahead.
 var _current: Dictionary = {}
+## Troopers and alarm boxes: {node: RifleTrooper|AlarmBox, owner: segment node, seg: segment}.
+var _combatants: Array[Dictionary] = []
+var _fire_held := false
+var _fire_cooldown := 0.0
+## HYBRID / TAP_TO_TARGET: the enemy the player last tapped.
+var _tapped: Node3D = null
+var _shot_tracer: MeshInstance3D
 
 @onready var _player: Player = $Player
 @onready var _camera: Camera3D = $Camera3D
@@ -70,6 +79,11 @@ func _ready() -> void:
 	_input.swiped.connect(_on_swipe)
 	_input.tapped.connect(_on_tap)
 	_input.fire_pressed.connect(_on_fire)
+	_input.fire_released.connect(set_fire_held.bind(false))
+	_hud.setup(tuning)
+	_shot_tracer = _box(self, Vector3(0.05, 0.05, 1.0), Vector3.ZERO, Color("fff0b0"))
+	_shot_tracer.top_level = true
+	_shot_tracer.visible = false
 	_runner.segment_needed.connect(_on_segment_needed)
 	_runner.junction_approaching.connect(_on_junction_approaching)
 	_runner.junction_cleared.connect(_on_junction_cleared)
@@ -102,6 +116,7 @@ func _physics_process(delta: float) -> void:
 	if GameState.run_active:
 		_runner.update(_player.distance_run(), _player.lane)
 		_check_obstacles()
+		_update_combat(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
@@ -293,6 +308,30 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		if kind.get("shadow", true):
 			_obstacle_shadows(node, seg, lanes.keys(), at, size)
 
+	# Troopers stand in a lane and face you. Alarm boxes are on a wall, facing the road.
+	for e: Dictionary in _graph.node_data(id).get("enemies", []):
+		if e.get("kind", "") != "rifle_trooper":
+			push_warning("Unknown enemy kind '%s' in %s" % [e.get("kind"), id])
+			continue
+		var t := RifleTrooper.new(tuning)
+		t.at = start + float(e["at"])
+		t.x = _player.lane_x(_remap_lane(int(e.get("lane", 2)), authored_lanes))
+		t.min_alert = int(e.get("min_alert", 1))
+		t.max_alert = int(e.get("max_alert", 3))
+		node.add_child(t)
+		t.transform = _frame_at(seg, float(e["at"])) * Transform3D(Basis(Vector3.UP, PI), Vector3(t.x, 0, 0))
+		t.knocked_down.connect(func() -> void: RunLog.record_event("trooper_down", {"node": id}))
+		_combatants.append({"node": t, "owner": node, "seg": seg})
+	for a: Dictionary in _graph.node_data(id).get("alarms", []):
+		var box := AlarmBox.new()
+		box.at = start + float(a["at"])
+		var s := -1.0 if String(a.get("side", "left")) == "left" else 1.0
+		node.add_child(box)
+		box.transform = _frame_at(seg, float(a["at"])) * Transform3D(Basis(Vector3.UP, -s * PI / 2.0),
+				Vector3(s * (tuning.lane_count * tuning.lane_width / 2.0 + 0.85), 1.8, 0))
+		box.destroyed.connect(_on_alarm_destroyed.bind(id))
+		_combatants.append({"node": box, "owner": node, "seg": seg})
+
 	if not _has_straight(id) and _graph.end_type(id) == "":
 		_build_dead_end(node, seg)
 	if RouteGraph.via_of(edge) == "ladder":
@@ -304,6 +343,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 
 ## The player is now on this segment: build every branch it can lead to, and its fork cue.
 func _promote(seg: Dictionary) -> void:
+	seg["promoted"] = true  # its troopers and alarm boxes come alive
 	_segments.append(seg)
 	_current = seg
 	_build_branches()
@@ -346,6 +386,7 @@ func _build_branches() -> void:
 func _discard(branch: Dictionary) -> void:
 	var node: Node3D = branch["node"]
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
+	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	node.queue_free()
 
 
@@ -753,6 +794,8 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.rust_pipe()
 		"truck":
 			return PsxTextures.truck()
+		"cover":
+			return PsxTextures.wall("blocks", Color("8e8e84"))
 	push_warning("Unknown obstacle texture '%s'" % name)
 	return PsxTextures.concrete()
 
@@ -808,6 +851,8 @@ func _despawn_behind() -> void:
 	while _segments.size() > 1 and _segments[0]["end"] < d - 15.0:
 		_segments.pop_front()["node"].queue_free()
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["at"] > d - 10.0)
+	_combatants = _combatants.filter(func(c: Dictionary) -> bool:
+		return is_instance_valid(c["node"]) and c["node"].at > d - 10.0)
 
 
 # --- Rules ------------------------------------------------------------------------
@@ -816,6 +861,14 @@ func _check_obstacles() -> void:
 	var d := _player.distance_run()
 	var half_hit := tuning.lane_width * 0.5 + 0.15
 	for o in _obstacles:
+		if o["pass"] == "cover":
+			# Reaching cover in its lane puts you in cover, just in front of it. It's the lane you're
+			# heading for that counts, so once you swipe away you're out, even mid-slide.
+			var stop_at: float = o["at"] - o["depth"] / 2.0 - tuning.cover_stop_gap
+			if not _player.in_cover and d >= stop_at and d < o["at"] and absf(o["x"] - _player.lane_x(_player.lane)) < 0.1:
+				_player.enter_cover(stop_at)
+				RunLog.record_event("cover", {"node": _runner.current})
+			continue
 		if o["done"] or absf(o["at"] - d) > o["depth"] / 2.0 + 0.2:
 			continue
 		if absf(o["x"] - _player.track_x) > half_hit:
@@ -839,6 +892,95 @@ func _check_obstacles() -> void:
 		RunLog.record_event("hit", {"kind": o["kind"], "node": _runner.current})
 		_end(&"killed")
 		return
+
+
+# --- Combat -----------------------------------------------------------------------
+
+## Troopers aim and shoot, alarm boxes open and close their windows, and FIRE shoots.
+func _update_combat(delta: float) -> void:
+	var d := _player.distance_run()
+	var alert := GameState.alert_level
+	var half_hit := tuning.lane_width * 0.5 + 0.15
+	for c in _combatants:
+		var n = c["node"]  # RifleTrooper or AlarmBox
+		if not is_instance_valid(n) or not c["seg"].get("promoted", false):
+			continue
+		if n is AlarmBox:
+			n.update(delta, tuning, d)
+			continue
+		var t: RifleTrooper = n
+		var shot := t.update(delta, tuning, alert, d, _player.track_x, _player.in_cover,
+				_player.global_position, _route_point)
+		if shot == RifleTrooper.Shot.MISSED:
+			RunLog.record_event("trooper_missed", {"node": _runner.current, "in_cover": _player.in_cover})
+		if shot == RifleTrooper.Shot.HIT:
+			_damage_player("shot")
+		# Running into a live trooper knocks him down, and it costs you a hit.
+		if t.is_targetable(alert) and absf(t.at - d) < 0.5 and absf(t.x - _player.track_x) <= half_hit:
+			t.knock_down()
+			_damage_player("ran_into_trooper")
+		if not GameState.run_active:
+			return
+	_hud.show_cover_hint(_player.in_cover)
+
+	_fire_cooldown -= delta
+	_hud.set_firing(_fire_held)
+	if _fire_held and _fire_cooldown <= 0.0 and not _player.halted:
+		_fire_cooldown = tuning.fire_interval
+		_shoot()
+
+
+## An alarm box hit lowers alert by one level; that can lift a lockdown door.
+func _on_alarm_destroyed(node_id: StringName) -> void:
+	RunLog.record_event("alarm_hit", {"node": node_id})
+	GameState.lower_alert()
+
+
+func _damage_player(why: String) -> void:
+	if not _player.take_hit():
+		return
+	RunLog.record_event("player_hit", {"by": why, "node": _runner.current, "left": _player.hits_left})
+	_hud.show_hit()
+	_hud.show_hp(_player.hits_left, tuning.player_hits)
+	if _player.hits_left <= 0:
+		_end(&"killed")
+
+
+## World position of a point on the route: `d` metres along, `x` across, `y` up.
+func _route_point(d: float, x: float, y: float) -> Vector3:
+	var seg := _segment_at(d)
+	return seg["node"].global_transform * _frame_at(seg, d - seg["start"]) * Vector3(x, y, 0)
+
+
+## What FIRE would hit right now (used by the bots, too).
+func fire_target() -> Node3D:
+	var alert := GameState.alert_level
+	var candidates: Array[Node3D] = []
+	for c in _combatants:
+		var n = c["node"]  # RifleTrooper or AlarmBox
+		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert):
+			candidates.append(n)
+	var origin := _player.global_position + Vector3(0, 1.2, 0)
+	var forward := -_player.global_transform.basis.z
+	if _tapped != null and (not is_instance_valid(_tapped) or not _tapped.call("is_targetable", alert)):
+		_tapped = null
+	return Targeting.pick(candidates, origin, forward, tuning, _tapped)
+
+
+func set_fire_held(held: bool) -> void:
+	_fire_held = held and GameState.run_active
+
+
+func _shoot() -> void:
+	var from := _player.global_transform * Vector3(0.25, 1.2, -0.4)
+	var target := fire_target()
+	var to := from + (-_player.global_transform.basis.z) * 20.0
+	if target != null:
+		to = target.global_position + Vector3(0, 1.1 if target is RifleTrooper else 0.0, 0)
+		target.call("hit")
+	_shot_tracer.global_transform = Transform3D(Basis.looking_at(to - from) * Basis.from_scale(Vector3(1, 1, from.distance_to(to))), (from + to) / 2.0)
+	_shot_tracer.visible = true
+	get_tree().create_timer(0.05).timeout.connect(func() -> void: _shot_tracer.visible = false)
 
 
 func _end(reason: StringName) -> void:
@@ -896,6 +1038,9 @@ func _on_junction_cleared() -> void:
 
 func _on_run_ended(reason: StringName) -> void:
 	Engine.time_scale = 1.0
+	_fire_held = false
+	_hud.set_firing(false)
+	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())
 
 
@@ -906,12 +1051,31 @@ func _on_swipe(dir: Vector2i) -> void:
 		_player.handle_swipe(dir)
 
 
-func _on_tap(_pos: Vector2) -> void:
+func _on_tap(pos: Vector2) -> void:
 	if not _started:
 		start_run()
 	elif not GameState.run_active:
 		_retry()
-	# TODO(targeting): when enemies exist, tap-to-target raycasts from the camera here.
+	elif tuning.targeting_mode != Tuning.TargetingMode.AUTO_PRIORITY:
+		_tapped = _enemy_near_screen(pos)
+
+
+## Tap-to-target (proposal under test): the live trooper drawn nearest the tap, if close enough.
+func _enemy_near_screen(pos: Vector2) -> Node3D:
+	var best: Node3D = null
+	var best_d := tuning.tap_target_radius_px
+	for c in _combatants:
+		var n = c["node"]
+		if not (n is RifleTrooper) or not n.is_targetable(GameState.alert_level):
+			continue
+		var p: Vector3 = n.global_position + Vector3(0, 1.0, 0)
+		if _camera.is_position_behind(p):
+			continue
+		var d := _camera.unproject_position(p).distance_to(pos)
+		if d < best_d:
+			best_d = d
+			best = n
+	return best
 
 
 func _on_fire() -> void:
@@ -919,6 +1083,8 @@ func _on_fire() -> void:
 		start_run()
 	elif not GameState.run_active:
 		_retry()
+	else:
+		set_fire_held(true)
 
 
 func _retry() -> void:

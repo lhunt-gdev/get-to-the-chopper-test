@@ -13,7 +13,7 @@ Every push to `main` runs the tests, exports a web build and publishes it to Git
 2. For fullscreen: Share → **Add to Home Screen**, then launch it from the icon.
 3. After a new push, wait for the Action to go green (~2–3 min), then reload.
 
-Controls: swipe left/right to change lane, up to jump, down to slide. At a fork, the far-left or far-right lane takes that side exit (corridor, stairs or ladder); the middle 3 lanes carry straight on. Tap to start and to retry. On desktop: arrow keys, Enter.
+Controls: swipe left/right to change lane, up to jump, down to slide; hold FIRE (bottom right) to shoot. Run into cover to take it; swipe left/right to break cover. At a fork, the far-left or far-right lane takes that side exit (corridor, stairs or ladder); the middle 3 lanes carry straight on. Tap to start and to retry. On desktop: arrow keys, Enter.
 
 ## Run it on your computer
 
@@ -25,12 +25,13 @@ Controls: swipe left/right to change lane, up to jump, down to slide. At a fork,
 
 | Works | Not built yet |
 |---|---|
-| Auto-run, 5 lanes, swipe dodge/jump/slide | Enemies, FIRE, tap-to-target in play |
-| Authored branching route from `route.json` | Contextual cover |
-| Junction prompt + brief slowdown (never a pause); the road physically splits (turns, stairs, end-of-level ladders) and straight on stays open until the split; lockdown doors on alert-closed branches; authored bends; routes head back to the centre; lanes painted per exit, sign over the fork | Alarm boxes |
+| Auto-run, 5 lanes, swipe dodge/jump/slide | Enemies beyond the Rifle Trooper (Rusher, Heavy, Sniper, Security) |
+| Authored branching route from `route.json` | Real damage model and weapons (placeholders: 3 hits, unlimited-ammo rifle) |
+| Junction prompt + brief slowdown (never a pause); the road physically splits (turns, stairs, end-of-level ladders) and straight on stays open until the split; lockdown doors on alert-closed branches; authored bends; routes head back to the centre; lanes painted per exit, sign over the fork | Ambient lighting pass |
 | Alert level; tripwire raises it; TUNNEL route sealed above Alert 1 | Chopper countdown / leaving |
 | Death, capture (missed the ladder), extraction, route summary, discovery saved between sessions | Real route-map screen, art, audio |
 | PS1 look: low-res, vertex wobble, affine textures, fog; placeholder textures generated in code, one look per area | |
+| FIRE button (hold) with auto-targeting / tap-to-target; Rifle Trooper that aims at your lane (dodge or hide); contextual cover; alarm box that lowers alert and can lift a lockdown door | |
 
 ## Layout
 
@@ -58,5 +59,5 @@ Conventions: snake_case files, PascalCase `class_name`s, one feature per folder 
 ```
 GODOT=/path/to/godot tests/run_all.sh
 ```
-- Unit tests: route validity, alert gating, lane→exit rule, route geometry rules, swipe direction, targeting priority.
-- Bot playthroughs: a scripted player runs six routes and must die, extract straight on via MOTOR POOL, take stairs up then down to the TUNNEL at Alert 1 and ladder out, find the TUNNEL sealed at Alert 2 and ladder down from ROOF EDGE, be captured for missing the ladder, and switch back to the middle at the last moment and still go straight on. If you edit `route.json` and make it unwinnable, CI fails.
+- Unit tests: route validity, alert gating, lane→exit rule, route geometry rules, swipe direction, targeting priority, trooper shot rules (dodge, cover, alert).
+- Bot playthroughs: a scripted player runs eight routes and must die, extract straight on via MOTOR POOL, take stairs up then down to the TUNNEL at Alert 1 and ladder out, find the TUNNEL sealed at Alert 2 and ladder down from ROOF EDGE, be captured for missing the ladder, switch back to the middle at the last moment and still go straight on, take a shot in cover without being hurt, and shoot the alarm box to reopen the TUNNEL. If you edit `route.json` and make it unwinnable, CI fails.

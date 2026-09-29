@@ -14,6 +14,12 @@ var track_x: float = 0.0
 var jump_y: float = 0.0
 ## Set when captured: stops running and ignores input.
 var halted: bool = false
+## In cover: stopped, crouched, safe from shots ahead. Swipe left/right to leave.
+var in_cover: bool = false
+## Placeholder damage model (Point 4 OPEN): this many hits and you're down.
+var hits_left: int = 3
+var _invulnerable: float = 0.0
+var _skin: ShaderMaterial
 var _y_velocity: float = 0.0
 var _slide_left: float = 0.0
 var _shadow: MeshInstance3D
@@ -25,7 +31,9 @@ var _arms: Array[MeshInstance3D] = []
 func _ready() -> void:
 	lane = tuning.lane_count / 2
 	track_x = lane_x(lane)
+	hits_left = tuning.player_hits
 	var skin := PsxMaterials.flat(Color("5b6b3a"))
+	_skin = skin
 	_body.material_override = skin
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Shadow"
@@ -50,7 +58,9 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not GameState.run_active or halted:
 		return
-	distance += tuning.run_speed * delta
+	_invulnerable -= delta
+	if not in_cover:
+		distance += tuning.run_speed * delta
 	track_x = move_toward(track_x, lane_x(lane), tuning.lane_change_speed * delta)
 
 	if is_airborne() or _y_velocity > 0.0:
@@ -61,13 +71,20 @@ func _physics_process(delta: float) -> void:
 
 	if _slide_left > 0.0:
 		_slide_left -= delta
-	var target_scale := 0.45 if is_sliding() else 1.0
+	var target_scale := 0.45 if is_sliding() else (0.65 if in_cover else 1.0)
 	_body.scale.y = move_toward(_body.scale.y, target_scale, delta * 10.0)
 	_update_visuals()
 
 
 func handle_swipe(dir: Vector2i) -> void:
 	if halted:
+		return
+	if in_cover:
+		# Swiping away from the cover (sideways) leaves it and resumes the run. Nothing else does.
+		var to := lane + (dir.x if dir.y == 0 else 0)
+		if dir.y == 0 and to >= 0 and to < tuning.lane_count:
+			in_cover = false
+			lane = to
 		return
 	match dir:
 		Vector2i.LEFT:
@@ -82,6 +99,26 @@ func handle_swipe(dir: Vector2i) -> void:
 			_slide_left = tuning.slide_duration
 			if is_airborne():
 				_y_velocity = minf(_y_velocity, -tuning.jump_velocity)  # fast-fall into the slide
+
+
+## Ran into cover: stop just in front of it and crouch.
+func enter_cover(stop_at: float) -> void:
+	in_cover = true
+	distance = minf(distance, stop_at)
+	jump_y = 0.0
+	_y_velocity = 0.0
+	_slide_left = 0.0
+
+
+## Returns true if the hit landed (not while briefly invulnerable after the last one).
+func take_hit() -> bool:
+	if _invulnerable > 0.0 or hits_left <= 0:
+		return false
+	hits_left -= 1
+	_invulnerable = tuning.hit_invulnerable_time
+	_body.material_override = PsxMaterials.flat(Color("d83a2a"))
+	get_tree().create_timer(0.15).timeout.connect(func() -> void: _body.material_override = _skin)
+	return true
 
 
 ## Captured: stop dead, drop to the ground and put both hands up.

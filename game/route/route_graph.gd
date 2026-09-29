@@ -132,6 +132,17 @@ func validate() -> PackedStringArray:
 				problems.append("node '%s': a bend needs \"side\": \"left\" or \"right\"" % id)
 			elif float(bend.get("at", -1)) <= 0.0 or float(bend.get("at", -1)) >= float(n.get("length", 50.0)):
 				problems.append("node '%s': bend at %s m is outside the segment" % [id, bend.get("at")])
+		var length := float(n.get("length", 50.0))
+		for e in n.get("enemies", []):
+			if String(e.get("kind", "")) != "rifle_trooper":
+				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
+			if float(e.get("at", -1)) < 0.0 or float(e.get("at", -1)) > length:
+				problems.append("node '%s': enemy at %s m is outside the segment" % [id, e.get("at")])
+		for a in n.get("alarms", []):
+			if not String(a.get("side", "")) in ["left", "right"]:
+				problems.append("node '%s': an alarm box needs \"side\": \"left\" or \"right\"" % id)
+			if float(a.get("at", -1)) < 0.0 or float(a.get("at", -1)) > length:
+				problems.append("node '%s': alarm box at %s m is outside the segment" % [id, a.get("at")])
 		var sides_seen := {}
 		for edge: Dictionary in edges:
 			var to := StringName(edge.get("to", ""))

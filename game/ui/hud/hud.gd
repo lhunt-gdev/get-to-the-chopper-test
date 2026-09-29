@@ -18,6 +18,36 @@ var _alert: Label
 var _junction: RichTextLabel
 var _end: Label
 var _title: Label
+var _hp: Label
+var _hint: Label
+var _flash: ColorRect
+var _fire: FireButton
+
+
+## The one FIRE control (LOCKED Controls v1): a chunky circle, bottom right. SwipeInput decides
+## what counts as touching it; this just draws it in the same place.
+class FireButton extends Control:
+	var tuning: Tuning
+	var held := false
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		get_viewport().size_changed.connect(queue_redraw)
+
+	func _draw() -> void:
+		if tuning == null:
+			return
+		var b := SwipeInput.fire_button(get_viewport_rect().size, tuning)
+		var c := Vector2(b.x, b.y)
+		draw_circle(c, b.z, Color(0, 0, 0, 0.45))
+		draw_arc(c, b.z, 0, TAU, 20, Color("d8d0b0") if not held else Color("ff5a3a"), 2.0)
+		if held:
+			draw_circle(c, b.z - 3, Color(1, 0.35, 0.2, 0.35))
+		var font := get_theme_default_font()
+		var size := 10
+		var w := font.get_string_size("FIRE", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		draw_string(font, c + Vector2(-w / 2.0, size / 3.0), "FIRE", HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color("f0e8c8"))
 
 
 static func side_color(side: String) -> Color:
@@ -56,11 +86,45 @@ func _ready() -> void:
 	_end = _label(Vector2(0, 150), HORIZONTAL_ALIGNMENT_CENTER)
 	_end.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_title = _label(Vector2(0, 120), HORIZONTAL_ALIGNMENT_CENTER)
+	_hp = _label(Vector2(6, 16), HORIZONTAL_ALIGNMENT_LEFT)
+	_hint = _label(Vector2(0, 104), HORIZONTAL_ALIGNMENT_CENTER)
+	_flash = ColorRect.new()
+	_flash.color = Color(0.85, 0.1, 0.05, 0.0)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_flash)
 	GameState.alert_changed.connect(_on_alert_changed)
 
 
+func setup(tuning: Tuning) -> void:
+	_fire = FireButton.new()
+	_fire.tuning = tuning
+	add_child(_fire)
+	show_hp(tuning.player_hits, tuning.player_hits)
+
+
+func show_hp(left: int, total: int) -> void:
+	_hp.text = "HP " + "#".repeat(left) + "-".repeat(maxi(0, total - left))
+	_hp.modulate = Color("f0e8c8") if left > 1 else Color("ff4b3a")
+
+
+func show_hit() -> void:
+	_flash.color.a = 0.45
+	create_tween().tween_property(_flash, "color:a", 0.0, 0.3)
+
+
+func set_firing(held: bool) -> void:
+	if _fire and _fire.held != held:
+		_fire.held = held
+		_fire.queue_redraw()
+
+
+func show_cover_hint(on: bool) -> void:
+	_hint.text = "IN COVER\nSWIPE < > TO BREAK COVER" if on else ""
+
+
 func show_title() -> void:
-	_title.text = "GET TO THE CHOPPER!\n\nSWIPE < > TO DODGE\nSWIPE UP TO JUMP\nSWIPE DOWN TO SLIDE\n\nAT A FORK, BE ON THAT SIDE\n\nTAP TO START"
+	_title.text = "GET TO THE CHOPPER!\n\nSWIPE < > TO DODGE\nSWIPE UP TO JUMP\nSWIPE DOWN TO SLIDE\nHOLD FIRE TO SHOOT\n\nOUTER LANES TAKE SIDE EXITS\nRUN INTO COVER TO HIDE\n\nTAP TO START"
 
 
 func hide_title() -> void:

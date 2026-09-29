@@ -17,6 +17,7 @@ func _run() -> void:
 	_test_alert_gating()
 	_test_pick_edge()
 	_test_route_rules()
+	_test_trooper_rules()
 	_test_swipe_direction()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
@@ -62,6 +63,17 @@ func _test_pick_edge() -> void:
 	var only_straight: Array[Dictionary] = [straight]
 	_check(not RouteGraph.is_choice(only_straight), "a single straight road is not a choice")
 	_check(RouteGraph.is_choice(ladders), "ladders are a choice")
+
+
+func _test_trooper_rules() -> void:
+	var w := 1.4
+	_check(RifleTrooper.shot_hits(0.0, 0.0, false, w), "trooper hits you in the lane he aimed at")
+	_check(not RifleTrooper.shot_hits(1.4, 0.0, false, w), "change lane before the shot and he misses")
+	_check(RifleTrooper.shot_hits(0.5, 0.0, false, w), "halfway through a lane change you're still hit")
+	_check(not RifleTrooper.shot_hits(0.0, 0.0, true, w), "cover blocks the shot")
+	var t := Tuning.new()
+	_check(RifleTrooper.aim_time(t, 1) > RifleTrooper.aim_time(t, 2) and RifleTrooper.aim_time(t, 2) > RifleTrooper.aim_time(t, 3),
+			"higher alert, less time to dodge")
 
 
 func _test_route_rules() -> void:

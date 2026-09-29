@@ -63,6 +63,15 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Bends (user direction):** paths don't need to be straight. A segment can bend left or right at the same angle as a split, with no choice involved. It's authored in `route.json` as `"bends": [{"at": 44, "side": "left"}]`. A bend has the same shape as a side branch: out at `fork_turn_degrees` for `branch_out_length`, then straight again. The route jogs across rather than drifting off at an angle, so "come back to the centre" still holds.
 - Lock after the first playtest of the built split.
 
+### PROPOSED — First combat slice: Rifle Trooper, FIRE, cover, alarm box (prototype plan §15)
+- **FIRE (LOCKED Controls v1):** one persistent on-screen FIRE button (bottom right). Hold it to keep shooting. Touches that start on it never count as swipes. Targets come from `Targeting` (auto-priority by default; tapping an enemy overrides it in HYBRID mode).
+- **Rifle Trooper (LOCKED roster, behaviour proposed):** stands in a lane ahead. Within `trooper_aim_range` he aims at **your lane**: a red "!" and a red laser dot on the road where you are. After `trooper_aim_time` he fires. Change lane before then and he misses. Cover blocks it too. Higher alert means he aims faster (LOCKED: alert changes enemy pressure), and a trooper can be alert-gated in `route.json` (`min_alert`) so loud routes are busier. He can't shoot behind him. Running into a live one costs a hit and knocks him down.
+- **Cover (LOCKED concept):** `"kind": "cover"` obstacles. Run into one in its lane and you automatically take cover: you stop, crouch, and are safe from troopers ahead. You can keep firing. Swipe left or right to leave and resume the run. Swiping early dodges it and keeps your momentum. No cover button.
+- **Alarm box (LOCKED recommendation):** mounted on a wall. It's only shootable in a short window as you pass (`alarm_window_near/far`) and blinks while it is. A hit lowers alert by one level, which can reopen a locked-down route (the door lifts). Miss it and it's gone.
+- **Placeholder — damage (Point 4 is OPEN):** 3 hits and you're KILLED IN ACTION, with a short invulnerability after each hit. No recovery yet. HUD shows HP.
+- **Placeholder — weapon (Point 5 is OPEN):** one rifle, unlimited ammo, `fire_interval` between shots; troopers take `trooper_health` hits.
+- Auto-priority order: an aiming trooper (50) > a live alarm box in its window (20) > the nearest idle trooper (0).
+
 ### OPEN — Who captures the player?
 - Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).
 

@@ -81,3 +81,34 @@ enum TargetingMode {
 @export var targeting_mode: TargetingMode = TargetingMode.HYBRID
 @export var target_cone_degrees: float = 35.0
 @export var target_range: float = 30.0
+## FIRE button radius as a fraction of screen width (bottom-right corner).
+@export_range(0.06, 0.25) var fire_button_fraction: float = 0.13
+## Seconds between shots while FIRE is held. Placeholder weapon: unlimited ammo.
+@export var fire_interval: float = 0.2
+## A tap within this many screen pixels of an enemy targets it (HYBRID / TAP_TO_TARGET).
+@export var tap_target_radius_px: float = 28.0
+
+@export_group("Damage (placeholder, Point 4 OPEN)")
+@export_range(1, 10) var player_hits: int = 3
+## Can't be hit again for this long after a hit.
+@export var hit_invulnerable_time: float = 1.0
+
+@export_group("Rifle Trooper")
+@export var trooper_health: int = 2
+## Starts aiming when you're this close (he only shoots forward, down the route at you).
+@export var trooper_aim_range: float = 25.0
+## Seconds from "!" to shot, at alert 1 / 2 / 3. Higher alert, less time to dodge.
+@export var trooper_aim_time_alert1: float = 1.0
+@export var trooper_aim_time_alert2: float = 0.8
+@export var trooper_aim_time_alert3: float = 0.6
+## Pause between one shot and aiming again.
+@export var trooper_refire: float = 1.2
+
+@export_group("Cover")
+## You stop this far in front of cover.
+@export var cover_stop_gap: float = 0.7
+
+@export_group("Alarm box")
+## The box can be shot while it's between these distances ahead of you.
+@export var alarm_window_near: float = 3.0
+@export var alarm_window_far: float = 20.0
