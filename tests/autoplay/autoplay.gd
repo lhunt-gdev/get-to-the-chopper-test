@@ -10,6 +10,8 @@ extends Node
 ##   roof_loud   - trips the wire, so TUNNEL is sealed at alert 2 and the left lane carries on to
 ##                 ROOF EDGE; takes the right-lane ladder down
 ##   miss_ladder - as roof_loud, but stays in the middle at ROOF EDGE: should be captured
+##   late_switch - heads for the right-lane stairs, then swipes back to the middle a few metres
+##                 before the split: straight on must still be open, so MOTOR POOL
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -35,6 +37,8 @@ func _ready() -> void:
 			_prefer = {&"compound_exit": 1, &"rooftops": -1, &"roof_edge": 1}
 		"miss_ladder":
 			_prefer = {&"compound_exit": 1, &"rooftops": -1, &"roof_edge": 0}
+		"late_switch":
+			_prefer = {&"compound_exit": 1}
 	_jump_tripwires = not scenario in ["roof_loud", "miss_ladder"]
 	_level = LEVEL.instantiate()
 	add_child(_level)
@@ -50,6 +54,14 @@ func _physics_process(_delta: float) -> void:
 	var d := _player.distance_run()
 	var obstacles: Array = _level._obstacles
 	var lane_count: int = _player.tuning.lane_count
+
+	# Last-minute change of mind: back to the middle just before the first split.
+	if scenario == "late_switch" and _level._runner.current == &"compound_exit":
+		var runner: RouteRunner = _level._runner
+		var left_to_split := runner.graph.length_of(runner.current) - (d - runner.segment_start)
+		if left_to_split < 4.0:
+			_prefer[&"compound_exit"] = 0
+			_cooldown = mini(_cooldown, 0)
 
 	# Steering: avoid lanes with a truck coming up; lean to the preferred side at junctions.
 	_cooldown -= 1

@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## JSON format (see game/levels/prototype_slice/route.json):
 ##   start: node id
-##   nodes: [{ id, length, tier, obstacles: [...], next: [edge, ...], end }]
+##   nodes: [{ id, length, tier, bends: [{at, side}], obstacles: [...], next: [edge, ...], end }]
 ##   edge:  { to, label, side, via, min_alert, max_alert }
 ## An edge can be gated by alert level, so the routes on offer change with alert (LOCKED).
 ##
@@ -127,6 +127,11 @@ func validate() -> PackedStringArray:
 			problems.append("node '%s' has no exits and is not an end" % id)
 		if not TIERS.has(n.get("tier", "ground")):
 			problems.append("node '%s' has unknown tier '%s'" % [id, n.get("tier")])
+		for bend in n.get("bends", []):
+			if not bend is Dictionary or not String(bend.get("side", "")) in ["left", "right"]:
+				problems.append("node '%s': a bend needs \"side\": \"left\" or \"right\"" % id)
+			elif float(bend.get("at", -1)) <= 0.0 or float(bend.get("at", -1)) >= float(n.get("length", 50.0)):
+				problems.append("node '%s': bend at %s m is outside the segment" % [id, bend.get("at")])
 		var sides_seen := {}
 		for edge: Dictionary in edges:
 			var to := StringName(edge.get("to", ""))
@@ -152,4 +157,14 @@ func validate() -> PackedStringArray:
 				problems.append("%s -> %s: %s must change height" % [id, to, via])
 			if via == "ladder" and String(node_data(to).get("end", "")) == "":
 				problems.append("%s -> %s: ladders only lead to the end of the level" % [id, to])
+			if side == "straight" and (edge.has("min_alert") or edge.has("max_alert")):
+				problems.append("%s -> %s: straight on must always be open; gate a side exit instead" % [id, to])
+		# Straight on is always open, so a last-minute lane change works. Only a dead end
+		# (nothing but ladders) has no straight road.
+		var needs_straight := false
+		for edge: Dictionary in edges:
+			if side_of(edge) != "straight" and via_of(edge) != "ladder":
+				needs_straight = true
+		if needs_straight and not sides_seen.has("straight"):
+			problems.append("node '%s' has side exits but no straight road" % id)
 	return problems

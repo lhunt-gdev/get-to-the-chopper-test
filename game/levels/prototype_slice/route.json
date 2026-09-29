@@ -8,6 +8,7 @@
       "theme": "compound",
       "tier": "ground",
       "length": 82,
+      "bends": [{"at": 6, "side": "right"}],
       "obstacles": [
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 30},
         {"kind": "truck", "lanes": [3, 4], "at": 38},
@@ -24,6 +25,7 @@
       "theme": "motor_pool",
       "tier": "ground",
       "length": 70,
+      "bends": [{"at": 44, "side": "left"}],
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1], "at": 14},
         {"kind": "truck", "lanes": [3, 4], "at": 22},

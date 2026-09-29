@@ -29,8 +29,9 @@ enum TargetingMode {
 @export var tap_max_ms: int = 200
 
 @export_group("Junctions")
-## The route is committed this many metres before the segment ends.
-@export var decision_lead: float = 18.0
+## The route is committed this many metres before the split. Small, so a last-minute lane
+## change still counts: every open branch is already built.
+@export var decision_lead: float = 1.0
 ## The junction prompt and slowdown start this far before the decision point.
 @export var approach_window: float = 14.0
 ## Each lane is painted in its route's colour for this many metres before the decision point.
@@ -47,8 +48,14 @@ enum TargetingMode {
 @export var stairs_run: float = 3.0
 ## Ladders are a short, steep climb: this many metres forward.
 @export var ladder_length: float = 3.0
-## How much of each branch you can see before you commit.
-@export var fork_preview_length: float = 30.0
+## A side branch turns out for this many metres, then runs parallel to the main road.
+@export var branch_out_length: float = 14.0
+## A route heading for the end angles back toward the centre line, then runs straight for this long.
+@export var converge_tail: float = 6.0
+## How much of a locked-down branch you can see behind its door.
+@export var locked_stub_length: float = 10.0
+## How long a lockdown door takes to slam shut.
+@export var lockdown_close_time: float = 0.7
 
 @export_group("Capture")
 ## Missing the exit at a no-way-on end stops the player this far from the end.

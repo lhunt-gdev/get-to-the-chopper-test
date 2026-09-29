@@ -27,7 +27,7 @@ Controls: swipe left/right to change lane, up to jump, down to slide. At a fork,
 |---|---|
 | Auto-run, 5 lanes, swipe dodge/jump/slide | Enemies, FIRE, tap-to-target in play |
 | Authored branching route from `route.json` | Contextual cover |
-| Junction prompt + brief slowdown (never a pause); the road physically splits (turns, stairs, end-of-level ladders); lanes painted per exit, sign over the fork | Alarm boxes |
+| Junction prompt + brief slowdown (never a pause); the road physically splits (turns, stairs, end-of-level ladders) and straight on stays open until the split; lockdown doors on alert-closed branches; authored bends; routes head back to the centre; lanes painted per exit, sign over the fork | Alarm boxes |
 | Alert level; tripwire raises it; TUNNEL route sealed above Alert 1 | Chopper countdown / leaving |
 | Death, capture (missed the ladder), extraction, route summary, discovery saved between sessions | Real route-map screen, art, audio |
 | PS1 look: low-res, vertex wobble, affine textures, fog; placeholder textures generated in code, one look per area | |
@@ -59,4 +59,4 @@ Conventions: snake_case files, PascalCase `class_name`s, one feature per folder 
 GODOT=/path/to/godot tests/run_all.sh
 ```
 - Unit tests: route validity, alert gating, lane→exit rule, route geometry rules, swipe direction, targeting priority.
-- Bot playthroughs: a scripted player runs five routes and must die, extract straight on via MOTOR POOL, take stairs up then down to the TUNNEL at Alert 1 and ladder out, find the TUNNEL sealed at Alert 2 and ladder down from ROOF EDGE, and be captured for missing the ladder. If you edit `route.json` and make it unwinnable, CI fails.
+- Bot playthroughs: a scripted player runs six routes and must die, extract straight on via MOTOR POOL, take stairs up then down to the TUNNEL at Alert 1 and ladder out, find the TUNNEL sealed at Alert 2 and ladder down from ROOF EDGE, be captured for missing the ladder, and switch back to the middle at the last moment and still go straight on. If you edit `route.json` and make it unwinnable, CI fails.

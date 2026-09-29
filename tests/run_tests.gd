@@ -74,6 +74,15 @@ func _test_route_rules() -> void:
 	_check("use stairs" in problems, "a corridor that changes height is rejected")
 	_check("ladder must change height" in problems, "a ladder on one level is rejected")
 	_check("ladders only lead to the end" in problems, "a ladder that isn't to the end is rejected")
+	var no_straight := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "next": [{"to": "b", "side": "left", "via": "corridor"}, {"to": "c", "max_alert": 1}]},
+		{"id": "b", "end": "extract"},
+		{"id": "c", "end": "extract"},
+		{"id": "d", "next": [{"to": "b", "side": "right", "via": "corridor"}]},
+	]})
+	problems = " ".join(no_straight.validate())
+	_check("straight on must always be open" in problems, "an alert-gated straight road is rejected")
+	_check("node 'd' has side exits but no straight road" in problems, "side exits without a straight road are rejected")
 
 
 func _test_swipe_direction() -> void:
