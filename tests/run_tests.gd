@@ -19,6 +19,7 @@ func _run() -> void:
 	_test_route_rules()
 	_test_trooper_rules()
 	_test_chopper_stages()
+	_test_seen_troopers_stay()
 	_test_trooper_tiers()
 	_test_swipe_direction()
 	await _test_targeting_priority()
@@ -78,6 +79,28 @@ func _test_trooper_tiers() -> void:
 					counts[alert - 1] += 1
 		_check(counts[0] >= 1 and counts[0] < counts[1] and counts[1] < counts[2],
 				"%s: more troopers at each alert level (%s)" % [id, counts])
+
+
+## Dropping the alert never makes a trooper you've already seen vanish.
+func _test_seen_troopers_stay() -> void:
+	var t := Tuning.new()
+	var near := RifleTrooper.new(t)
+	near.at = 100.0
+	near.min_alert = 2
+	near.note_seen(t, 2, 100.0 - t.trooper_commit_distance + 5.0)  # alert 2, in sight
+	_check(near.is_active(1), "a seen alert-2 trooper stays when alert drops to 1")
+	var far := RifleTrooper.new(t)
+	far.at = 100.0
+	far.min_alert = 2
+	far.note_seen(t, 2, 100.0 - t.trooper_commit_distance - 20.0)  # alert 2, but not in sight yet
+	_check(not far.is_active(1), "an unseen alert-2 trooper goes when alert drops to 1")
+	var unseen := RifleTrooper.new(t)
+	unseen.at = 100.0
+	unseen.min_alert = 2
+	unseen.note_seen(t, 1, 95.0)  # close, but never active (alert 1)
+	_check(not unseen.is_active(1), "a trooper who was never active doesn't appear by being close")
+	for n in [near, far, unseen]:
+		n.free()
 
 
 func _test_chopper_stages() -> void:

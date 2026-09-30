@@ -86,6 +86,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - User felt the level was a little short. Every route is roughly doubled, with more obstacles and more cover blocks. Still one test level; the aim is to feel out length.
 - **Playtest (2026-09-30, user):** the length feels good now.
 - **Troopers are tiered by alert on every route (user decision):** each route has a set for each alert level, with fewer at Alert 1 than at 2 or 3. In the test level each segment has 1 trooper at Alert 1, 2 at Alert 2 and 3 at Alert 3 (`min_alert` in `route.json`). They appear or disappear live as alert goes up or down, so raising or lowering alert changes the pressure on whatever route you're on.
+- **Seen troopers stay (user rule):** when alert drops (e.g. you shoot an alarm box), troopers already active and in view don't disappear. A trooper is committed once he's active and within `trooper_commit_distance` (≈ how far you can see through the fog), or has started aiming; after that he stays whatever the alert. Only troopers further ahead, not yet seen, come and go with alert.
 - Note: the test level has only one tripwire, so Alert 3 can't be reached yet. The Alert 3 troopers are authored, ready for a second alert trigger.
 
 ### PROPOSED — Two kinds of cover replace the trucks (user decision)

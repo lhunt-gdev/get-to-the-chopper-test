@@ -112,6 +112,9 @@ enum TargetingMode {
 @export var trooper_aim_time_alert3: float = 0.6
 ## Pause between one shot and aiming again.
 @export var trooper_refire: float = 1.2
+## Once an active trooper is this close (about as far as you can see through the fog), he stays,
+## even if alert later drops below his level. No one vanishes in front of you.
+@export var trooper_commit_distance: float = 40.0
 
 @export_group("Cover")
 ## You stop this far in front of cover.

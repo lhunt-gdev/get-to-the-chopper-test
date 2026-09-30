@@ -1250,7 +1250,14 @@ func _update_combat(delta: float) -> void:
 	var half_hit := tuning.lane_width * 0.5 + 0.15
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
-		if not is_instance_valid(n) or not c["seg"].get("promoted", false):
+		if not is_instance_valid(n):
+			continue
+		if not c["seg"].get("promoted", false):
+			# On a branch ahead: not acting yet, but shown (and committed once seen) by the same
+			# alert rules, so you never see a trooper that isn't there, or lose one you've seen.
+			if n is RifleTrooper:
+				n.note_seen(tuning, alert, d)
+				n.visible = n.is_active(alert)
 			continue
 		if n is AlarmBox:
 			n.update(delta, tuning, d)

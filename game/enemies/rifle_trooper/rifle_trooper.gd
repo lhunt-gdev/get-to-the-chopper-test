@@ -23,6 +23,9 @@ var health: int = 2
 var state: State = State.IDLE
 ## The lane position he's aiming at, fixed when he starts aiming.
 var aimed_x: float = 0.0
+## Set once he's been active within sight of the player: from then on he stays whatever the alert
+## (user rule: dropping the alert never makes a trooper vanish in front of you).
+var committed: bool = false
 
 var _timer: float = 0.0
 var _body: Node3D
@@ -75,7 +78,15 @@ static func aim_time(tuning: Tuning, alert: int) -> float:
 
 
 func is_active(alert: int) -> bool:
-	return alert >= min_alert and alert <= max_alert
+	return committed or (alert >= min_alert and alert <= max_alert)
+
+
+## Commits him once he's active and within sight, or already aiming.
+func note_seen(tuning: Tuning, alert: int, player_d: float) -> void:
+	if committed or not is_alive():
+		return
+	if state != State.IDLE or (is_active(alert) and at - player_d <= tuning.trooper_commit_distance):
+		committed = true
 
 
 func is_alive() -> bool:
@@ -95,6 +106,7 @@ func is_targetable(alert: int) -> bool:
 ## Returns whether he fired and hit you.
 func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x: float,
 		in_cover: bool, player_world: Vector3, route_point: Callable) -> Shot:
+	note_seen(tuning, alert, player_d)
 	visible = is_active(alert) or state == State.DOWN
 	if not is_alive():
 		return Shot.NONE
