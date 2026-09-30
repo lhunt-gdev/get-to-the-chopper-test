@@ -20,6 +20,7 @@ func _run() -> void:
 	_test_trooper_rules()
 	_test_chopper_stages()
 	_test_seen_troopers_stay()
+	_test_mission_layout()
 	_test_trooper_tiers()
 	_test_swipe_direction()
 	await _test_targeting_priority()
@@ -68,10 +69,34 @@ func _test_pick_edge() -> void:
 	_check(RouteGraph.is_choice(ladders), "ladders are a choice")
 
 
+## Every route must reach the end; areas in several stretches show once in the summary.
+func _test_mission_layout() -> void:
+	var loop := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "next": [{"to": "b"}, {"to": "c", "side": "left", "via": "corridor"}]},
+		{"id": "b", "end": "extract"},
+		{"id": "c", "next": [{"to": "d"}]},
+		{"id": "d", "next": [{"to": "c"}]},
+	]})
+	var problems := " ".join(loop.validate())
+	_check("node 'c' can never reach the end" in problems, "a branch that never reaches the end is rejected")
+	_check(not "node 'a' can never" in problems, "a node with one good route is fine")
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	_check(g.display_name(&"rooftops_far") == "ROOFTOPS", "the far rooftops show as ROOFTOPS")
+	var run_log: Node = root.get_node_or_null("RunLog")  # an autoload; not a global name in -s scripts
+	if run_log == null:
+		_check(false, "RunLog autoload is available")
+		return
+	run_log.begin()
+	run_log.enter_node(&"rooftops", g.display_name(&"rooftops"))
+	run_log.enter_node(&"rooftops_far", g.display_name(&"rooftops_far"))
+	run_log.enter_node(&"helipad", g.display_name(&"helipad"))
+	_check(run_log.route_summary() == "ROOFTOPS > HELIPAD", "two stretches of rooftops show once: %s" % run_log.route_summary())
+
+
 ## Every route has a trooper set per alert level, with fewer at Alert 1 than at 2, and at 2 than at 3.
 func _test_trooper_tiers() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	for id in ["main_floor_lobby", "building_main_floor", "rooftops", "roof_edge", "service_tunnel", "main_floor_exit"]:
+	for id in ["main_floor_lobby", "building_main_floor", "rooftops", "rooftops_far", "service_tunnel", "main_floor_exit"]:
 		var counts := [0, 0, 0]
 		for e in g.node_data(StringName(id)).get("enemies", []):
 			for alert in [1, 2, 3]:
@@ -105,11 +130,19 @@ func _test_seen_troopers_stay() -> void:
 
 func _test_chopper_stages() -> void:
 	var t := Tuning.new()
-	_check(ExtractionClock.stage_at(0.0, t) == ExtractionClock.Stage.INBOUND, "chopper inbound at the start")
-	_check(ExtractionClock.stage_at(t.chopper_lands_at, t) == ExtractionClock.Stage.LANDED, "chopper landed on time")
-	_check(ExtractionClock.stage_at(t.chopper_lifts_at + 0.1, t) == ExtractionClock.Stage.LIFTING_OFF, "chopper lifting off")
-	_check(ExtractionClock.stage_at(t.chopper_gone_at, t) == ExtractionClock.Stage.GONE, "chopper gone at the end")
-	_check(t.chopper_lands_at < t.chopper_lifts_at and t.chopper_lifts_at < t.chopper_gone_at, "chopper stages in order")
+	var l := t.chopper_lands_at
+	var f := t.chopper_lifts_at
+	var gone := t.chopper_gone_at
+	_check(ExtractionClock.stage_at(0.0, l, f, gone) == ExtractionClock.Stage.INBOUND, "chopper inbound at the start")
+	_check(ExtractionClock.stage_at(l, l, f, gone) == ExtractionClock.Stage.LANDED, "chopper landed on time")
+	_check(ExtractionClock.stage_at(f + 0.1, l, f, gone) == ExtractionClock.Stage.LIFTING_OFF, "chopper lifting off")
+	_check(ExtractionClock.stage_at(gone, l, f, gone) == ExtractionClock.Stage.GONE, "chopper gone at the end")
+	_check(l < f and f < gone, "default chopper stages in order")
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	_check(float(g.mission().get("chopper", {}).get("gone_at", 0)) == 68.0, "this mission sets its own chopper time")
+	var bad := RouteGraph.from_dict({"start": "a", "chopper": {"lands_at": 30, "lifts_at": 20, "gone_at": 40},
+			"nodes": [{"id": "a", "end": "extract"}]})
+	_check("chopper times must be" in " ".join(bad.validate()), "a mission's chopper times must be in order")
 
 
 func _test_trooper_rules() -> void:

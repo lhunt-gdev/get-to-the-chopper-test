@@ -5,17 +5,18 @@ extends Node
 ## Every bot but "naive" holds FIRE while there's a trooper to shoot (alarm boxes only in the
 ## alarm scenarios). Scenarios:
 ##   naive        - never moves or shoots; should be killed
-##   ground       - keeps to the middle lanes: straight on via MAIN FLOOR and the GATE
+##   ground       - keeps to the middle lanes: straight on through the main floor to the EXIT
 ##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
 ##                  (open at alert 1), then a ladder up
 ##   tunnel_loud  - runs through MAIN FLOOR's wire: the TUNNEL locks down (alert 2), so the left
-##                  lane carries straight on to the GATE
+##                  lane carries straight on to the EXIT
 ##   tunnel_alarm - runs through MAIN FLOOR's wire, shoots its alarm box (back to alert 1, the
 ##                  door lifts) and takes the TUNNEL after all
-##   roof_down    - right-lane stairs up to ROOFTOPS, then left-lane stairs back down to the GATE
-##   roof_loud    - runs through the first wire (alert 2), up to ROOFTOPS, straight on to ROOF
-##                  EDGE, right-lane ladder down
-##   miss_ladder  - as roof_loud, but stays in the middle at ROOF EDGE: should be captured
+##   roof_down    - right-lane stairs up to the ROOFTOPS, then left-lane stairs back down into
+##                  BUILDING MAIN FLOOR
+##   roof_loud    - runs through the first wire (alert 2), up to the ROOFTOPS, straight on to the
+##                  far end, right-lane ladder down
+##   miss_ladder  - as roof_loud, but stays in the middle at the end of the ROOFTOPS: captured
 ##   late_switch  - heads for the right-lane stairs, then swipes back to the middle a few metres
 ##                  before the split: straight on must still be open, so MAIN FLOOR
 ##   cover        - runs into the first cover, holds fire until it's safe to shoot from cover,
@@ -61,10 +62,10 @@ func _ready() -> void:
 		"roof_down":
 			_prefer = {&"main_floor_lobby": 1, &"rooftops": -1}
 		"roof_loud":
-			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
+			_prefer = {&"main_floor_lobby": 1, &"rooftops_far": 1}
 			_trip_in = [&"main_floor_lobby"]
 		"miss_ladder":
-			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 0}
+			_prefer = {&"main_floor_lobby": 1, &"rooftops_far": 0}
 			_trip_in = [&"main_floor_lobby"]
 		"late_switch":
 			_prefer = {&"main_floor_lobby": 1}

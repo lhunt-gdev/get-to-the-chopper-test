@@ -1,6 +1,7 @@
 {
   "mission": "prototype_slice",
   "authored_for_lanes": 5,
+  "chopper": {"lands_at": 15, "lifts_at": 58, "gone_at": 68},
   "start": "main_floor_lobby",
   "nodes": [
     {
@@ -91,12 +92,13 @@
         {"side": "left", "at": 40}
       ],
       "next": [
-        {"to": "roof_edge", "label": "ROOF EDGE"},
-        {"to": "main_floor_exit", "label": "EXIT", "side": "left", "via": "stairs"}
+        {"to": "rooftops_far", "label": "ROOFTOPS"},
+        {"to": "building_main_floor", "label": "MAIN FLOOR", "side": "left", "via": "stairs"}
       ]
     },
     {
-      "id": "roof_edge",
+      "id": "rooftops_far",
+      "name": "ROOFTOPS",
       "theme": "rooftops",
       "tier": "roof",
       "length": 80,

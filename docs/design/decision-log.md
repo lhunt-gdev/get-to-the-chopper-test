@@ -110,6 +110,16 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - ROOFTOPS gets a left-lane staircase back down to AIRFIELD GATE (main level) and still carries straight on to ROOF EDGE and its ladders.
 - This replaces the earlier layout (ROOFTOPS → stairs down → TUNNEL).
 
+### PROPOSED — Mission layout: main, up and down (user direction, 2026-09-30)
+- A mission has three tiers: the main level (the building), up (ROOFTOPS) and down (SERVICE TUNNEL). ROOF EDGE is removed as a separate area. It's just the far stretch of the ROOFTOPS and shows as ROOFTOPS on screen, because a stretch that ends in ladders can't also have a staircase in its outer lanes.
+- **No fixed lane rule (user decision):** up and down are not always the same lane, and they don't branch off in the same places. Levels should feel intended, not formulaic.
+- **Late branches needn't come back (user decision):** an up or down route that branches off early rejoins the main level. One that branches off near the end can run to its own ladders instead. Test level: the ROOFTOPS (early) come back down into BUILDING MAIN FLOOR; the SERVICE TUNNEL (late) runs to its ladders.
+- Every route must still reach the end of the mission (route validation).
+- **The roof detour is the slow route (user decision):** coming back down into BUILDING MAIN FLOOR adds ~190 m (a clean run takes ~48 s, not ~38 s). Rather than shorten it, the mission gets more chopper time. Each mission now carries its own timeline (`"chopper"` in `route.json`: lands 15 s, lifts off 58 s, gone 68 s here), with `Tuning` as the default.
+
+### OPEN — Missions / story stages (Point 10)
+- The full game has story stages that act as missions. Each reuses the main / up / down structure with its own layout, obstacle looks, trooper sets and chopper time. The test level is one mission.
+
 ### PROPOSED — Readable, grounded obstacles (user direction)
 - **Tripwire emitters:** each laser comes out of an emitter box at each end, set in the side wall. If a wire stops mid-road, the emitter sits on a floor post. That makes the beam easier to spot.
 - **Pipes are plumbed in:** nuts where pipe pieces join. A pipe end next to a wall runs into the wall with a mounting plate; an end in the open bends down into the floor with a foot. No pipe is left floating.
@@ -142,6 +152,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - A short grace after a stumble (`obstacle_grace`) so one fumble can't chain straight into another.
 - The chopper clock turns each stumble into a real cost (about a second).
 - Tripwires unchanged: running through one only raises alert. Placeholder 3 HP stays.
+- **Playtest (2026-09-30, user):** feels good; keep the current values.
 
 ### OPEN — Who captures the player?
 - Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).

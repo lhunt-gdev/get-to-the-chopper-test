@@ -100,6 +100,7 @@ func _ready() -> void:
 	_clock.name = "ExtractionClock"
 	_clock.tuning = tuning
 	add_child(_clock)
+	_clock.configure(_graph.mission().get("chopper", {}))  # this mission's own timeline, if it has one
 	_clock.stage_changed.connect(_on_chopper_stage)
 	_shot_tracer = _box(self, Vector3(0.05, 0.05, 1.0), Vector3.ZERO, Color("fff0b0"))
 	_shot_tracer.top_level = true
@@ -141,7 +142,7 @@ func _physics_process(delta: float) -> void:
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
-	_hud.show_clock(_clock.fraction())
+	_hud.show_clock(_clock.fraction(), _clock.lift_fraction())
 
 
 ## The chopper's stages: a message under the clock, the helicopter lifting, and THE CHOPPER LEFT.
@@ -156,7 +157,7 @@ func _on_chopper_stage(stage: ExtractionClock.Stage) -> void:
 			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("ff4b3a"), 0.0, true)
 			for c in get_tree().get_nodes_in_group("chopper"):
 				c.create_tween().tween_property(c, "position:y", c.position.y + 2.5,
-						tuning.chopper_gone_at - tuning.chopper_lifts_at)
+						_clock.gone_at - _clock.lifts_at)
 		ExtractionClock.Stage.GONE:
 			for c in get_tree().get_nodes_in_group("chopper"):
 				c.visible = false
@@ -1149,9 +1150,9 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 	chopper.add_to_group("chopper")
 	# Built late (with the helipad), so catch up if it's already lifting off.
 	if _clock and _clock.stage == ExtractionClock.Stage.LIFTING_OFF:
-		var t := (_clock.elapsed - tuning.chopper_lifts_at) / (tuning.chopper_gone_at - tuning.chopper_lifts_at)
+		var t := (_clock.elapsed - _clock.lifts_at) / (_clock.gone_at - _clock.lifts_at)
 		chopper.position.y += 2.5 * t
-		chopper.create_tween().tween_property(chopper, "position:y", xf.origin.y + 2.5, tuning.chopper_gone_at - _clock.elapsed)
+		chopper.create_tween().tween_property(chopper, "position:y", xf.origin.y + 2.5, _clock.gone_at - _clock.elapsed)
 	_box(chopper, Vector3(2.2, 1.6, 4.5), Vector3(0, 1.2, 0), Color("2f3b2a"))
 	_box(chopper, Vector3(0.5, 0.5, 4.0), Vector3(0, 1.6, 4.0), Color("2f3b2a"))
 	var rotor := _box(chopper, Vector3(9.0, 0.08, 0.35), Vector3(0, 2.2, 0), Color("111111"))

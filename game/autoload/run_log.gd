@@ -7,6 +7,9 @@ const DISCOVERY_PATH := "user://discovery.json"
 
 ## Route node ids visited this run, in order.
 var visited: Array[StringName] = []
+## What each visited area is called on screen (several route nodes can share a name, e.g. two
+## stretches of ROOFTOPS).
+var visited_names: PackedStringArray = []
 ## Timestamped gameplay events this run (alert changes, hits, choices...).
 var events: Array[Dictionary] = []
 var end_reason: StringName = &""
@@ -21,13 +24,15 @@ func _ready() -> void:
 
 func begin() -> void:
 	visited.clear()
+	visited_names.clear()
 	events.clear()
 	end_reason = &""
 	end_node = &""
 
 
-func enter_node(id: StringName) -> void:
+func enter_node(id: StringName, display_name: String = "") -> void:
 	visited.append(id)
+	visited_names.append(display_name if display_name != "" else String(id).to_upper().replace("_", " "))
 	if not discovered.has(id):
 		discovered[id] = true
 		record_event("discovered", {"node": id})
@@ -45,10 +50,13 @@ func finish(reason: StringName, at_node: StringName) -> void:
 	_save_discovery()
 
 
+## The route as the player saw it: area names, with back-to-back repeats (one area in several
+## stretches) shown once.
 func route_summary() -> String:
 	var parts := PackedStringArray()
-	for id in visited:
-		parts.append(String(id).to_upper().replace("_", " "))
+	for n in visited_names:
+		if parts.is_empty() or parts[-1] != n:
+			parts.append(n)
 	return " > ".join(parts)
 
 

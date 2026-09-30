@@ -83,7 +83,7 @@ func _enter(id: StringName, start: float) -> void:
 	segment_start = start
 	_committed = &""
 	_shown_labels = []
-	RunLog.enter_node(id)
+	RunLog.enter_node(id, graph.display_name(id))
 	node_entered.emit(id)
 
 

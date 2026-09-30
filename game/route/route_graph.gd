@@ -41,6 +41,8 @@ const TIERS := {"roof": 1, "ground": 0, "underground": -1}
 
 var start_id: StringName = &""
 var _nodes: Dictionary = {}  # StringName -> Dictionary
+## The mission-wide settings from the top of the file (e.g. "chopper": its own timeline).
+var _mission: Dictionary = {}
 
 
 static func from_json_file(path: String) -> RouteGraph:
@@ -54,9 +56,14 @@ static func from_json_file(path: String) -> RouteGraph:
 static func from_dict(data: Dictionary) -> RouteGraph:
 	var g := RouteGraph.new()
 	g.start_id = StringName(data.get("start", ""))
+	g._mission = data
 	for n: Dictionary in data.get("nodes", []):
 		g._nodes[StringName(n["id"])] = n
 	return g
+
+
+func mission() -> Dictionary:
+	return _mission
 
 
 func has_node_id(id: StringName) -> bool:
@@ -69,6 +76,11 @@ func node_data(id: StringName) -> Dictionary:
 
 func length_of(id: StringName) -> float:
 	return float(node_data(id).get("length", 50.0))
+
+
+## What the area is called on screen: its "name", or its id in capitals.
+func display_name(id: StringName) -> String:
+	return String(node_data(id).get("name", String(id).to_upper().replace("_", " ")))
 
 
 ## Non-empty when this node finishes the mission (e.g. "extract").
@@ -183,11 +195,36 @@ static func _overlaps(id: StringName, obstacles: Array, enemies: Array) -> Packe
 	return problems
 
 
+## True if some route from this node reaches the end of the mission (whatever the alert).
+func reaches_end(from: StringName) -> bool:
+	var seen := {}
+	var todo: Array[StringName] = [from]
+	while not todo.is_empty():
+		var id: StringName = todo.pop_back()
+		if seen.has(id) or not _nodes.has(id):
+			continue
+		seen[id] = true
+		if end_type(id) != "":
+			return true
+		for edge in all_next(id):
+			todo.append(StringName(edge.get("to", "")))
+	return false
+
+
 ## Returns a list of problems. Empty means the graph is valid.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
 	if not _nodes.has(start_id):
 		problems.append("start node '%s' does not exist" % start_id)
+	var ch: Dictionary = _mission.get("chopper", {})
+	if not ch.is_empty():
+		var t0 := float(ch.get("lands_at", 0)); var t1 := float(ch.get("lifts_at", 0)); var t2 := float(ch.get("gone_at", 0))
+		if not (t0 > 0.0 and t0 < t1 and t1 < t2):
+			problems.append("mission chopper times must be lands_at < lifts_at < gone_at")
+	# Every route, up, down or main, must still get you to the chopper.
+	for id: StringName in _nodes:
+		if not reaches_end(id):
+			problems.append("node '%s' can never reach the end of the mission" % id)
 	for id: StringName in _nodes:
 		var n: Dictionary = _nodes[id]
 		var edges: Array = n.get("next", [])

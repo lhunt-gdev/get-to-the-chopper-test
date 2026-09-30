@@ -36,6 +36,8 @@ class ClockDial extends Control:
 	const R := 15.0
 	var tuning: Tuning
 	var fraction := 0.0
+	## Where LIFTING OFF starts on the dial (0-1), from the mission's chopper timeline.
+	var lift_fraction := 0.8
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -48,7 +50,7 @@ class ClockDial extends Control:
 		draw_circle(c, R + 2.0, Color("1c1c1a"))
 		draw_circle(c, R, Color("d8d0b0"))
 		# LIFTING OFF: the last stretch of the dial.
-		var lift := tuning.chopper_lifts_at / tuning.chopper_gone_at
+		var lift := lift_fraction
 		_wedge(c, R - 1.0, lift, 1.0, Color("c8402e"))
 		# Spent time greys out, so the dial also reads as "how much is left".
 		_wedge(c, R - 5.0, 0.0, fraction, Color(0.25, 0.24, 0.2, 0.55))
@@ -159,7 +161,10 @@ func show_hp(left: int, total: int) -> void:
 	_hp.modulate = Color("f0e8c8") if left > 1 else Color("ff4b3a")
 
 
-func show_clock(fraction: float) -> void:
+func show_clock(fraction: float, lift_fraction: float = -1.0) -> void:
+	if _clock and lift_fraction >= 0.0 and _clock.lift_fraction != lift_fraction:
+		_clock.lift_fraction = lift_fraction
+		_clock.queue_redraw()
 	if _clock and absf(_clock.fraction - fraction) > 0.001:
 		_clock.fraction = fraction
 		_clock.queue_redraw()
