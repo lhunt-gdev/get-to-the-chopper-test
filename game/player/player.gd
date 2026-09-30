@@ -21,6 +21,9 @@ var cover_crouch: bool = false
 ## Placeholder damage model (Point 4 OPEN): this many hits and you're down.
 var hits_left: int = 3
 var _invulnerable: float = 0.0
+## Stumbling: stunned (no swipes) for a moment, then back up to speed.
+var _stun_left: float = 0.0
+var _speed_mul: float = 1.0
 var _skin: ShaderMaterial
 var _y_velocity: float = 0.0
 var _slide_left: float = 0.0
@@ -61,8 +64,12 @@ func _physics_process(delta: float) -> void:
 	if not GameState.run_active or halted:
 		return
 	_invulnerable -= delta
+	if _stun_left > 0.0:
+		_stun_left -= delta
+	else:
+		_speed_mul = move_toward(_speed_mul, 1.0, delta * (1.0 - tuning.obstacle_slow_factor) / tuning.obstacle_slow_recover)
 	if not in_cover:
-		distance += tuning.run_speed * delta
+		distance += tuning.run_speed * _speed_mul * delta
 	track_x = move_toward(track_x, lane_x(lane), tuning.lane_change_speed * delta)
 
 	if is_airborne() or _y_velocity > 0.0:
@@ -75,11 +82,16 @@ func _physics_process(delta: float) -> void:
 		_slide_left -= delta
 	var target_scale := 0.45 if is_sliding() else (0.65 if in_cover and cover_crouch else 1.0)
 	_body.scale.y = move_toward(_body.scale.y, target_scale, delta * 10.0)
+	# Stumbling: pitch forward and wobble, then straighten up.
+	var pitch := 0.0
+	if _stun_left > 0.0:
+		pitch = -0.45 * (_stun_left / tuning.obstacle_stun_time) + 0.12 * sin(_stun_left * 40.0)
+	_body.rotation.x = lerpf(_body.rotation.x, pitch, clampf(delta * 18.0, 0.0, 1.0))
 	_update_visuals()
 
 
 func handle_swipe(dir: Vector2i) -> void:
-	if halted:
+	if halted or is_stunned():
 		return
 	if in_cover:
 		# Swiping away from the cover (sideways) leaves it and resumes the run. Nothing else does.
@@ -111,6 +123,20 @@ func enter_cover(stop_at: float, crouch: bool) -> void:
 	jump_y = 0.0
 	_y_velocity = 0.0
 	_slide_left = 0.0
+
+
+## Ran into a jump/slide obstacle: stunned for a moment (no swipes), slowed, then back up to
+## speed. Any jump or slide in progress is cut short.
+func stumble() -> void:
+	_stun_left = tuning.obstacle_stun_time
+	_speed_mul = tuning.obstacle_slow_factor
+	_slide_left = 0.0
+	jump_y = 0.0
+	_y_velocity = 0.0
+
+
+func is_stunned() -> bool:
+	return _stun_left > 0.0
 
 
 ## Returns true if the hit landed (not while briefly invulnerable after the last one).

@@ -102,6 +102,18 @@ enum TargetingMode {
 ## Can't be hit again for this long after a hit.
 @export var hit_invulnerable_time: float = 1.0
 
+@export_group("Stumbles (placeholder, Point 4 OPEN)")
+## Running into a jump/slide obstacle stuns you for this long (no swipes)...
+@export var obstacle_stun_time: float = 0.5
+## ...drops you to this fraction of run speed...
+@export_range(0.1, 1.0) var obstacle_slow_factor: float = 0.5
+## ...which recovers to full speed over this many seconds after the stun.
+@export var obstacle_slow_recover: float = 1.2
+## HP lost per stumble (0 = time cost only).
+@export_range(0, 3) var obstacle_damage: int = 1
+## After a stumble, other obstacles can't trip you for this long.
+@export var obstacle_grace: float = 1.0
+
 @export_group("Rifle Trooper")
 @export var trooper_health: int = 2
 ## Starts aiming when you're this close (he only shoots forward, down the route at you).

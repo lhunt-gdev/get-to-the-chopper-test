@@ -136,6 +136,13 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 ### OPEN — FIRE button position setting (later)
 - User wants a player setting to put FIRE on the left, the right or in the middle. Build it when there's a settings screen. The button's position is already one function (`SwipeInput.fire_button`), so it's a small change.
 
+### PROPOSED — Obstacles stun instead of kill (user decision; part of the OPEN damage model, Point 4)
+- Running into a jump or slide obstacle no longer ends the run. You **stumble**: a short stun (`obstacle_stun_time`, no swipes), your speed drops (`obstacle_slow_factor`) and recovers over `obstacle_slow_recover`, and you lose `obstacle_damage` HP (default 1, from the same pool as trooper hits; set 0 to try "time cost only").
+- Why HP as well: without it, a player could shrug off obstacles and just take the time hit, and jumping and sliding would stop mattering. Obstacles and troopers share one health pool, so a messy run is what fails.
+- A short grace after a stumble (`obstacle_grace`) so one fumble can't chain straight into another.
+- The chopper clock turns each stumble into a real cost (about a second).
+- Tripwires unchanged: running through one only raises alert. Placeholder 3 HP stays.
+
 ### OPEN — Who captures the player?
 - Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).
 

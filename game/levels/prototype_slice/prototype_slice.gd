@@ -74,6 +74,8 @@ var _shot_tracer: MeshInstance3D
 var _clock: ExtractionClock
 ## How far the camera follows the player across the road (0.6 normally, 1.0 beside a wall).
 var _camera_follow := 0.6
+## Obstacles can't trip you again until this game time (seconds into the run), after a stumble.
+var _stumble_grace_until := -1.0
 
 @onready var _player: Player = $Player
 @onready var _camera: Camera3D = $Camera3D
@@ -1236,9 +1238,32 @@ func _check_obstacles() -> void:
 				GameState.raise_alert()
 				continue
 		o["done"] = true
-		RunLog.record_event("hit", {"kind": o["kind"], "node": _runner.current})
-		_end(&"killed")
+		_stumble(o)
 		return
+
+
+## Ran into a jump or slide obstacle: a stumble, not the end of the run. You're stunned and
+## slowed (the chopper clock makes that cost something) and lose obstacle_damage HP. A short grace
+## afterwards stops one fumble chaining into the next.
+func _stumble(o: Dictionary) -> void:
+	if _clock.elapsed < _stumble_grace_until:
+		return
+	_stumble_grace_until = _clock.elapsed + tuning.obstacle_grace
+	RunLog.record_event("stumble", {"kind": o["kind"], "node": _runner.current})
+	_player.stumble()
+	var here := _player.global_position + Vector3(0, 1.2, 0)
+	if o["pass"] == "slide" and _skin(_runner.current, "pipe", "pipe") == "wires":
+		# Zapped by the live wires: a burst of sparks on the player.
+		var s := Sparks.new(6, Time.get_ticks_msec())
+		_world.add_child(s)
+		s.global_position = here
+		get_tree().create_timer(0.6).timeout.connect(s.queue_free)
+	elif o["pass"] == "jump" and o["mesh"] is Node3D:
+		# Knocked it over as you went through.
+		var m: Node3D = o["mesh"]
+		m.create_tween().tween_property(m, "rotation:x", m.rotation.x - 1.2, 0.25).set_ease(Tween.EASE_OUT)
+	for i in tuning.obstacle_damage:
+		_damage_player(String(o["kind"]))
 
 
 # --- Combat -----------------------------------------------------------------------

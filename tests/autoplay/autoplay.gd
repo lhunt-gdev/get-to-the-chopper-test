@@ -23,6 +23,8 @@ extends Node
 ##   camper       - takes cover and never leaves it: the chopper should leave without us
 ##   ground_loud  - main route, runs through both wires and ignores the alarm boxes: Alert 3
 ##   ground_alarms - main route, runs through both wires, shoots both alarm boxes: back to Alert 1
+##   stumble_once - main route, but runs straight into the first barrier: a stumble (1 HP, a
+##                  little time), not the end of the run
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -39,6 +41,8 @@ var _trip_in: Array = []
 var _cooldown := 0
 var _took_cover := false
 var _cover_frames := 0
+## stumble_once: the obstacle it deliberately doesn't jump (null until chosen).
+var _fumble: Variant = null
 
 
 func _ready() -> void:
@@ -131,6 +135,9 @@ func _physics_process(_delta: float) -> void:
 			continue
 		match o["pass"]:
 			"jump":
+				if scenario == "stumble_once" and (_fumble == null or _fumble == o):
+					_fumble = o  # run straight into this one
+					continue
 				_player.handle_swipe(Vector2i.UP)
 			"jump_or_alert":
 				if not _level._runner.current in _trip_in:
@@ -186,8 +193,8 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d time=%.1f" % [scenario, reason,
-			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _level._clock.elapsed])
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d time=%.1f" % [scenario, reason,
+			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _level._clock.elapsed])
 	get_tree().quit()
 
 
