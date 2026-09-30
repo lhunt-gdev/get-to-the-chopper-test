@@ -54,7 +54,7 @@ const THEMES := {
 			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"),
 			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "roof_vent",
 					"wall_looks": ["hvac"]}},
-	"tunnel": {"wall": "tile", "ambient": Color(0.19, 0.23, 0.2), "lamps": "bulbs", "fog_color": Color("0b100d"),
+	"tunnel": {"wall": "tile", "wall_tex": "tunnel_wall", "ceiling_tex": "tunnel_ceiling", "ambient": Color(0.19, 0.23, 0.2), "lamps": "bulbs", "fog_color": Color("0b100d"),
 			"stair_wall": "tunnel_wall", "stair_door": "steel_door", "marker_door": "bars", "color": Color("4d5c52"), "height": CEILING_Y, "ground": "asphalt", "ceiling": true},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
 	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "helipad", "snow": true,
@@ -1184,6 +1184,9 @@ func _wall(parent: Node3D, seg: Dictionary, a: float, b: float, x: float, side: 
 	var l := b - a
 	var xf: Transform3D = leg["xf"]
 	var m := _plane(parent, Vector2(l, y1 - y0), Vector3.ZERO, tex, Vector2(l / 2.0, (y1 - y0) / 2.0), PlaneMesh.FACE_Z)
+	# Shift the pattern so a tile's bottom row (skirting, grime) sits on the floor, whatever the height.
+	var rows := (y1 - y0) / 2.0
+	m.material_override = PsxMaterials.textured(tex, Vector2(l / 2.0, rows), false, Vector2(0, ceilf(rows) - rows))
 	m.transform = Transform3D(xf.basis * Basis(Vector3.UP, -side * PI / 2.0),
 			xf * Vector3(x, (y0 + y1) / 2.0, -((a + b) / 2.0 - leg["start"])))
 
@@ -2017,7 +2020,9 @@ func _obstacle_texture(name: String) -> Texture2D:
 		"roof_hut":
 			return PsxTextures.wall("blocks", Color("7c7c72"))
 		"tunnel_wall":
-			return PsxTextures.wall("tile", Color("4d5c52"))
+			return PsxTextures.tunnel_wall()
+		"tunnel_ceiling":
+			return PsxTextures.tunnel_ceiling()
 	push_warning("Unknown obstacle texture '%s'" % name)
 	return PsxTextures.concrete()
 

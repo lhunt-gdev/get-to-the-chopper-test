@@ -53,15 +53,17 @@ static func shadow_mesh(size: Vector2) -> PlaneMesh:
 
 
 ## uv_scale sets how often the texture repeats across the mesh. unlit: it gives off its own light
-## (lit windows at night) and ignores the area's lighting.
-static func textured(tex: Texture2D, uv_scale: Vector2 = Vector2.ONE, unlit: bool = false) -> ShaderMaterial:
-	var key := "%d_%s_%s" % [tex.get_rid().get_id(), uv_scale, unlit]
+## (lit windows at night) and ignores the area's lighting. uv_offset shifts the texture (walls use it
+## so a tile's bottom row sits on the floor).
+static func textured(tex: Texture2D, uv_scale: Vector2 = Vector2.ONE, unlit: bool = false, uv_offset: Vector2 = Vector2.ZERO) -> ShaderMaterial:
+	var key := "%d_%s_%s_%s" % [tex.get_rid().get_id(), uv_scale, unlit, uv_offset]
 	if not _cache.has(key):
 		var m := ShaderMaterial.new()
 		m.shader = SHADER
 		m.set_shader_parameter("albedo_texture", tex)
 		m.set_shader_parameter("uv_scale", uv_scale)
 		m.set_shader_parameter("unlit", unlit)
+		m.set_shader_parameter("uv_offset", uv_offset)
 		_cache[key] = m
 	return _cache[key]
 

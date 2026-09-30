@@ -54,6 +54,16 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - The PS1 shader does its own lighting: an ambient and a moonlight colour per area, plus the nearest 8 lamps, lit per pixel in stepped, dithered bands so it stays pixel-crisp. It's cheap on iPhone web, and it replaces the flat sun and ambient.
   - Lamps are authored per area theme: office ceiling strips, caged tunnel bulbs, rooftop floodlights, and blinking aviation beacons on the skyline.
   - A full-screen grade and dither pass sits under the HUD. The stairwell CCTV view replaces it while you're in a stairwell.
+- **Playtest (2026-09-30, user, iPhone):** speed is fine; the tunnel isn't too dark for now; the ALERT 3 red is fine, not too much. Keep the current values.
+- **Texture pass (user direction, 2026-09-30):** "work on the textures more and give them a bit more of an MGS quality". The generated textures go from flat 32 px tiles to 64 px tiles with the detail MGS1's textures are known for:
+  - bevelled panel edges (light top-left, dark bottom-right) and recessed seams;
+  - blotchy grime rather than even noise, dirt building up at the bottom of walls, and rust and water streaks running down from seams;
+  - rivets, bolts, grilles and vents;
+  - military stencils on doors, crates and machinery (a tiny pixel font, e.g. "B2", "05", "AC-3");
+  - a reduced colour palette per texture, like the PS1's colour tables.
+  - The painted light panels come off the office ceiling (the real ceiling lamps replace them). The tunnel gets its own grimy tiled wall.
+  - Textures get mipmaps, so the extra detail doesn't sparkle in the distance. Up close they're still unfiltered, chunky pixels.
+  - Lane lines and lane seams stay as readable as before (user rule).
 - **Not in this pass:** sound (there is none yet, and it's the other half of MGS's mood, so it's worth doing next); new models; a Codec-style radio HUD.
 - Numbers in `Tuning` (Ambience).
 

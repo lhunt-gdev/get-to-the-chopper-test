@@ -1,49 +1,89 @@
 class_name PsxTextures
 extends RefCounted
 ## Placeholder PS1-style textures, generated in code so the prototype needs no art files.
-## Tiny, nearest-filtered, with colour baked in. Real art replaces these later.
+## 64 px tiles in the MGS1 manner: bevelled panels and seams, blotchy grime that builds up at the
+## bottom, rust and water streaks, rivets and grilles, worn military stencils, and a reduced
+## palette per texture (like the PS1's colour tables). Nearest-filtered up close, with mipmaps so
+## the detail doesn't sparkle far off. Real art replaces these later.
 ## Each texture is cached by key, and the noise uses a fixed seed so it looks the same every run.
+## Rows run top to bottom (y = 0 is the top of a wall).
 
-const SIZE := 32
+const SIZE := 64
 const ROAD := Color("3a3a37")
+## Levels per colour channel after generating (PS1 colour-table look).
+const LEVELS := 28
 
 static var _cache: Dictionary = {}
 
+## A 3x5 pixel stencil font (rows top to bottom, 1 = paint).
+const GLYPHS := {
+	"0": ["111", "101", "101", "101", "111"], "1": ["010", "110", "010", "010", "111"],
+	"2": ["111", "001", "111", "100", "111"], "3": ["111", "001", "111", "001", "111"],
+	"4": ["101", "101", "111", "001", "001"], "5": ["111", "100", "111", "001", "111"],
+	"6": ["111", "100", "111", "101", "111"], "7": ["111", "001", "001", "010", "010"],
+	"8": ["111", "101", "111", "101", "111"], "9": ["111", "101", "111", "001", "111"],
+	"A": ["010", "101", "111", "101", "101"], "B": ["110", "101", "110", "101", "110"],
+	"C": ["011", "100", "100", "100", "011"], "D": ["110", "101", "101", "101", "110"],
+	"E": ["111", "100", "110", "100", "111"], "F": ["111", "100", "110", "100", "100"],
+	"G": ["011", "100", "101", "101", "011"], "H": ["101", "101", "111", "101", "101"],
+	"I": ["111", "010", "010", "010", "111"], "K": ["101", "101", "110", "101", "101"],
+	"L": ["100", "100", "100", "100", "111"], "M": ["101", "111", "111", "101", "101"],
+	"N": ["110", "101", "101", "101", "101"], "O": ["111", "101", "101", "101", "111"],
+	"P": ["110", "101", "110", "100", "100"], "R": ["110", "101", "110", "101", "101"],
+	"S": ["011", "100", "010", "001", "110"], "T": ["111", "010", "010", "010", "010"],
+	"U": ["101", "101", "101", "101", "111"], "V": ["101", "101", "101", "101", "010"],
+	"W": ["101", "101", "111", "111", "101"], "X": ["101", "101", "010", "101", "101"],
+	"Y": ["101", "101", "010", "010", "010"], "-": ["000", "000", "111", "000", "000"],
+}
 
-## One lane-width tile of road, with a dashed lane line down its left edge.
+
+## One lane-width tile of road (4 m long): worn asphalt with cracks and oil stains, and a dashed
+## lane line down its left edge.
 static func asphalt() -> Texture2D:
 	if _cache.has("asphalt"):
 		return _cache["asphalt"]
-	var img := _start("asphalt", ROAD, 0.035)
-	for y in range(0, 16):
-		for x in range(0, 2):
-			img.set_pixel(x, y, Color("b8b49a"))
+	var img := _start("asphalt", ROAD, 0.05)
+	_aggregate(img, "asphalt_stones", 260, 0.07)
+	_blotches(img, "asphalt_oil", 3, 4, 8, Color("1e1e1c"), 0.35)
+	_cracks(img, "asphalt_cracks", 3, 22, 0.6)
+	var rng := _rng("asphalt_line")
+	for y in range(0, 32):
+		for x in range(0, 3):
+			if rng.randf() > 0.12:  # worn paint
+				_blend(img, x, y, Color("b8b49a"), 0.85)
 	return _finish("asphalt", img)
 
 
-## Plain concrete slabs, e.g. the helipad.
+## Concrete slabs (the helipad, kerbs, slabs): stained, with recessed joints.
 static func concrete() -> Texture2D:
 	if _cache.has("concrete"):
 		return _cache["concrete"]
-	var img := _start("concrete", Color("6a6a62"), 0.04)
-	for i in SIZE:
-		img.set_pixel(i, 0, Color("55554e"))
-		img.set_pixel(0, i, Color("55554e"))
+	var img := _start("concrete", Color("6a6a62"), 0.05)
+	_aggregate(img, "concrete_stones", 140, 0.05)
+	_blotches(img, "concrete_stains", 3, 5, 10, Color("4a4a44"), 0.3)
+	_cracks(img, "concrete_cracks", 2, 14, 0.7)
+	_groove_h(img, 0, 0, SIZE)
+	_groove_v(img, 0, 0, SIZE)
 	return _finish("concrete", img)
 
 
-## Stairs: four concrete steps per tile, each with a light nosing and a dark riser.
+## Stairs: four concrete steps per tile, each with a worn light nosing and a dark riser, and
+## the middle of each tread worn paler by feet.
 static func stairs() -> Texture2D:
 	if _cache.has("stairs"):
 		return _cache["stairs"]
-	var img := _start("stairs", Color("6e6e66"), 0.035)
+	var img := _start("stairs", Color("6e6e66"), 0.04)
 	for step in 4:
-		var y0 := step * 8
+		var y0 := step * 16
 		for x in SIZE:
-			img.set_pixel(x, y0, Color("a8a898"))
-			img.set_pixel(x, y0 + 1, Color("8c8c82"))
-			img.set_pixel(x, y0 + 6, Color("3c3c38"))
-			img.set_pixel(x, y0 + 7, Color("2c2c29"))
+			var wear := 1.0 + 0.08 * (1.0 - absf(x - SIZE / 2.0) / (SIZE / 2.0))
+			for y in range(y0 + 3, y0 + 12):
+				_shade(img, x, y, wear)
+			_put(img, x, y0, Color("b0b0a0"))
+			_put(img, x, y0 + 1, Color("94948a"))
+			_put(img, x, y0 + 2, Color("7c7c74"))
+			for y in range(y0 + 12, y0 + 16):
+				_shade(img, x, y, 0.55 - 0.05 * (y - y0 - 12))
 	return _finish("stairs", img)
 
 
@@ -52,161 +92,283 @@ static func wall(pattern: String, color: Color) -> Texture2D:
 	var key := "wall_%s_%s" % [pattern, color.to_html()]
 	if _cache.has(key):
 		return _cache[key]
-	var img := _start(key, color, 0.04)
-	var line := color.darkened(0.45)
+	var img := _start(key, color, 0.045)
 	match pattern:
 		"blocks":
-			_courses(img, 8, 16, line)
+			_courses(img, key, 16, 32)
 		"brick":
-			_courses(img, 4, 8, line)
+			_courses(img, key, 8, 16)
 		"tile":
-			for i in SIZE:
-				for j in range(0, SIZE, 8):
-					img.set_pixel(i, j, line)
-					img.set_pixel(j, i, line)
+			_tiles(img, 16, 8, color.darkened(0.45))
 		"corrugated":
 			for x in SIZE:
+				var k := 1.0 + 0.16 * sin(x * TAU / 6.0)
 				for y in SIZE:
-					var c := img.get_pixel(x, y)
-					img.set_pixel(x, y, c.lightened(0.18) if (x / 2) % 2 == 0 else c.darkened(0.12))
+					_shade(img, x, y, k)
+	_streaks(img, key + "_streaks", 5, color.darkened(0.6), 0.3)
+	_grime_bottom(img, key, 38, 0.4)
 	return _finish(key, img)
 
 
-## Jump barriers: yellow and black hazard stripes.
+## The service tunnel's walls: old glazed tiles above a dark green band, grimy lower tiles, and
+## water and rust running down from the joints.
+static func tunnel_wall() -> Texture2D:
+	if _cache.has("tunnel_wall"):
+		return _cache["tunnel_wall"]
+	var img := _start("tunnel_wall", Color("70847a"), 0.04)
+	var grout := Color("39443e")
+	_tiles(img, 16, 8, grout)
+	for y in range(40, SIZE):
+		for x in SIZE:
+			_shade(img, x, y, 0.62)
+	for x in SIZE:
+		for y in range(38, 43):
+			_put(img, x, y, Color("2d4636"))
+		_shade(img, x, 38, 1.5)
+		_shade(img, x, 42, 0.6)
+	_streaks(img, "tunnel_wall_water", 7, Color("26302a"), 0.45)
+	_streaks(img, "tunnel_wall_rust", 3, Color("6a3a1c"), 0.35)
+	_blotches(img, "tunnel_wall_damp", 3, 4, 9, Color("2a3830"), 0.3)
+	_grime_bottom(img, "tunnel_wall", 44, 0.55)
+	return _finish("tunnel_wall", img)
+
+
+## The service tunnel's ceiling: stained concrete between cast ribs, with a conduit and a
+## cable tray running along it.
+static func tunnel_ceiling() -> Texture2D:
+	if _cache.has("tunnel_ceiling"):
+		return _cache["tunnel_ceiling"]
+	var img := _start("tunnel_ceiling", Color("4e524c"), 0.05)
+	_aggregate(img, "tunnel_ceiling_stones", 160, 0.05)
+	_blotches(img, "tunnel_ceiling_damp", 4, 4, 9, Color("2a302a"), 0.35)
+	for x in SIZE:
+		for y in range(0, 6):  # a rib across the tunnel
+			_put(img, x, y, Color("5e625a"))
+		_shade(img, x, 0, 1.3)
+		_shade(img, x, 5, 0.55)
+		_shade(img, x, 6, 0.7)
+	for y in SIZE:
+		for x in range(20, 23):  # conduit
+			_put(img, x, y, Color("3a3e3a") if x != 20 else Color("6a6e68"))
+		for x in range(40, 50):  # cable tray
+			_put(img, x, y, Color("2c2e2c") if x in [40, 49] else Color("3c3a34").lightened(0.06 * ((y / 3) % 2)))
+	_streaks(img, "tunnel_ceiling_rust", 3, Color("5a3a1c"), 0.3)
+	return _finish("tunnel_ceiling", img)
+
+
+## Jump barriers: worn yellow and black hazard stripes, chipped to bare metal, dirty edges.
 static func hazard() -> Texture2D:
 	if _cache.has("hazard"):
 		return _cache["hazard"]
 	var img := _start("hazard", Color.BLACK, 0.0)
 	for y in SIZE:
 		for x in SIZE:
-			img.set_pixel(x, y, Color("d9b02a") if ((x + y) / 8) % 2 == 0 else Color("1c1c1a"))
+			img.set_pixel(x, y, Color("d4aa2a") if ((x + y) / 11) % 2 == 0 else Color("1e1e1b"))
+	_noise(img, "hazard", 16, 0.06)
+	_blotches(img, "hazard_chips", 7, 1, 3, Color("6a6c6e"), 0.8)
+	_scratches(img, "hazard_scratch", 10)
+	_frame(img, 2)
+	_grime_bottom(img, "hazard", 40, 0.35)
 	return _finish("hazard", img)
 
 
-## Slide pipes: grey metal with rust patches and joint bands.
+## Slide pipes: grey metal with rust eating in, and bolted flanges.
 static func rust_pipe() -> Texture2D:
 	if _cache.has("rust_pipe"):
 		return _cache["rust_pipe"]
 	var img := _start("rust_pipe", Color("7a7f86"), 0.05)
-	var rng := _rng("rust_pipe_spots")
-	for i in 14:
-		var cx := rng.randi_range(0, SIZE - 1)
-		var cy := rng.randi_range(0, SIZE - 1)
-		var r := rng.randi_range(2, 4)
-		for y in range(cy - r, cy + r + 1):
-			for x in range(cx - r, cx + r + 1):
-				if Vector2(x - cx, y - cy).length() <= r:
-					img.set_pixel(posmod(x, SIZE), posmod(y, SIZE), Color("8a4a22").lightened(rng.randf_range(-0.1, 0.1)))
+	_rust(img, "rust_pipe", 0.08)
 	for x in SIZE:
-		for y in [0, 15, 16]:
-			img.set_pixel(x, y, Color("3e4046"))
+		for y in [0, 1, 30, 31, 32, 33]:
+			_put(img, x, y, Color("3e4046"))
+		_shade(img, x, 29, 0.7)
+		_shade(img, x, 34, 1.3)
+	for x in range(4, SIZE, 12):
+		_rivet(img, x, 31)
+	_streaks(img, "rust_pipe_run", 4, Color("6a3a1c"), 0.4)
 	return _finish("rust_pipe", img)
 
 
-## Office / complex wall (MGS PS1 style): blue-grey panels with dark seams, a darker dado band
-## and a light stripe along it. One tile per 2 m x 2 m.
+## Office / complex wall (MGS PS1 style): blue-grey panels with recessed seams and screws, a dado
+## rail, a darker kick panel scuffed by feet, a power socket, and dirt along the floor.
 static func office_wall() -> Texture2D:
 	if _cache.has("office_wall"):
 		return _cache["office_wall"]
-	var img := _start("office_wall", Color("6f7a82"), 0.025)
-	for y in SIZE:
+	var img := _start("office_wall", Color("717c84"), 0.03)
+	for y in 42:
 		for x in SIZE:
-			if x % 16 == 0 or y == 0:
-				img.set_pixel(x, y, Color("4a535a"))  # panel seams
-			if y >= 22:
-				img.set_pixel(x, y, Color("4c565e"))  # dado
-			if y == 21 or y == 22:
-				img.set_pixel(x, y, Color("9aa8b0"))  # stripe
+			_shade(img, x, y, 1.06 - 0.1 * y / 42.0)  # a little lighter near the top
+	for x in SIZE:
+		for y in range(46, SIZE):
+			_put(img, x, y, img.get_pixel(x, y).darkened(0.3))
+	for y in range(0, 46):
+		_groove_v(img, 0, y, y + 1)
+		_groove_v(img, 32, y, y + 1)
+	_groove_h(img, 0, 0, SIZE)
+	for x in SIZE:
+		_put(img, x, 42, Color("a8b4bc"))
+		_put(img, x, 43, Color("8e9aa2"))
+		_put(img, x, 44, Color("5a646c"))
+		_put(img, x, 45, Color("3e464c"))
+	for p in [Vector2i(4, 4), Vector2i(28, 4), Vector2i(36, 4), Vector2i(60, 4), Vector2i(4, 38), Vector2i(28, 38), Vector2i(36, 38), Vector2i(60, 38)]:
+		_rivet(img, p.x, p.y)
+	_bevel(img, Rect2i(0, 46, 32, 18), 1.15, 0.75)
+	_bevel(img, Rect2i(32, 46, 32, 18), 1.15, 0.75)
+	# A power socket on the kick panel.
+	_fill(img, Rect2i(12, 50, 6, 5), Color("b8bcb4"))
+	_bevel(img, Rect2i(12, 50, 6, 5), 1.1, 0.7)
+	_put(img, 14, 52, Color("2a2c2a"))
+	_put(img, 16, 52, Color("2a2c2a"))
+	_blotches(img, "office_wall_scuffs", 5, 1, 3, Color("30363a"), 0.4, Rect2i(0, 54, SIZE, 10))
+	_grime_bottom(img, "office_wall", 50, 0.35)
 	return _finish("office_wall", img)
 
 
-## Office floor: grey linoleum tiles, one per lane width, with a faint seam where lanes meet.
+## Office floor: linoleum tiles (four per lane width) each a slightly different shade, with
+## grout lines, scuffs and a waxy sheen, and a darker seam where lanes meet.
 static func office_floor() -> Texture2D:
 	if _cache.has("office_floor"):
 		return _cache["office_floor"]
-	var img := _start("office_floor", Color("5f625c"), 0.03)
-	for i in SIZE:
-		img.set_pixel(0, i, Color("40423e"))
-		img.set_pixel(1, i, Color("40423e"))
-		img.set_pixel(i, 0, Color("4a4c47"))
-	for y in range(6, 26, 10):  # scuff marks
-		img.set_pixel(10 + y % 7, y, Color("535650"))
+	var img := _start("office_floor", Color("61645e"), 0.03)
+	var rng := _rng("office_floor_tiles")
+	for ty in 2:
+		for tx in 2:
+			var k := rng.randf_range(0.93, 1.07)
+			for y in range(ty * 32, ty * 32 + 32):
+				for x in range(tx * 32, tx * 32 + 32):
+					_shade(img, x, y, k)
+			_bevel(img, Rect2i(tx * 32, ty * 32, 32, 32), 1.1, 0.8)
+	for i in SIZE:  # sheen
+		_shade(img, i, (i + 20) % SIZE, 1.08)
+		_shade(img, i, (i + 21) % SIZE, 1.05)
+	_blotches(img, "office_floor_scuffs", 7, 1, 2, Color("3e403c"), 0.45)
+	for y in SIZE:
+		for x in range(0, 3):
+			_put(img, x, y, Color("3c3e3a"))  # lane seam
 	return _finish("office_floor", img)
 
 
-## Office ceiling: square tiles with a fluorescent light panel every other tile.
+## Office ceiling: acoustic tiles on a metal T-bar grid, perforated, with a water stain and an
+## air vent. (The lights are real fixtures now, not painted on.)
 static func office_ceiling() -> Texture2D:
 	if _cache.has("office_ceiling"):
 		return _cache["office_ceiling"]
-	var img := _start("office_ceiling", Color("8a8e8c"), 0.02)
-	for y in SIZE:
-		for x in SIZE:
-			if x % 16 == 0 or y % 16 == 0:
-				img.set_pixel(x, y, Color("5c605e"))
-			elif x < 16 and y < 16 and x > 3 and x < 13 and y > 5 and y < 11:
-				img.set_pixel(x, y, Color("eef6f0"))  # light panel
+	var img := _start("office_ceiling", Color("8a8e8a"), 0.025)
+	var rng := _rng("office_ceiling_holes")
+	for y in range(2, SIZE, 3):
+		for x in range(2, SIZE, 3):
+			if rng.randf() < 0.55:
+				_shade(img, x + rng.randi_range(-1, 0), y, 0.8)
+	for i in SIZE:
+		for j in [0, 32]:
+			_put(img, i, j, Color("b4b8b4"))
+			_put(img, j, i, Color("b4b8b4"))
+			_shade(img, i, j + 1, 0.65)
+			_shade(img, j + 1, i, 0.7)
+	# A brown water stain on one tile, a vent grille in another.
+	_blotches(img, "office_ceiling_stain", 1, 6, 8, Color("7a6a4c"), 0.35, Rect2i(36, 36, 24, 24))
+	_fill(img, Rect2i(8, 40, 16, 14), Color("6a6e6c"))
+	for y in range(42, 53, 2):
+		for x in range(9, 23):
+			_put(img, x, y, Color("2c302e"))
+	_bevel(img, Rect2i(8, 40, 16, 14), 1.2, 0.7)
 	return _finish("office_ceiling", img)
 
 
-## Gravel roofing: dark grey with light and dark pebbles, and a faint membrane seam down the
-## left edge (lanes meet there, so the lanes still read).
+## Gravel roofing: pebbles of several greys and browns, each lit from above, over dark tar, and
+## a tarred membrane seam down the left edge (lanes meet there, so the lanes still read).
 static func gravel() -> Texture2D:
 	if _cache.has("gravel"):
 		return _cache["gravel"]
-	var img := _start("gravel", Color("4c4c48"), 0.05)
+	var img := _start("gravel", Color("45453f"), 0.05)
 	var rng := _rng("gravel_pebbles")
-	for i in 120:
+	var tones := [Color("6e6c66"), Color("7a766c"), Color("5c5a54"), Color("6a6258"), Color("848078")]
+	for i in 520:
 		var x := rng.randi_range(0, SIZE - 1)
 		var y := rng.randi_range(0, SIZE - 1)
-		img.set_pixel(x, y, Color("6e6c66") if i % 3 else Color("2c2c2a"))
+		var c: Color = tones[rng.randi() % tones.size()]
+		_put(img, x, y, c.lightened(0.15))
+		if rng.randf() < 0.5:
+			_put(img, x + 1, y, c)
+		_put(img, x + 1, y + 1, c.darkened(0.45))
 	for y in SIZE:
-		img.set_pixel(0, y, Color("3a3a37"))
+		for x in range(0, 3):
+			_put(img, x, y, Color("33332f") if x < 2 else Color("3e3e39"))
 	return _finish("gravel", img)
 
 
-## Rooftop ventilation shaft: galvanised sheet with louvre slats.
+## Rooftop ventilation shaft: galvanised sheet with louvre slats, a riveted frame and rust
+## running down from the slats.
 static func vent() -> Texture2D:
 	if _cache.has("vent"):
 		return _cache["vent"]
-	var img := _start("vent", Color("8c9296"), 0.03)
-	for y in SIZE:
-		for x in SIZE:
-			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3:
-				img.set_pixel(x, y, Color("5e6468"))
-			elif y % 5 == 0:
-				img.set_pixel(x, y, Color("3c4044"))  # louvre shadow
-			elif y % 5 == 1:
-				img.set_pixel(x, y, Color("b0b6ba"))  # louvre edge
+	var img := _start("vent", Color("8c9296"), 0.035)
+	for y in range(5, SIZE - 5):
+		var r := (y - 5) % 7
+		for x in range(5, SIZE - 5):
+			if r == 0:
+				_put(img, x, y, Color("b8bec2"))
+			elif r == 1:
+				_shade(img, x, y, 1.05)
+			elif r >= 5:
+				_put(img, x, y, Color("2e3236") if r == 6 else Color("454a4e"))
+	_frame(img, 5)
+	for p in [Vector2i(2, 2), Vector2i(SIZE - 4, 2), Vector2i(2, SIZE - 4), Vector2i(SIZE - 4, SIZE - 4), Vector2i(SIZE / 2, 2), Vector2i(SIZE / 2, SIZE - 4)]:
+		_rivet(img, p.x, p.y)
+	_streaks(img, "vent_rust", 4, Color("6a3a1c"), 0.3)
+	_grime_bottom(img, "vent", 44, 0.3)
 	return _finish("vent", img)
 
 
-## Rooftop air-conditioning unit side: beige-grey panels with a dense condenser grille.
+## Rooftop air-conditioning unit side: panels with a dense condenser grille, service screws, a
+## stencilled unit number and weather staining.
 static func hvac() -> Texture2D:
 	if _cache.has("hvac"):
 		return _cache["hvac"]
-	var img := _start("hvac", Color("9a9a8e"), 0.03)
-	for y in SIZE:
-		for x in SIZE:
-			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3 or x == 16:
-				img.set_pixel(x, y, Color("6e6e64"))  # frame and panel split
-			elif y > 5 and y < SIZE - 5 and y % 2 == 0:
-				img.set_pixel(x, y, Color("4a4a44"))  # grille slats
+	var img := _start("hvac", Color("9a9a8e"), 0.035)
+	for y in range(12, SIZE - 8):
+		for x in range(4, SIZE - 4):
+			if x == 32 or x == 31:
+				continue
+			var r := y % 3
+			_put(img, x, y, Color("3c3c36") if r == 0 else (Color("5c5c54") if r == 1 else img.get_pixel(x, y).darkened(0.1)))
+	_bevel(img, Rect2i(4, 12, 27, SIZE - 20), 0.7, 1.2)  # the grille is set in: dark top, light bottom
+	_bevel(img, Rect2i(33, 12, 27, SIZE - 20), 0.7, 1.2)
+	_frame(img, 3)
+	_groove_v(img, 31, 0, SIZE)
+	for p in [Vector2i(6, 6), Vector2i(26, 6), Vector2i(37, 6), Vector2i(57, 6), Vector2i(6, SIZE - 5), Vector2i(57, SIZE - 5)]:
+		_rivet(img, p.x, p.y)
+	_stencil(img, "AC-3", 9, 4, Color("2c2c28"), 0.8)
+	_streaks(img, "hvac_rust", 5, Color("6a4a2a"), 0.3)
+	_grime_bottom(img, "hvac", 46, 0.35)
 	return _finish("hvac", img)
 
 
-## A building at night: dark facade with a grid of windows, some lit.
+## A building at night: dark facade with floor bands and a grid of windows, some lit warm, some
+## by cold fluorescent light, some with the blinds half down.
 static func building_night() -> Texture2D:
 	if _cache.has("building_night"):
 		return _cache["building_night"]
 	var img := _start("building_night", Color("1a1d24"), 0.02)
 	var rng := _rng("building_windows")
-	for wy in range(2, SIZE, 6):
-		for wx in range(2, SIZE, 5):
-			var lit := rng.randf() < 0.35
-			var c := Color("d8b870").darkened(rng.randf_range(0.0, 0.4)) if lit else Color("2a3040")
-			for y in range(wy, wy + 3):
-				for x in range(wx, wx + 3):
-					img.set_pixel(x, y, c)
+	for wy in range(3, SIZE, 8):
+		for x in SIZE:
+			_shade(img, x, wy - 3, 0.7)  # floor band
+		for wx in range(2, SIZE, 8):
+			var roll := rng.randf()
+			var lit := roll < 0.34
+			var c := Color("2a3040")
+			if lit:
+				c = Color("d8b870").darkened(rng.randf_range(0.0, 0.35)) if rng.randf() < 0.7 else Color("a8c4c8").darkened(rng.randf_range(0.0, 0.3))
+			var blinds := lit and rng.randf() < 0.35
+			for y in range(wy, wy + 5):
+				for x in range(wx, wx + 5):
+					var px := c
+					if blinds and (y - wy) < 3 and (y - wy) % 2 == 0:
+						px = c.darkened(0.45)
+					_put(img, x, y, px)
+			if not lit:
+				_put(img, wx, wy, Color("3a4458"))  # a glint of reflection
 	return _finish("building_night", img)
 
 
@@ -261,155 +423,220 @@ static func skyline() -> Texture2D:
 	return tex
 
 
-## Office window onto a dark room: a frame, a cross bar and a pale reflection streak.
+## Office window onto a dark room: a bevelled frame, blinds half down, glass with a pale
+## reflection streak.
 static func office_window() -> Texture2D:
 	if _cache.has("office_window"):
 		return _cache["office_window"]
-	var img := _start("office_window", Color("2c3a44"), 0.03)
+	var img := _start("office_window", Color("26343e"), 0.03)
 	for y in SIZE:
 		for x in SIZE:
-			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3 or x == 16 or x == 15:
-				img.set_pixel(x, y, Color("8a949a"))
-			elif absi(x - y - 4) <= 1 and x < 14:
-				img.set_pixel(x, y, Color("5e7482"))  # reflection
+			_shade(img, x, y, 1.15 - 0.3 * y / SIZE)
+	for y in range(4, 30):  # blinds
+		for x in range(4, SIZE - 4):
+			_put(img, x, y, Color("9aa29e") if y % 3 != 2 else Color("5a625e"))
+	for i in range(0, 34):
+		for w in 2:
+			_blend(img, 10 + i + w, 60 - i, Color("6a8494"), 0.6)
+			_blend(img, 18 + i + w, 60 - i, Color("5a7282"), 0.35)
+	_frame(img, 4, Color("8a949a"))
+	for y in range(4, SIZE - 4):
+		_put(img, 31, y, Color("8a949a"))
+		_put(img, 32, y, Color("6a7478"))
 	return _finish("office_window", img)
 
 
-## Notice board: cork with a frame and pinned sheets of paper.
+## Notice board: cork in a frame, with pinned sheets (typed lines, a photo, a yellow memo).
 static func notice_board() -> Texture2D:
 	if _cache.has("notice_board"):
 		return _cache["notice_board"]
 	var img := _start("notice_board", Color("8a6a40"), 0.06)
+	_aggregate(img, "notice_board_cork", 400, 0.12)
 	var rng := _rng("notice_board_papers")
-	for y in SIZE:
-		for x in SIZE:
-			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3:
-				img.set_pixel(x, y, Color("5a4a36"))
 	for i in 6:
-		var px := rng.randi_range(3, SIZE - 11)
-		var py := rng.randi_range(3, SIZE - 12)
+		var px := rng.randi_range(5, SIZE - 20)
+		var py := rng.randi_range(5, SIZE - 22)
 		var paper := Color("e4e0d4") if i % 3 != 2 else Color("e8d890")
-		for y in range(py, py + 9):
-			for x in range(px, px + 7):
-				img.set_pixel(x, y, paper if (y - py) % 3 != 1 or x == px else paper.darkened(0.25))
-		img.set_pixel(px + 3, py, Color("c83a2a"))  # pin
+		_fill(img, Rect2i(px + 1, py + 1, 14, 18), Color("4a3a24"))  # shadow
+		_fill(img, Rect2i(px, py, 14, 18), paper)
+		if i == 4:
+			_fill(img, Rect2i(px + 2, py + 2, 10, 8), Color("4a5058"))  # a photo
+		for ly in range(py + 3, py + 16, 2):
+			for lx in range(px + 2, px + 12 - (ly % 5)):
+				_put(img, lx, ly, paper.darkened(0.4))
+		_put(img, px + 6, py, Color("c83a2a"))
+		_put(img, px + 7, py, Color("ff7a6a"))
+	_frame(img, 3, Color("5a4a36"))
 	return _finish("notice_board", img)
 
 
-## Steel access door (roofs, tunnels): grey plate with rivets, a small wired window and a
-## yellow and black kick plate.
+## Steel access door (roofs, tunnels): riveted grey plate with two recessed panels, a small
+## wired-glass window, a stencilled "B2", a hazard kick plate and rust at the bottom.
 static func steel_door() -> Texture2D:
 	if _cache.has("steel_door"):
 		return _cache["steel_door"]
-	var img := _start("steel_door", Color("6a7076"), 0.03)
-	for y in SIZE:
-		for x in SIZE:
-			if x < 2 or x > SIZE - 3 or y < 2:
-				img.set_pixel(x, y, Color("40454a"))
-			elif y > SIZE - 6:
-				img.set_pixel(x, y, Color("c9a227") if ((x + y) / 3) % 2 == 0 else Color("1c1c1a"))
-			elif x > 11 and x < 20 and y > 5 and y < 12:
-				img.set_pixel(x, y, Color("2c3840"))
-			elif (x == 4 or x == SIZE - 5) and y % 6 == 3:
-				img.set_pixel(x, y, Color("a8b0b8"))  # rivets
-			elif x > 24 and x < 28 and y == 16:
-				img.set_pixel(x, y, Color("c8ccd0"))  # handle
+	var img := _start("steel_door", Color("6a7076"), 0.035)
+	_bevel(img, Rect2i(8, 6, 48, 20), 0.75, 1.2)
+	_bevel(img, Rect2i(8, 30, 48, 20), 0.75, 1.2)
+	_fill(img, Rect2i(22, 9, 18, 13), Color("22303a"))
+	for y in range(9, 22):
+		for x in range(22, 40):
+			if (x + y) % 4 == 0 or (x - y) % 4 == 0:
+				_put(img, x, y, Color("4a5a64"))  # wire mesh
+	_bevel(img, Rect2i(21, 8, 20, 15), 0.6, 1.3)
+	_stencil(img, "B2", 12, 36, Color("d8c890"), 0.75)
+	for y in range(52, SIZE - 3):
+		for x in range(3, SIZE - 3):
+			_put(img, x, y, Color("c9a227") if ((x + y) / 5) % 2 == 0 else Color("1c1c1a"))
+	_scratches(img, "steel_door_kick", 5, Rect2i(3, 52, SIZE - 6, 9))
+	for x in range(46, 56):
+		_put(img, x, 28, Color("c8ccd0"))
+		_put(img, x, 29, Color("5a5e62"))
+	for y in range(6, 50, 8):
+		_rivet(img, 3, y)
+		_rivet(img, SIZE - 5, y)
+	_frame(img, 2, Color("40454a"))
+	_streaks(img, "steel_door_rust", 3, Color("6a3a1c"), 0.3)
+	_grime_bottom(img, "steel_door", 46, 0.3)
 	return _finish("steel_door", img)
 
 
-## Office door: pale grey-green panel with a frame, a little window and a handle.
+## Office door: pale grey-green, a wired-glass window, a push plate and handle, a metal kick
+## plate and scuffs. (No lettering: the right-hand leaf of a double door is this, mirrored.)
 static func door() -> Texture2D:
 	if _cache.has("door"):
 		return _cache["door"]
 	var img := _start("door", Color("8e9a92"), 0.03)
-	for y in SIZE:
-		for x in SIZE:
-			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3:
-				img.set_pixel(x, y, Color("5a645e"))
-			elif x > 6 and x < 14 and y > 5 and y < 14:
-				img.set_pixel(x, y, Color("3a4a52"))  # wired-glass window
-			elif x > 24 and x < 28 and y > 14 and y < 18:
-				img.set_pixel(x, y, Color("c8ccc8"))  # handle
+	_bevel(img, Rect2i(8, 36, 48, 14), 1.15, 0.8)
+	_fill(img, Rect2i(14, 10, 16, 18), Color("32424a"))
+	for y in range(10, 28):
+		for x in range(14, 30):
+			if (x + y) % 5 == 0 or (x - y) % 5 == 0:
+				_put(img, x, y, Color("4a5e68"))
+			if x - y == 8 or x - y == 9:
+				_put(img, x, y, Color("6a8290"))  # reflection
+	_bevel(img, Rect2i(13, 9, 18, 20), 0.6, 1.3)
+	_fill(img, Rect2i(50, 26, 3, 10), Color("b8bcb8"))  # push plate
+	_bevel(img, Rect2i(50, 26, 3, 10), 1.2, 0.7)
+	for x in range(46, 54):
+		_put(img, x, 31, Color("d0d4d0"))
+		_put(img, x, 32, Color("50585a"))
+	_fill(img, Rect2i(4, 54, SIZE - 8, 7), Color("a8acaa"))
+	_bevel(img, Rect2i(4, 54, SIZE - 8, 7), 1.2, 0.7)
+	_scratches(img, "door_kick", 6, Rect2i(4, 54, SIZE - 8, 7))
+	_frame(img, 3, Color("5a645e"))
+	_grime_bottom(img, "door", 48, 0.25)
 	return _finish("door", img)
 
 
-## Metal filing cabinet: grey drawers with handles.
+## Metal filing cabinet: four drawers, each with a recessed handle, a label card and the odd
+## dent, dirtier near the floor.
 static func cabinet() -> Texture2D:
 	if _cache.has("cabinet"):
 		return _cache["cabinet"]
 	var img := _start("cabinet", Color("7c8288"), 0.03)
-	for y in SIZE:
-		for x in SIZE:
-			if y % 8 == 0 or x < 2 or x > SIZE - 3:
-				img.set_pixel(x, y, Color("4e5358"))
-			if y % 8 == 3 and x > 12 and x < 20:
-				img.set_pixel(x, y, Color("c8ccd0"))  # handle
+	for d in 4:
+		var y0 := d * 16
+		_bevel(img, Rect2i(3, y0 + 1, SIZE - 6, 14), 1.2, 0.65)
+		_fill(img, Rect2i(26, y0 + 8, 12, 3), Color("2e3236"))
+		for x in range(26, 38):
+			_put(img, x, y0 + 7, Color("c8ccd0"))
+		_fill(img, Rect2i(28, y0 + 3, 8, 3), Color("dcd8c8"))
+		_put(img, 29, y0 + 4, Color("6a6a60"))
+		_put(img, 31, y0 + 4, Color("6a6a60"))
+		_put(img, 33, y0 + 4, Color("6a6a60"))
+	_blotches(img, "cabinet_dents", 3, 1, 3, Color("50565c"), 0.4)
+	_frame(img, 2, Color("4e5358"))
+	_grime_bottom(img, "cabinet", 40, 0.3)
 	return _finish("cabinet", img)
 
 
-## Office desk: wood-effect top edge over a grey modesty panel.
+## Office desk: a wood-effect top with grain over a grey modesty panel.
 static func desk() -> Texture2D:
 	if _cache.has("desk"):
 		return _cache["desk"]
 	var img := _start("desk", Color("5e6268"), 0.03)
-	for y in SIZE:
-		for x in SIZE:
-			if y < 7:
-				img.set_pixel(x, y, Color("8a6a44").lightened(0.05 * ((x / 3) % 2)))
-			elif y == 7:
-				img.set_pixel(x, y, Color("3a3024"))
-			elif x % 16 == 0:
-				img.set_pixel(x, y, Color("45494e"))
+	_grain(img, "desk_grain", Rect2i(0, 0, SIZE, 14), Color("8a6a44"))
+	for x in SIZE:
+		_put(img, x, 14, Color("3a3024"))
+		_put(img, x, 15, Color("2a2420"))
+	_bevel(img, Rect2i(2, 17, 29, SIZE - 19), 1.15, 0.75)
+	_bevel(img, Rect2i(33, 17, 29, SIZE - 19), 1.15, 0.75)
+	for p in [Vector2i(5, 20), Vector2i(27, 20), Vector2i(36, 20), Vector2i(58, 20)]:
+		_rivet(img, p.x, p.y)
+	_grime_bottom(img, "desk", 44, 0.3)
 	return _finish("desk", img)
 
 
-## Wooden crate: horizontal planks with dark gaps, a frame and a cross brace.
+## Wooden crate: grained planks with dark gaps, a nailed frame and a diagonal brace, and a faded
+## stencilled lot number.
 static func crate_wood() -> Texture2D:
 	if _cache.has("crate_wood"):
 		return _cache["crate_wood"]
-	var img := _start("crate_wood", Color("8a6238"), 0.06)
-	var dark := Color("4a3218")
+	var img := _start("crate_wood", Color("8a6238"), 0.04)
+	_grain(img, "crate_wood_grain", Rect2i(0, 0, SIZE, SIZE), Color("8a6238"))
+	for y in SIZE:
+		if y % 16 == 15:
+			for x in SIZE:
+				_put(img, x, y, Color("3a2612"))
+				_shade(img, x, y - 1, 0.8)
+	_stencil(img, "B-12", 10, 46, Color("2a1a0c"), 0.65)
 	var frame := Color("6a4826")
 	for y in SIZE:
 		for x in SIZE:
-			if y % 8 == 7:
-				img.set_pixel(x, y, dark)
-			if x < 3 or x > SIZE - 4 or y < 3 or y > SIZE - 4 or absi(x - y) <= 1:
-				img.set_pixel(x, y, frame)
+			if x < 6 or x > SIZE - 7 or y < 6 or y > SIZE - 7 or absi(x - y) <= 2:
+				var c := frame.lightened(0.04 * sin(y * 0.9 + x * 0.3))
+				_put(img, x, y, c)
+	_bevel(img, Rect2i(0, 0, SIZE, 6), 1.2, 0.7)
+	_bevel(img, Rect2i(0, SIZE - 6, SIZE, 6), 1.2, 0.7)
+	_bevel(img, Rect2i(0, 0, 6, SIZE), 1.2, 0.7)
+	_bevel(img, Rect2i(SIZE - 6, 0, 6, SIZE), 1.2, 0.7)
+	for p in [Vector2i(2, 2), Vector2i(SIZE - 4, 2), Vector2i(2, SIZE - 4), Vector2i(SIZE - 4, SIZE - 4), Vector2i(8, 8), Vector2i(SIZE - 10, SIZE - 10)]:
+		_put(img, p.x, p.y, Color("2a2a2a"))
+		_put(img, p.x + 1, p.y + 1, Color("9a9a90"))
+	_grime_bottom(img, "crate_wood", 44, 0.3)
 	return _finish("crate_wood", img)
 
 
-## Metal crate: grey ribbed steel with rivets and a stencil stripe.
+## Metal crate: ribbed steel with riveted top and bottom bars, a yellow stencil band with its
+## number, rust at the edges.
 static func crate_metal() -> Texture2D:
 	if _cache.has("crate_metal"):
 		return _cache["crate_metal"]
 	var img := _start("crate_metal", Color("5e666e"), 0.04)
-	for y in SIZE:
+	for x in SIZE:
+		var k: float = [1.25, 1.1, 1.0, 1.0, 0.95, 0.9, 0.75, 0.65][x % 8]
+		for y in SIZE:
+			_shade(img, x, y, k)
+	for y in range(26, 38):
+		for x in range(6, SIZE - 6):
+			_put(img, x, y, Color("c9a227").darkened(0.05 * ((x % 8) / 4)))
+	_stencil(img, "05", 24, 27, Color("1c1c1a"), 0.9, 2)
+	for y in [0, 1, 2, 3, 4, 5, SIZE - 6, SIZE - 5, SIZE - 4, SIZE - 3, SIZE - 2, SIZE - 1]:
 		for x in SIZE:
-			var c := img.get_pixel(x, y)
-			if x % 6 == 0:
-				img.set_pixel(x, y, c.lightened(0.18))
-			elif x % 6 == 1:
-				img.set_pixel(x, y, c.darkened(0.2))
-			if y < 2 or y > SIZE - 3:
-				img.set_pixel(x, y, Color("3a3f44"))
-	for p in [Vector2i(3, 4), Vector2i(28, 4), Vector2i(3, 27), Vector2i(28, 27)]:
-		img.set_pixel(p.x, p.y, Color("b8c0c8"))
-	for x in range(8, 24):
-		for y in range(14, 18):
-			img.set_pixel(x, y, Color("c9a227"))
+			_put(img, x, y, Color("3a3f44"))
+	_bevel(img, Rect2i(0, 0, SIZE, 6), 1.3, 0.6)
+	_bevel(img, Rect2i(0, SIZE - 6, SIZE, 6), 1.3, 0.6)
+	for x in range(4, SIZE, 10):
+		_rivet(img, x, 2)
+		_rivet(img, x, SIZE - 4)
+	_rust(img, "crate_metal", 0.0)
+	_streaks(img, "crate_metal_rust", 3, Color("6a3a1c"), 0.3)
 	return _finish("crate_metal", img)
 
 
-## Wall cover: a concrete column with a darker base and a yellow warning band.
+## Wall cover: a concrete-block column with a worn yellow and black band at the bottom.
 static func cover_wall() -> Texture2D:
 	if _cache.has("cover_wall"):
 		return _cache["cover_wall"]
-	var img := _start("cover_wall", Color("7c7c72"), 0.04)
-	_courses(img, 8, 16, Color("54544c"))
+	var img := _start("cover_wall", Color("7c7c72"), 0.045)
+	_courses(img, "cover_wall", 16, 32)
+	_streaks(img, "cover_wall_streaks", 4, Color("4a4a44"), 0.3)
 	for x in SIZE:
-		for y in range(SIZE - 4, SIZE):
-			img.set_pixel(x, y, Color("c9a227") if ((x + y) / 4) % 2 == 0 else Color("1c1c1a"))
+		for y in range(SIZE - 9, SIZE):
+			_put(img, x, y, Color("c9a227") if ((x + y) / 6) % 2 == 0 else Color("1c1c1a"))
+	_scratches(img, "cover_wall_band", 6, Rect2i(0, SIZE - 9, SIZE, 9))
+	_grime_bottom(img, "cover_wall", 40, 0.3)
 	return _finish("cover_wall", img)
 
 
@@ -421,27 +648,276 @@ static func _rng(key: String) -> RandomNumberGenerator:
 	return rng
 
 
-## A new image filled with noisy base colour.
+## A new image: base colour with blotchy (large-scale) and fine noise, so surfaces look dirty and
+## uneven rather than evenly speckled.
 static func _start(key: String, base: Color, amount: float) -> Image:
 	var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGB8)
-	var rng := _rng(key)
-	for y in SIZE:
-		for x in SIZE:
-			var n := rng.randf_range(-amount, amount)
-			img.set_pixel(x, y, Color(base.r + n, base.g + n, base.b + n))
+	img.fill(base)
+	if amount > 0.0:
+		_noise(img, key, 16, amount * 1.4)
+		_noise(img, key + "_fine", 4, amount * 0.7)
+		var rng := _rng(key + "_grain")
+		for y in SIZE:
+			for x in SIZE:
+				_shade(img, x, y, 1.0 + rng.randf_range(-amount, amount))
 	return img
 
 
+## Posterise to the PS1-style palette, add mipmaps (for distance only; up close it's still
+## unfiltered pixels) and cache.
 static func _finish(key: String, img: Image) -> Texture2D:
+	for y in SIZE:
+		for x in SIZE:
+			var c := img.get_pixel(x, y)
+			img.set_pixel(x, y, Color(roundf(c.r * LEVELS) / LEVELS, roundf(c.g * LEVELS) / LEVELS, roundf(c.b * LEVELS) / LEVELS))
+	img.generate_mipmaps()
 	var tex := ImageTexture.create_from_image(img)
 	_cache[key] = tex
 	return tex
 
 
-## Staggered courses of blocks or bricks.
-static func _courses(img: Image, row_h: int, block_w: int, line: Color) -> void:
+## Tileable value noise added to brightness: `cell` pixels between random values.
+static func _noise(img: Image, key: String, cell: int, amount: float) -> void:
+	var rng := _rng(key + "_noise%d" % cell)
+	var g := SIZE / cell
+	var v := PackedFloat32Array()
+	v.resize(g * g)
+	for i in g * g:
+		v[i] = rng.randf_range(-1.0, 1.0)
 	for y in SIZE:
-		var offset := (block_w / 2) * ((y / row_h) % 2)
+		var fy := float(y) / cell
+		var y0 := int(fy) % g
+		var y1 := (y0 + 1) % g
+		var ty := smoothstep(0.0, 1.0, fy - floorf(fy))
 		for x in SIZE:
-			if y % row_h == 0 or (x + offset) % block_w == 0:
-				img.set_pixel(x, y, line)
+			var fx := float(x) / cell
+			var x0 := int(fx) % g
+			var x1 := (x0 + 1) % g
+			var tx := smoothstep(0.0, 1.0, fx - floorf(fx))
+			var n := lerpf(lerpf(v[y0 * g + x0], v[y0 * g + x1], tx), lerpf(v[y1 * g + x0], v[y1 * g + x1], tx), ty)
+			_shade(img, x, y, 1.0 + n * amount)
+
+
+static func _put(img: Image, x: int, y: int, c: Color) -> void:
+	img.set_pixel(posmod(x, SIZE), posmod(y, SIZE), c)
+
+
+## Multiply a pixel's brightness (k < 1 darker).
+static func _shade(img: Image, x: int, y: int, k: float) -> void:
+	var px := posmod(x, SIZE)
+	var py := posmod(y, SIZE)
+	var c := img.get_pixel(px, py)
+	img.set_pixel(px, py, Color(c.r * k, c.g * k, c.b * k))
+
+
+static func _blend(img: Image, x: int, y: int, c: Color, a: float) -> void:
+	var px := posmod(x, SIZE)
+	var py := posmod(y, SIZE)
+	img.set_pixel(px, py, img.get_pixel(px, py).lerp(c, a))
+
+
+static func _fill(img: Image, r: Rect2i, c: Color) -> void:
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			_put(img, x, y, c)
+
+
+## A raised panel: light top and left edges, dark bottom and right (swap the numbers for a
+## recess).
+static func _bevel(img: Image, r: Rect2i, light: float, dark: float) -> void:
+	for x in range(r.position.x, r.end.x):
+		_shade(img, x, r.position.y, light)
+		_shade(img, x, r.end.y - 1, dark)
+	for y in range(r.position.y + 1, r.end.y - 1):
+		_shade(img, r.position.x, y, light)
+		_shade(img, r.end.x - 1, y, dark)
+
+
+## A bevelled border `w` pixels wide round the whole tile, optionally recoloured.
+static func _frame(img: Image, w: int, color: Color = Color(0, 0, 0, 0)) -> void:
+	for y in SIZE:
+		for x in SIZE:
+			if x < w or x >= SIZE - w or y < w or y >= SIZE - w:
+				if color.a > 0.0:
+					_put(img, x, y, color.lightened(0.03 * sin(x * 1.7 + y)))
+				else:
+					_shade(img, x, y, 0.8)
+	_bevel(img, Rect2i(0, 0, SIZE, SIZE), 1.3, 0.6)
+	_bevel(img, Rect2i(w - 1, w - 1, SIZE - 2 * w + 2, SIZE - 2 * w + 2), 0.6, 1.25)
+
+
+## A recessed seam: a dark line with a light line after it.
+static func _groove_h(img: Image, y: int, x0: int, x1: int) -> void:
+	for x in range(x0, x1):
+		_shade(img, x, y, 0.55)
+		_shade(img, x, y + 1, 1.2)
+
+
+static func _groove_v(img: Image, x: int, y0: int, y1: int) -> void:
+	for y in range(y0, y1):
+		_shade(img, x, y, 0.55)
+		_shade(img, x + 1, y, 1.2)
+
+
+## A rivet or screw head: lit on top, shadow below right.
+static func _rivet(img: Image, x: int, y: int) -> void:
+	_shade(img, x, y, 1.55)
+	_shade(img, x + 1, y, 1.2)
+	_shade(img, x, y + 1, 1.1)
+	_shade(img, x + 1, y + 1, 0.55)
+	_shade(img, x + 2, y + 1, 0.75)
+	_shade(img, x + 1, y + 2, 0.75)
+
+
+## Dirt building up toward the bottom of a wall from row `from_y`.
+static func _grime_bottom(img: Image, key: String, from_y: int, strength: float) -> void:
+	var rng := _rng(key + "_grime")
+	for y in range(from_y, SIZE):
+		var t := pow(float(y - from_y) / (SIZE - from_y), 1.4)
+		for x in SIZE:
+			_shade(img, x, y, 1.0 - strength * t * rng.randf_range(0.6, 1.0))
+
+
+## Streaks running down from the top or from seams (water, rust): each fades as it goes.
+static func _streaks(img: Image, key: String, count: int, tint: Color, strength: float) -> void:
+	var rng := _rng(key)
+	for i in count:
+		var x := rng.randi_range(0, SIZE - 1)
+		var y0: int = [0, 0, 16, 32, 38][rng.randi() % 5] + rng.randi_range(0, 3)
+		var length := rng.randi_range(10, 34)
+		var w := 1 + rng.randi() % 2
+		for j in length:
+			var a := strength * (1.0 - float(j) / length)
+			if rng.randf() < 0.15:
+				x += rng.randi_range(-1, 1)
+			for k in w:
+				_blend(img, x + k, y0 + j, tint, a)
+
+
+## Soft blotches (stains, oil, damp, chipped paint), optionally only inside `area`.
+static func _blotches(img: Image, key: String, count: int, r_min: int, r_max: int, tint: Color, strength: float,
+		area: Rect2i = Rect2i(0, 0, SIZE, SIZE)) -> void:
+	var rng := _rng(key)
+	for i in count:
+		var cx := rng.randi_range(area.position.x, area.end.x - 1)
+		var cy := rng.randi_range(area.position.y, area.end.y - 1)
+		var r := rng.randi_range(r_min, r_max)
+		for y in range(cy - r, cy + r + 1):
+			for x in range(cx - r, cx + r + 1):
+				var d := Vector2(x - cx, y - cy).length() / maxf(r, 0.5)
+				if d <= 1.0 and rng.randf() < 1.1 - d * 0.5:
+					_blend(img, x, y, tint, strength * (1.0 - d * 0.6))
+
+
+## Hairline cracks: dark random walks.
+static func _cracks(img: Image, key: String, count: int, length: int, dark: float) -> void:
+	var rng := _rng(key)
+	for i in count:
+		var p := Vector2i(rng.randi_range(0, SIZE - 1), rng.randi_range(0, SIZE - 1))
+		var dir := Vector2i([-1, 0, 1][rng.randi() % 3], 1)
+		for j in length:
+			_shade(img, p.x, p.y, dark)
+			if rng.randf() < 0.35:
+				dir.x = clampi(dir.x + rng.randi_range(-1, 1), -1, 1)
+			p += dir
+
+
+## Short scratches through paint: light on dark, dark on light.
+static func _scratches(img: Image, key: String, count: int, area: Rect2i = Rect2i(0, 0, SIZE, SIZE)) -> void:
+	var rng := _rng(key)
+	for i in count:
+		var x := rng.randi_range(area.position.x, area.end.x - 1)
+		var y := rng.randi_range(area.position.y, area.end.y - 1)
+		var dx: int = [-1, 1][rng.randi() % 2]
+		for j in rng.randi_range(3, 7):
+			var c := img.get_pixel(posmod(x, SIZE), posmod(y, SIZE))
+			_shade(img, x, y, 1.6 if c.get_luminance() < 0.3 else 0.65)
+			x += dx
+			if rng.randf() < 0.4:
+				y += 1
+
+
+## Tiny stones in concrete, asphalt and cork: single light or dark pixels.
+static func _aggregate(img: Image, key: String, count: int, amount: float) -> void:
+	var rng := _rng(key)
+	for i in count:
+		_shade(img, rng.randi_range(0, SIZE - 1), rng.randi_range(0, SIZE - 1), 1.0 + (amount * 3.0 if i % 2 else -amount * 3.0))
+
+
+## Rust eating into metal where the blotchy noise is high.
+static func _rust(img: Image, key: String, amount: float) -> void:
+	var rust := Image.create(SIZE, SIZE, false, Image.FORMAT_RGB8)
+	rust.fill(Color(0.5, 0.5, 0.5))
+	_noise(rust, key + "_rust", 8, 0.9)
+	var rng := _rng(key + "_rust_px")
+	for y in SIZE:
+		for x in SIZE:
+			var n := rust.get_pixel(x, y).r
+			if n > 0.62 - amount:
+				_blend(img, x, y, Color("7a4020").lightened(rng.randf_range(-0.1, 0.12)), clampf((n - 0.5) * 2.5, 0.3, 0.9))
+
+
+## Wood grain across a rect: streaky horizontal bands.
+static func _grain(img: Image, key: String, r: Rect2i, wood: Color) -> void:
+	var rng := _rng(key)
+	var phase := rng.randf_range(0.0, TAU)
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			var g := sin(y * 1.3 + sin(x * 0.18 + phase) * 2.2 + sin(x * 0.05) * 3.0)
+			_put(img, x, y, wood.darkened(0.12 * (g * 0.5 + 0.5)).lightened(rng.randf_range(0.0, 0.04)))
+
+
+## Staggered courses of blocks or bricks, each unit bevelled and a slightly different shade.
+static func _courses(img: Image, key: String, row_h: int, block_w: int) -> void:
+	var rng := _rng(key + "_courses")
+	for row in SIZE / row_h:
+		var offset := (block_w / 2) * (row % 2)
+		for b in range(-1, SIZE / block_w + 1):
+			var x0 := b * block_w + offset
+			var k := rng.randf_range(0.92, 1.08)
+			for y in range(row * row_h, row * row_h + row_h):
+				for x in range(x0, x0 + block_w):
+					if x >= 0 and x < SIZE:
+						_shade(img, x, y, k)
+			var r := Rect2i(x0, row * row_h, block_w, row_h)
+			for x in range(r.position.x, r.end.x):
+				_shade(img, x, r.position.y, 0.55)  # mortar line
+				_shade(img, x, r.position.y + 1, 1.18)
+			for y in range(r.position.y, r.end.y):
+				_shade(img, r.position.x, y, 0.6)
+				_shade(img, r.position.x + 1, y, 1.12)
+				_shade(img, r.end.x - 1, y, 0.85)
+
+
+## Glazed tiles (w x h px): grout lines, and a glint at each tile's top-left corner.
+static func _tiles(img: Image, w: int, h: int, grout: Color) -> void:
+	for y in SIZE:
+		for x in SIZE:
+			var offset := (w / 2) * ((y / h) % 2)
+			var lx := (x + offset) % w
+			var ly := y % h
+			if lx == 0 or ly == 0:
+				_put(img, x, y, grout)
+			elif lx == 1 and ly == 1:
+				_shade(img, x, y, 1.35)
+			elif ly == 1 or lx == 1:
+				_shade(img, x, y, 1.1)
+			elif ly == h - 1 or lx == w - 1:
+				_shade(img, x, y, 0.85)
+
+
+## Worn stencil lettering in the 3x5 font; `scale` makes each font pixel bigger.
+static func _stencil(img: Image, text: String, x: int, y: int, color: Color, alpha: float, scale: int = 1) -> void:
+	var rng := _rng("stencil_" + text)
+	var cx := x
+	for ch in text:
+		if GLYPHS.has(ch):
+			var rows: Array = GLYPHS[ch]
+			for gy in 5:
+				for gx in 3:
+					if rows[gy][gx] == "1":
+						for sy in scale:
+							for sx in scale:
+								if rng.randf() > 0.12:  # worn
+									_blend(img, cx + gx * scale + sx, y + gy * scale + sy, color, alpha)
+		cx += 4 * scale

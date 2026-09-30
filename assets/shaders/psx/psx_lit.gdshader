@@ -7,7 +7,8 @@ shader_type spatial;
 render_mode specular_disabled, cull_back, unshaded;
 
 uniform vec4 albedo : source_color = vec4(1.0);
-uniform sampler2D albedo_texture : source_color, filter_nearest, repeat_enable, hint_default_white;
+uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_enable, hint_default_white;
+uniform vec2 uv_offset = vec2(0.0);
 uniform vec2 uv_scale = vec2(1.0);
 // Grid that vertices snap to in screen space. Lower = more wobble.
 uniform float snap_resolution = 90.0;
@@ -66,7 +67,7 @@ float bayer4(vec2 frag) {
 }
 
 void fragment() {
-	vec2 uv = affine_mapping ? affine_uv_w.xy / affine_uv_w.z : UV * uv_scale;
+	vec2 uv = (affine_mapping ? affine_uv_w.xy / affine_uv_w.z : UV * uv_scale) + uv_offset;
 	vec3 base = albedo.rgb * texture(albedo_texture, uv).rgb;
 	if (unlit) {
 		ALBEDO = base;
