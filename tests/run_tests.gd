@@ -70,7 +70,7 @@ func _test_pick_edge() -> void:
 ## Every route has a trooper set per alert level, with fewer at Alert 1 than at 2, and at 2 than at 3.
 func _test_trooper_tiers() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	for id in ["compound_exit", "building_main_floor", "rooftops", "roof_edge", "service_tunnel", "airfield_gate"]:
+	for id in ["main_floor_lobby", "building_main_floor", "rooftops", "roof_edge", "service_tunnel", "main_floor_exit"]:
 		var counts := [0, 0, 0]
 		for e in g.node_data(StringName(id)).get("enemies", []):
 			for alert in [1, 2, 3]:

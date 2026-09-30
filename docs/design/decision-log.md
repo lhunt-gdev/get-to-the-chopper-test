@@ -126,6 +126,8 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - Slide: **live electrical wires hanging low, with sparks.** Some are cut, with sparks at the end. This replaces the air-con ducts, which didn't fit visually.
   - Cover: tall metal cabinets and desks, only a few wooden crates. Walls are office partitions.
   - Pipes: only the odd small pipe (`"look": "pipe"`).
+- **Details (user, 2026-09-30):** now and then an office door, a window or a notice board on the side walls. Loose paper scattered on the floor around the low filing cabinets, as if they were tipped over or shoved aside in a hurry.
+- **The main route is all office for now (user decision):** the player starts inside the building. COMPOUND EXIT becomes MAIN FLOOR LOBBY and AIRFIELD GATE becomes MAIN FLOOR EXIT, both office-themed; no road sections on the main route. The helipad stays outside. Stairs up to the ROOFTOPS and down to the TUNNEL now start inside the building (consistent with the stacked tiers). The compound and gate themes are kept for later levels.
 - **Walls at the edge join the outer wall (user rule, every level):** a wall cover in an edge lane runs right into the side wall, with no gap.
 - **Proposed for the rest, needs the user's pick:** COMPOUND: concrete road barriers, boom-gate arms, sandbags / crates / concrete walls. SERVICE TUNNEL: valve housings, pipes, concrete pillars / metal crates. ROOFTOPS: low parapets or skylight frames, antenna cables / water pipes, air-con units / water tanks. AIRFIELD GATE: barriers, boom-gate arms, sandbags / containers.
 

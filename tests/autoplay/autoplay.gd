@@ -55,17 +55,17 @@ func _ready() -> void:
 			_prefer = {&"building_main_floor": -1, &"service_tunnel": -1}
 			_trip_in = [&"building_main_floor"]
 		"roof_down":
-			_prefer = {&"compound_exit": 1, &"rooftops": -1}
+			_prefer = {&"main_floor_lobby": 1, &"rooftops": -1}
 		"roof_loud":
-			_prefer = {&"compound_exit": 1, &"roof_edge": 1}
-			_trip_in = [&"compound_exit"]
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
+			_trip_in = [&"main_floor_lobby"]
 		"miss_ladder":
-			_prefer = {&"compound_exit": 1, &"roof_edge": 0}
-			_trip_in = [&"compound_exit"]
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 0}
+			_trip_in = [&"main_floor_lobby"]
 		"late_switch":
-			_prefer = {&"compound_exit": 1}
+			_prefer = {&"main_floor_lobby": 1}
 		"ground_loud", "ground_alarms":
-			_trip_in = [&"compound_exit", &"building_main_floor"]
+			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 	_level = LEVEL.instantiate()
 	add_child(_level)
 	_player = _level.get_node("Player")
@@ -91,11 +91,11 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	# Last-minute change of mind: back to the middle just before the first split.
-	if scenario == "late_switch" and _level._runner.current == &"compound_exit":
+	if scenario == "late_switch" and _level._runner.current == &"main_floor_lobby":
 		var runner: RouteRunner = _level._runner
 		var left_to_split := runner.graph.length_of(runner.current) - (d - runner.segment_start)
 		if left_to_split < 4.0:
-			_prefer[&"compound_exit"] = 0
+			_prefer[&"main_floor_lobby"] = 0
 			_cooldown = mini(_cooldown, 0)
 
 	# Steering: avoid lanes with cover (walls, boxes) coming up; lean to the preferred side at junctions.

@@ -1,11 +1,11 @@
 {
   "mission": "prototype_slice",
   "authored_for_lanes": 5,
-  "start": "compound_exit",
+  "start": "main_floor_lobby",
   "nodes": [
     {
-      "id": "compound_exit",
-      "theme": "compound",
+      "id": "main_floor_lobby",
+      "theme": "office",
       "tier": "ground",
       "length": 150,
       "bends": [{"at": 6, "side": "right"}, {"at": 76, "side": "left"}],
@@ -65,7 +65,7 @@
         {"side": "right", "at": 72}
       ],
       "next": [
-        {"to": "airfield_gate", "label": "GATE"},
+        {"to": "main_floor_exit", "label": "EXIT"},
         {"to": "service_tunnel", "label": "TUNNEL", "side": "left", "via": "stairs", "max_alert": 1}
       ]
     },
@@ -92,7 +92,7 @@
       ],
       "next": [
         {"to": "roof_edge", "label": "ROOF EDGE"},
-        {"to": "airfield_gate", "label": "GATE", "side": "left", "via": "stairs"}
+        {"to": "main_floor_exit", "label": "EXIT", "side": "left", "via": "stairs"}
       ]
     },
     {
@@ -137,8 +137,8 @@
       ]
     },
     {
-      "id": "airfield_gate",
-      "theme": "gate",
+      "id": "main_floor_exit",
+      "theme": "office",
       "tier": "ground",
       "length": 110,
       "obstacles": [

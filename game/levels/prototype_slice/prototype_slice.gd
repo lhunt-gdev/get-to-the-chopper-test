@@ -39,7 +39,7 @@ const THEMES := {
 	"compound": {"wall": "blocks", "color": Color("77776c"), "height": 3.0, "ground": "asphalt"},
 	# MGS PS1-style complex / office interior.
 	"office": {"wall": "office", "wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "color": Color("6f7a82"),
-			"height": CEILING_Y, "ground": "office_floor", "ceiling": true,
+			"height": CEILING_Y, "ground": "office_floor", "ceiling": true, "wall_decor": true,
 			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_metal": "cabinet", "box_wood": "desk",
 					"wall": "office_wall"}},
 	"rooftops": {"wall": "brick", "color": Color("7a4a38"), "height": 1.0, "ground": "concrete"},
@@ -379,6 +379,8 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		for lane: int in lanes:
 			var x := _player.lane_x(lane)
 			var mesh: Node3D = one_piece
+			if jump_look == "cabinet":
+				_scatter_papers(node, seg, at, x, lane)
 			if jump_look == "blockade":
 				mesh = _build_blockade(node, seg, at, x, lane)
 			elif mesh == null:
@@ -630,6 +632,35 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 			var j: float = seg["legs"][k]["start"]
 			if j >= maxf(open, ramp):
 				_item_box(parent, seg, j, Vector3(side * (road_w / 2.0 + 1.0), ph / 2.0, 0), Vector3(1.0, ph, 1.0), theme["color"].darkened(0.5))
+		if theme.get("wall_decor", false):
+			_wall_decor(parent, seg, side, maxf(open, ramp), length)
+
+
+## Office walls: now and then a door, a window or a notice board between the pillars.
+func _wall_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	var face := side * (tuning.lane_count * tuning.lane_width / 2.0 + 1.0 - 0.03)
+	for i in range(ceili(from / 5.0) * 5, int(to) - 3, 5):
+		var at := i + 2.5
+		var near_bend := false
+		for leg in seg["legs"]:
+			if absf(leg["start"] - at) < 1.3:
+				near_bend = true
+		if near_bend:
+			continue
+		# (width, height, centre height, texture); about half the gaps get something.
+		var pick := absi(hash([seg["id"], i, side])) % 7
+		var item: Array = []
+		match pick:
+			0, 1:
+				item = [1.0, 2.1, 1.05, PsxTextures.door()]
+			2, 3:
+				item = [1.6, 0.9, 1.65, PsxTextures.office_window()]
+			4:
+				item = [1.1, 0.75, 1.5, PsxTextures.notice_board()]
+		if item.is_empty():
+			continue
+		var m := _item_box(parent, seg, at, Vector3(face, item[2], 0), Vector3(0.05, item[1], item[0]), Color.WHITE)
+		m.material_override = PsxMaterials.textured(item[3], Vector2(3, 2))
 
 
 ## Splits [a, b] where legs bend and where stairs end, so each piece is one straight slope.
@@ -747,27 +778,38 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 
 
 ## Live electrical wires hanging low across a run of lanes (the main floor's slide obstacle):
-## three sagging cables, anchored in a junction box on the wall or rising to the ceiling where they
-## stop mid-road, a cut wire dangling from the ceiling, and sparks where they're broken.
+## three cables in one smooth drape. Over the blocked lanes they sag low (you have to slide). At a
+## wall they end in a junction box; where they stop mid-road they curve up to a hook in the ceiling
+## just beyond the end, well above head height by the next lane. A cut wire dangles with a bend in
+## it, and sparks where they're broken.
 func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Array) -> Node3D:
 	var frame := _frame_at(seg, at)
-	var x0: float = ends[0]["x"]
-	var x1: float = ends[1]["x"]
-	var top := y + 0.2   # where the cables are held
-	var low := y - 0.08  # how far they sag in the middle (still too low to run under)
+	var top := y + 0.2   # height at the edge of the blocked lanes
+	var low := y - 0.08  # lowest point, mid-run (still too low to run under)
+	var reach := 1.3     # how far past a mid-road end the ceiling hook is
+	# Edges of the blocked lanes (a wall end is the wall itself) and where each end is anchored.
+	var e0: float = ends[0]["x"] if ends[0]["wall"] else ends[0]["x"] - 0.2
+	var e1: float = ends[1]["x"] if ends[1]["wall"] else ends[1]["x"] + 0.2
+	var a0 := e0 if ends[0]["wall"] else e0 - reach
+	var a1 := e1 if ends[1]["wall"] else e1 + reach
+	var mid := (e0 + e1) / 2.0
+	var half := (e1 - e0) / 2.0
+	var slope := 2.0 * (top - low) / half  # steepness at the lane edge, carried on into the rise
 	var black := Color("141414")
 	var first: MeshInstance3D = null
-	var n := maxi(4, ceili((x1 - x0) / 0.6))
+	var steps := maxi(8, ceili((a1 - a0) / 0.3))
 	for c in 3:
 		var dz: float = [-0.1, 0.0, 0.1][c]
 		var dy: float = [0.0, 0.06, -0.05][c]
-		var prev := Vector3(x0, top + dy, dz)
-		for i in range(1, n + 1):
-			var t := float(i) / n
-			var p := Vector3(lerpf(x0, x1, t), top + dy - (top - low) * 4.0 * t * (1.0 - t), dz)
-			var seg_mesh := _cable(parent, frame, prev, p, 0.04, black if c != 1 else Color("5a3a12"))
-			if first == null:
-				first = seg_mesh
+		var prev := Vector3.ZERO
+		for i in steps + 1:
+			var x := lerpf(a0, a1, float(i) / steps)
+			var h := _wire_height(x, e0, e1, mid, half, top, low, slope, reach)
+			var p := Vector3(x, h + dy * clampf((CEILING_Y - h) / 1.0, 0.0, 1.0), dz)
+			if i > 0:
+				var piece := _cable(parent, frame, prev, p, 0.04, black if c != 1 else Color("5a3a12"))
+				if first == null:
+					first = piece
 			prev = p
 	for e in ends:
 		var ex: float = e["x"]
@@ -777,16 +819,36 @@ func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Ar
 			var stripe := _box(jb, Vector3(0.26, 0.08, 0.44), Vector3.ZERO, Color("c9a227"))
 			stripe.position.y = 0.12
 		else:
-			_cable(parent, frame, Vector3(ex, top, 0), Vector3(ex, CEILING_Y, 0), 0.09, black)  # up to the ceiling
-	# A cut wire dangling from the ceiling, sparking at its end, and sparks where the run is broken.
-	var cut_x := lerpf(x0, x1, 0.3)
-	var tip := Vector3(cut_x, top - 0.1, 0.25)
-	_cable(parent, frame, Vector3(cut_x, CEILING_Y, 0.25), tip, 0.04, black)
-	for spot in [tip, Vector3(lerpf(x0, x1, 0.65), low + 0.02, 0.0)]:
+			var hook := a0 if ex < mid else a1
+			_box(parent, Vector3(0.18, 0.12, 0.3), Vector3.ZERO, Color("5a5f66")).transform = \
+					frame * Transform3D(Basis.IDENTITY, Vector3(hook, CEILING_Y - 0.06, 0))  # ceiling hook
+	# A cut wire dangling from the ceiling with a lazy bend in it, sparking at its end.
+	var cut_x := lerpf(e0, e1, 0.3)
+	var tip := Vector3(cut_x + 0.18, top - 0.1, 0.25)
+	var prev_cut := Vector3(cut_x, CEILING_Y, 0.25)
+	for i in range(1, 7):
+		var t := i / 6.0
+		var p := Vector3(cut_x + 0.18 * t * t + 0.12 * sin(t * PI), lerpf(CEILING_Y, tip.y, t), 0.25)
+		_cable(parent, frame, prev_cut, p, 0.04, black)
+		prev_cut = p
+	tip = prev_cut
+	for spot in [tip, Vector3(lerpf(e0, e1, 0.65), low + 0.02, 0.0)]:
 		var s := Sparks.new(4, hash(Vector2(at, spot.x)))
 		parent.add_child(s)
 		s.transform = frame * Transform3D(Basis.IDENTITY, spot)
 	return first
+
+
+## The wires' drape: a parabola over the blocked lanes (lowest mid-run, `top` at their edges);
+## past a mid-road end it keeps curving up at the same steepness to the ceiling hook.
+static func _wire_height(x: float, e0: float, e1: float, mid: float, half: float, top: float, low: float,
+		slope: float, reach: float) -> float:
+	if x >= e0 and x <= e1:
+		var u := (x - mid) / half
+		return low + (top - low) * u * u
+	var s := (e0 - x) if x < e0 else (x - e1)  # metres past the edge, toward the hook
+	var a := (CEILING_Y - top - slope * reach) / (reach * reach)
+	return minf(CEILING_Y, top + slope * s + a * s * s)
 
 
 ## A thin straight cable between two points given in `frame` (a place on the route).
@@ -797,6 +859,22 @@ func _cable(parent: Node3D, frame: Transform3D, a: Vector3, b: Vector3, thick: f
 	var up := Vector3.UP if absf((pb - pa).normalized().y) < 0.99 else Vector3.RIGHT
 	m.transform = Transform3D(Basis.looking_at(pb - pa, up), (pa + pb) / 2.0)
 	return m
+
+
+## Loose sheets of paper around a low filing cabinet, as if it was tipped over or shoved aside
+## in a hurry: mostly on the floor in front of and behind it, a couple on top.
+func _scatter_papers(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([seg["id"], at, lane])
+	var frame := _frame_at(seg, at)
+	for i in 9:
+		var on_top := i < 2
+		var p := Vector3(x + rng.randf_range(-0.6, 0.6), 0.51 if on_top else 0.012,
+				rng.randf_range(-0.25, 0.25) if on_top else rng.randf_range(-1.8, 1.4))
+		if not on_top and absf(p.z) < 0.25:
+			p.z = 0.35 * signf(p.z + 0.001)  # not inside the cabinet
+		var sheet := _box(parent, Vector3(0.21, 0.006, 0.29), Vector3.ZERO, Color("e6e2d6") if i % 4 else Color("d8d2b8"))
+		sheet.transform = frame * Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), p)
 
 
 ## A makeshift blockade across one lane: a door on its side, with a chair tipped over behind it.

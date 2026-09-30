@@ -165,6 +165,41 @@ static func office_ceiling() -> Texture2D:
 	return _finish("office_ceiling", img)
 
 
+## Office window onto a dark room: a frame, a cross bar and a pale reflection streak.
+static func office_window() -> Texture2D:
+	if _cache.has("office_window"):
+		return _cache["office_window"]
+	var img := _start("office_window", Color("2c3a44"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3 or x == 16 or x == 15:
+				img.set_pixel(x, y, Color("8a949a"))
+			elif absi(x - y - 4) <= 1 and x < 14:
+				img.set_pixel(x, y, Color("5e7482"))  # reflection
+	return _finish("office_window", img)
+
+
+## Notice board: cork with a frame and pinned sheets of paper.
+static func notice_board() -> Texture2D:
+	if _cache.has("notice_board"):
+		return _cache["notice_board"]
+	var img := _start("notice_board", Color("8a6a40"), 0.06)
+	var rng := _rng("notice_board_papers")
+	for y in SIZE:
+		for x in SIZE:
+			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3:
+				img.set_pixel(x, y, Color("5a4a36"))
+	for i in 6:
+		var px := rng.randi_range(3, SIZE - 11)
+		var py := rng.randi_range(3, SIZE - 12)
+		var paper := Color("e4e0d4") if i % 3 != 2 else Color("e8d890")
+		for y in range(py, py + 9):
+			for x in range(px, px + 7):
+				img.set_pixel(x, y, paper if (y - py) % 3 != 1 or x == px else paper.darkened(0.25))
+		img.set_pixel(px + 3, py, Color("c83a2a"))  # pin
+	return _finish("notice_board", img)
+
+
 ## Office door: pale grey-green panel with a frame, a little window and a handle.
 static func door() -> Texture2D:
 	if _cache.has("door"):
