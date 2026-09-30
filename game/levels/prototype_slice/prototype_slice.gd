@@ -32,9 +32,16 @@ const KINDS := {
 }
 
 ## How each area looks, picked by "theme" in route.json. Placeholder art, so you can tell where you are.
+## Optional keys: "wall_tex" / "ceiling_tex" name a PsxTextures function (instead of a wall
+## pattern); "skins" give this area its own look for obstacles, e.g. {"pipe": "duct"}; the
+## gameplay (jump / slide / cover) never changes.
 const THEMES := {
 	"compound": {"wall": "blocks", "color": Color("77776c"), "height": 3.0, "ground": "asphalt"},
-	"motor_pool": {"wall": "corrugated", "color": Color("56613f"), "height": 3.5, "ground": "asphalt"},
+	# MGS PS1-style complex / office interior.
+	"office": {"wall": "office", "wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "color": Color("6f7a82"),
+			"height": CEILING_Y, "ground": "office_floor", "ceiling": true,
+			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_metal": "cabinet", "box_wood": "desk",
+					"wall": "office_wall"}},
 	"rooftops": {"wall": "brick", "color": Color("7a4a38"), "height": 1.0, "ground": "concrete"},
 	"tunnel": {"wall": "tile", "color": Color("4d5c52"), "height": 3.2, "ground": "asphalt", "ceiling": true},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
@@ -65,6 +72,8 @@ var _fire_cooldown := 0.0
 var _tapped: Node3D = null
 var _shot_tracer: MeshInstance3D
 var _clock: ExtractionClock
+## How far the camera follows the player across the road (0.6 normally, 1.0 beside a wall).
+var _camera_follow := 0.6
 
 @onready var _player: Player = $Player
 @onready var _camera: Camera3D = $Camera3D
@@ -317,6 +326,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 	_build_surfaces(node, seg, road_end, 0.0, 0.0)
 
 	var authored_lanes := 5
+	var jumps_seen := 0  # jump obstacles alternate through the area's looks
 	for ob: Dictionary in _graph.node_data(id).get("obstacles", []):
 		var kind: Dictionary = KINDS.get(ob["kind"], {})
 		if kind.is_empty():
@@ -328,31 +338,58 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		var at := float(ob["at"])
 		var size: Vector3 = kind["size"] * Vector3(tuning.lane_width, 1, 1)
 		var y: float = kind["y"]
-		var tex_name: String = kind.get("tex", "")
-		if ob["kind"] == "box" and String(ob.get("material", "wood")) == "metal":
-			tex_name = "crate_metal"
+		# Each area has its own look for the same gameplay (THEMES "skins"); "look" in route.json
+		# overrides it for one obstacle (e.g. the odd small pipe on the main floor).
+		var tex_name: String = _skin(id, ob["kind"], kind.get("tex", ""))
+		var jump_look := ""
+		if ob["kind"] == "barrier":
+			var looks: Array = _theme(id).get("skins", {}).get("barrier_looks", [])
+			jump_look = ob.get("look", looks[jumps_seen % looks.size()] if not looks.is_empty() else "")
+			jumps_seen += 1
+			if jump_look == "cabinet":
+				tex_name = "cabinet"
+		if ob["kind"] == "box":
+			var metal := String(ob.get("material", "wood")) == "metal"
+			tex_name = _skin(id, "box_metal", "crate_metal") if metal else _skin(id, "box_wood", "crate_wood")
+			if ob.has("look"):  # e.g. the odd wooden crate among the office furniture
+				tex_name = {"crate": "crate_wood", "desk": "desk", "cabinet": "cabinet"}.get(ob["look"], tex_name)
+		var span_look: String = ob.get("look", _skin(id, ob["kind"], ob["kind"]))
 		if ob["kind"] == "wall":
-			# Floor to ceiling: up to the tunnel ceiling indoors, a tall column outside.
+			# Floor to ceiling: up to the ceiling indoors, a tall column outside.
 			size.y = CEILING_Y if _theme(id).get("ceiling", false) else kind["size"].y
 			y = size.y / 2.0
-		var one_mesh: MeshInstance3D = null
-		if kind.get("one_piece", false):
+		var one_piece: Node3D = null
+		if ob["kind"] in ["pipe", "tripwire"]:
+			# Built per run of neighbouring lanes, anchored to a wall, the floor or the ceiling.
+			one_piece = _build_spans(node, seg, span_look if ob["kind"] == "pipe" else "tripwire", lanes.keys(), at, y)
+		elif kind.get("one_piece", false):
 			var sorted: Array = lanes.keys()
 			sorted.sort()
 			var x0 := _player.lane_x(sorted[0]) - tuning.lane_width / 2.0 + 0.05
 			var x1 := _player.lane_x(sorted[-1]) + tuning.lane_width / 2.0 - 0.05
-			one_mesh = _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
-			one_mesh.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
+			# A wall in an edge lane runs right into the side wall: no gap down the side (user rule).
+			var side_wall := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
+			if sorted[0] == 0:
+				x0 = -side_wall
+			if sorted[-1] == tuning.lane_count - 1:
+				x1 = side_wall
+			var w := _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
+			w.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
+			one_piece = w
 		for lane: int in lanes:
 			var x := _player.lane_x(lane)
-			var mesh := one_mesh
-			if mesh == null:
-				mesh = _item_box(node, seg, at, Vector3(x, y, 0), size, kind.get("color", Color.WHITE))
+			var mesh: Node3D = one_piece
+			if jump_look == "blockade":
+				mesh = _build_blockade(node, seg, at, x, lane)
+			elif mesh == null:
+				var m := _item_box(node, seg, at, Vector3(x, y, 0), size, kind.get("color", Color.WHITE))
 				if tex_name != "":
 					# BoxMesh lays its six faces out on a 3x2 grid, so this puts one tile on each face.
-					mesh.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
+					m.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
+				mesh = m
+			# "group": every lane of one obstacle, so a tripwire trips once however you cross it.
 			_obstacles.append({"x": x, "at": start + at, "depth": size.z, "kind": ob["kind"], "pass": kind["pass"],
-					"crouch": kind.get("crouch", false), "done": false, "mesh": mesh, "owner": node})
+					"crouch": kind.get("crouch", false), "done": false, "mesh": mesh, "owner": node, "group": ob})
 		if kind.get("shadow", true):
 			_obstacle_shadows(node, seg, lanes.keys(), at, size)
 
@@ -546,7 +583,7 @@ func _build_surfaces(parent: Node3D, seg: Dictionary, road_end: float, open_l: f
 		elif on_ramp:
 			_strip(parent, seg, piece.x, piece.y, 0.0, road_w, 0.0, PsxTextures.stairs(), float(tuning.lane_count))
 		else:
-			_strip(parent, seg, piece.x, piece.y, 0.0, road_w, 0.0, _ground(id), float(tuning.lane_count))
+			_strip(parent, seg, piece.x, piece.y, 0.0, road_w, 0.0, _ground(id), float(tuning.lane_count), _ground_tile(id))
 	# Patches under each bend, so the outside corner has no gap.
 	for i in range(1, seg["legs"].size()):
 		var j: float = seg["legs"][i]["start"]
@@ -556,7 +593,7 @@ func _build_surfaces(parent: Node3D, seg: Dictionary, road_end: float, open_l: f
 	if theme.get("ceiling", false):
 		for piece in _pieces(seg, ramp, length):
 			var roof := _strip(parent, seg, piece.x, piece.y, 0.0, road_w + 2.0, CEILING_Y,
-					PsxTextures.wall(theme["wall"], theme["color"]), road_w / 2.0, 2.0)
+					_ceiling_texture(theme), road_w / 2.0, 2.0)
 			roof.rotate_object_local(Vector3.FORWARD, PI)  # face down
 	var walls := Node3D.new()
 	walls.name = "Walls"
@@ -572,7 +609,7 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 	var road_w := tuning.lane_count * tuning.lane_width
 	var theme := _theme(seg["id"])
 	var h: float = theme["height"]
-	var wall_tex := PsxTextures.wall(theme["wall"], theme["color"])
+	var wall_tex := _wall_texture(theme)
 	var via := RouteGraph.via_of(seg["edge"])
 	for side in [-1, 1]:
 		var open := open_l if side < 0 else open_r
@@ -647,6 +684,144 @@ func _item_box(parent: Node3D, seg: Dictionary, into: float, local: Vector3, siz
 	return m
 
 
+## Pipes and tripwires, one piece per run of neighbouring lanes, never left floating:
+## - a run that reaches the road edge carries on into the side wall (a mounting plate for a pipe,
+##   an emitter box for a tripwire);
+## - a run that stops mid-road ends on the floor (a pipe bends down to a foot, a tripwire ends on
+##   an emitter post).
+## Pipes get a nut where each lane's pipe joins the next. Returns the node to hide when tripped.
+func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, at: float, y: float) -> Node3D:
+	lanes.sort()
+	var runs: Array[Array] = []
+	for lane: int in lanes:
+		if runs.is_empty() or lane != runs[-1][-1] + 1:
+			runs.append([lane])
+		else:
+			runs[-1].append(lane)
+	var road_w := tuning.lane_count * tuning.lane_width
+	var wall_x := road_w / 2.0 + 1.0
+	var last := tuning.lane_count - 1
+	var beam: MeshInstance3D = null
+	var holder := Node3D.new()  # tripwire beams go in one node, so they hide together
+	parent.add_child(holder)
+	var metal := Color("4a4e54")
+	for run in runs:
+		var ends := [
+			{"x": -wall_x if run[0] == 0 else _player.lane_x(run[0]) - tuning.lane_width / 2.0 + 0.2, "wall": run[0] == 0},
+			{"x": wall_x if run[-1] == last else _player.lane_x(run[-1]) + tuning.lane_width / 2.0 - 0.2, "wall": run[-1] == last},
+		]
+		var x0: float = ends[0]["x"]
+		var x1: float = ends[1]["x"]
+		if kind == "pipe":
+			var p := _item_box(parent, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, 0.3, 0.3), Color.WHITE)
+			p.material_override = PsxMaterials.textured(PsxTextures.rust_pipe(), Vector2(3, 2))
+			beam = p
+			for k in range(1, run.size()):  # nuts where one lane's pipe joins the next
+				_item_box(parent, seg, at, Vector3(_player.lane_x(run[k]) - tuning.lane_width / 2.0, y, 0), Vector3(0.14, 0.44, 0.44), metal)
+			for e in ends:
+				var ex: float = e["x"]
+				if e["wall"]:
+					_item_box(parent, seg, at, Vector3(ex, y, 0), Vector3(0.1, 0.62, 0.62), metal)  # wall plate
+				else:
+					_item_box(parent, seg, at, Vector3(ex, y, 0), Vector3(0.38, 0.38, 0.38), metal)  # elbow
+					var down := _item_box(parent, seg, at, Vector3(ex, y / 2.0, 0), Vector3(0.3, y, 0.3), Color.WHITE)
+					down.material_override = PsxMaterials.textured(PsxTextures.rust_pipe(), Vector2(3, 2))
+					_item_box(parent, seg, at, Vector3(ex, 0.04, 0), Vector3(0.55, 0.08, 0.55), metal)  # foot
+		elif kind == "wires":
+			beam = _build_wires(parent, seg, at, y, ends)
+		else:
+			# Thick enough to stay at least a pixel tall at the low internal resolution, far off.
+			var b := _item_box(holder, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, 0.1, 0.06), Color("ff3030"))
+			beam = b
+			for e in ends:
+				var ex: float = e["x"]
+				if e["wall"]:
+					ex -= signf(ex) * 0.2  # stands just proud of the wall, so it reads against it
+				else:
+					_item_box(parent, seg, at, Vector3(ex, y / 2.0, 0), Vector3(0.12, y, 0.12), metal)  # emitter post
+				# A light housing with a bright red lens facing along the beam.
+				var em := _item_box(parent, seg, at, Vector3(ex, y, 0), Vector3(0.4, 0.34, 0.34), Color("a8acb2"))
+				_box(em, Vector3(0.44, 0.14, 0.14), Vector3.ZERO, Color("ff2a2a"))
+	# Hiding the holder hides every beam of a tripwire at once.
+	return holder if kind == "tripwire" else beam
+
+
+## Live electrical wires hanging low across a run of lanes (the main floor's slide obstacle):
+## three sagging cables, anchored in a junction box on the wall or rising to the ceiling where they
+## stop mid-road, a cut wire dangling from the ceiling, and sparks where they're broken.
+func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Array) -> Node3D:
+	var frame := _frame_at(seg, at)
+	var x0: float = ends[0]["x"]
+	var x1: float = ends[1]["x"]
+	var top := y + 0.2   # where the cables are held
+	var low := y - 0.08  # how far they sag in the middle (still too low to run under)
+	var black := Color("141414")
+	var first: MeshInstance3D = null
+	var n := maxi(4, ceili((x1 - x0) / 0.6))
+	for c in 3:
+		var dz: float = [-0.1, 0.0, 0.1][c]
+		var dy: float = [0.0, 0.06, -0.05][c]
+		var prev := Vector3(x0, top + dy, dz)
+		for i in range(1, n + 1):
+			var t := float(i) / n
+			var p := Vector3(lerpf(x0, x1, t), top + dy - (top - low) * 4.0 * t * (1.0 - t), dz)
+			var seg_mesh := _cable(parent, frame, prev, p, 0.04, black if c != 1 else Color("5a3a12"))
+			if first == null:
+				first = seg_mesh
+			prev = p
+	for e in ends:
+		var ex: float = e["x"]
+		if e["wall"]:
+			var jb := _box(parent, Vector3(0.24, 0.42, 0.42), Vector3.ZERO, Color("5a5f66"))  # junction box
+			jb.transform = frame * Transform3D(Basis.IDENTITY, Vector3(ex - signf(ex) * 0.1, top, 0))
+			var stripe := _box(jb, Vector3(0.26, 0.08, 0.44), Vector3.ZERO, Color("c9a227"))
+			stripe.position.y = 0.12
+		else:
+			_cable(parent, frame, Vector3(ex, top, 0), Vector3(ex, CEILING_Y, 0), 0.09, black)  # up to the ceiling
+	# A cut wire dangling from the ceiling, sparking at its end, and sparks where the run is broken.
+	var cut_x := lerpf(x0, x1, 0.3)
+	var tip := Vector3(cut_x, top - 0.1, 0.25)
+	_cable(parent, frame, Vector3(cut_x, CEILING_Y, 0.25), tip, 0.04, black)
+	for spot in [tip, Vector3(lerpf(x0, x1, 0.65), low + 0.02, 0.0)]:
+		var s := Sparks.new(4, hash(Vector2(at, spot.x)))
+		parent.add_child(s)
+		s.transform = frame * Transform3D(Basis.IDENTITY, spot)
+	return first
+
+
+## A thin straight cable between two points given in `frame` (a place on the route).
+func _cable(parent: Node3D, frame: Transform3D, a: Vector3, b: Vector3, thick: float, color: Color) -> MeshInstance3D:
+	var m := _box(parent, Vector3(thick, thick, maxf(a.distance_to(b), 0.01)), Vector3.ZERO, color)
+	var pa := frame * a
+	var pb := frame * b
+	var up := Vector3.UP if absf((pb - pa).normalized().y) < 0.99 else Vector3.RIGHT
+	m.transform = Transform3D(Basis.looking_at(pb - pa, up), (pa + pb) / 2.0)
+	return m
+
+
+## A makeshift blockade across one lane: a door on its side, with a chair tipped over behind it.
+## Still exactly a jump obstacle; just a different look (main floor).
+func _build_blockade(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var tilt := 0.07 if lane % 2 == 0 else -0.06
+	var door := _box(holder, Vector3(tuning.lane_width * 0.94, 0.5, 0.07), Vector3(0, 0.25, 0), Color.WHITE)
+	door.material_override = PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
+	door.rotation.z = tilt
+	# The chair, on its side: seat standing up, back lying flat, legs sticking out.
+	var chair := Node3D.new()
+	holder.add_child(chair)
+	chair.position = Vector3(0.25 if lane % 2 == 0 else -0.25, 0, -0.35)
+	chair.rotation.y = 0.5 if lane % 2 == 0 else -0.4
+	var plastic := Color("3e4c5c")
+	_box(chair, Vector3(0.44, 0.44, 0.05), Vector3(0, 0.22, 0), plastic)       # seat
+	_box(chair, Vector3(0.44, 0.05, 0.42), Vector3(0, 0.03, -0.2), plastic)    # back, flat on the floor
+	for lx in [-0.19, 0.19]:
+		_box(chair, Vector3(0.03, 0.03, 0.4), Vector3(lx, 0.4, 0.2), Color("8a8f96"))  # legs
+	return holder
+
+
 ## Where there is no way straight on: a wall across the middle lanes. Only the outer lanes (ladders) get out.
 func _build_dead_end(parent: Node3D, seg: Dictionary) -> void:
 	var length: float = seg["length"]
@@ -654,7 +829,7 @@ func _build_dead_end(parent: Node3D, seg: Dictionary) -> void:
 	var h: float = CEILING_Y if theme.get("ceiling", false) else maxf(theme["height"], 1.2)
 	var w := (tuning.lane_count - 2) * tuning.lane_width
 	var wall := _item_box(parent, seg, length, Vector3(0, h / 2.0, -0.2), Vector3(w, h, 0.4), Color.WHITE)
-	wall.material_override = PsxMaterials.textured(PsxTextures.wall(theme["wall"], theme["color"]), Vector2(3, 2))
+	wall.material_override = PsxMaterials.textured(_wall_texture(theme), Vector2(3, 2))
 
 
 ## Rails and rungs up (or down) the ladder lane at the start of the segment the ladder leads to.
@@ -755,7 +930,8 @@ func _build_fork_cue() -> void:
 				var side := RouteGraph.side_of(edge)
 				tex = PsxTextures.fork_lane(Hud.side_dir(side), Hud.side_color(side))
 		for piece in _pieces(seg, cue_start, length):
-			_strip(cue, seg, piece.x, piece.y, _player.lane_x(lane), tuning.lane_width, 0.0, tex, 1.0)
+			_strip(cue, seg, piece.x, piece.y, _player.lane_x(lane), tuning.lane_width, 0.0, tex, 1.0,
+					_ground_tile(id) if tex == _ground(id) else 4.0)
 	if not choice:
 		return
 
@@ -811,7 +987,32 @@ func _theme(id: StringName) -> Dictionary:
 
 
 func _ground(id: StringName) -> Texture2D:
-	return PsxTextures.asphalt() if _theme(id)["ground"] == "asphalt" else PsxTextures.concrete()
+	match _theme(id)["ground"]:
+		"asphalt":
+			return PsxTextures.asphalt()
+		"office_floor":
+			return PsxTextures.office_floor()
+	return PsxTextures.concrete()
+
+
+## How long one floor tile is along the road (office tiles are square, one lane wide).
+func _ground_tile(id: StringName) -> float:
+	return tuning.lane_width if _theme(id)["ground"] == "office_floor" else 4.0
+
+
+func _wall_texture(theme: Dictionary) -> Texture2D:
+	if theme.has("wall_tex"):
+		return _obstacle_texture(theme["wall_tex"])
+	return PsxTextures.wall(theme["wall"], theme["color"])
+
+
+func _ceiling_texture(theme: Dictionary) -> Texture2D:
+	return _obstacle_texture(theme["ceiling_tex"]) if theme.has("ceiling_tex") else _wall_texture(theme)
+
+
+## This area's look for an obstacle (see THEMES "skins"), or the default.
+func _skin(id: StringName, what: String, default: String) -> String:
+	return _theme(id).get("skins", {}).get(what, default)
 
 
 ## A blob shadow directly under an obstacle, one per run of neighbouring lanes, because
@@ -846,6 +1047,16 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.crate_metal()
 		"cover_wall":
 			return PsxTextures.cover_wall()
+		"office_wall":
+			return PsxTextures.office_wall()
+		"office_ceiling":
+			return PsxTextures.office_ceiling()
+		"cabinet":
+			return PsxTextures.cabinet()
+		"desk":
+			return PsxTextures.desk()
+		"door":
+			return PsxTextures.door()
 	push_warning("Unknown obstacle texture '%s'" % name)
 	return PsxTextures.concrete()
 
@@ -939,7 +1150,9 @@ func _check_obstacles() -> void:
 			"jump_or_alert":
 				if _player.clears_low_obstacle():
 					continue
-				o["done"] = true
+				for other in _obstacles:  # the whole wire trips (and vanishes) at once
+					if other["group"] == o["group"]:
+						other["done"] = true
 				o["mesh"].visible = false
 				RunLog.record_event("tripwire", {"node": _runner.current})
 				GameState.raise_alert()
@@ -1152,13 +1365,22 @@ func _retry() -> void:
 # --- Camera -----------------------------------------------------------------------
 
 ## Behind and above the player, in the frame of the leg they're on, eased so turns and
-## climbs swing smoothly rather than snapping.
+## climbs swing smoothly rather than snapping. Normally it sits a little toward the middle of the
+## road; near a wall (walls are solid and lane-aligned) it moves right behind the player, so it
+## never ends up inside one.
 func _update_camera(delta: float) -> void:
-	var seg := _segment_at(_player.distance_run())
-	var into: float = _player.distance_run() - seg["start"]
+	var d := _player.distance_run()
+	var seg := _segment_at(d)
+	var into: float = d - seg["start"]
 	var f: Transform3D = seg["node"].global_transform * _frame_at(seg, into)
 	var x := _player.track_x
-	var eye := f * Vector3(x * 0.6, 3.4, 5.5)
+	var near_wall := false
+	for o in _obstacles:
+		if o["kind"] == "wall" and o["at"] > d - 7.0 and o["at"] < d + 1.5:
+			near_wall = true
+			break
+	_camera_follow = move_toward(_camera_follow, 1.0 if near_wall else 0.6, delta * 3.0)
+	var eye := f * Vector3(x * _camera_follow, 3.4, 5.5)
 	var look := f * Vector3(x * 0.8, 1.0, -10.0)
 	var target := Transform3D(Basis.IDENTITY, eye).looking_at(look, Vector3.UP)
 	_camera.global_transform = _camera.global_transform.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))

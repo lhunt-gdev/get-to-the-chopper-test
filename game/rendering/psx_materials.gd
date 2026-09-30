@@ -18,6 +18,18 @@ static func flat(color: Color) -> ShaderMaterial:
 	return _cache[key]
 
 
+## Unlit, full-brightness colour for things that give off light (sparks), so they pop in the dark.
+static func glow(color: Color) -> StandardMaterial3D:
+	var key := "glow_" + color.to_html()
+	if not _cache.has(key):
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = color
+		m.disable_fog = true
+		_cache[key] = m
+	return _cache[key]
+
+
 ## Blob shadow with dithered edges. rectangle = false gives an ellipse.
 static func shadow(rectangle: bool, tuning: Tuning) -> ShaderMaterial:
 	var key := "shadow_%s_%s_%s" % [rectangle, tuning.shadow_opacity, tuning.shadow_softness]

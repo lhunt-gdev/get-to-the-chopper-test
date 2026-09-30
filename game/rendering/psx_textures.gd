@@ -120,6 +120,97 @@ static func rust_pipe() -> Texture2D:
 	return _finish("rust_pipe", img)
 
 
+## Office / complex wall (MGS PS1 style): blue-grey panels with dark seams, a darker dado band
+## and a light stripe along it. One tile per 2 m x 2 m.
+static func office_wall() -> Texture2D:
+	if _cache.has("office_wall"):
+		return _cache["office_wall"]
+	var img := _start("office_wall", Color("6f7a82"), 0.025)
+	for y in SIZE:
+		for x in SIZE:
+			if x % 16 == 0 or y == 0:
+				img.set_pixel(x, y, Color("4a535a"))  # panel seams
+			if y >= 22:
+				img.set_pixel(x, y, Color("4c565e"))  # dado
+			if y == 21 or y == 22:
+				img.set_pixel(x, y, Color("9aa8b0"))  # stripe
+	return _finish("office_wall", img)
+
+
+## Office floor: grey linoleum tiles, one per lane width, with a faint seam where lanes meet.
+static func office_floor() -> Texture2D:
+	if _cache.has("office_floor"):
+		return _cache["office_floor"]
+	var img := _start("office_floor", Color("5f625c"), 0.03)
+	for i in SIZE:
+		img.set_pixel(0, i, Color("40423e"))
+		img.set_pixel(1, i, Color("40423e"))
+		img.set_pixel(i, 0, Color("4a4c47"))
+	for y in range(6, 26, 10):  # scuff marks
+		img.set_pixel(10 + y % 7, y, Color("535650"))
+	return _finish("office_floor", img)
+
+
+## Office ceiling: square tiles with a fluorescent light panel every other tile.
+static func office_ceiling() -> Texture2D:
+	if _cache.has("office_ceiling"):
+		return _cache["office_ceiling"]
+	var img := _start("office_ceiling", Color("8a8e8c"), 0.02)
+	for y in SIZE:
+		for x in SIZE:
+			if x % 16 == 0 or y % 16 == 0:
+				img.set_pixel(x, y, Color("5c605e"))
+			elif x < 16 and y < 16 and x > 3 and x < 13 and y > 5 and y < 11:
+				img.set_pixel(x, y, Color("eef6f0"))  # light panel
+	return _finish("office_ceiling", img)
+
+
+## Office door: pale grey-green panel with a frame, a little window and a handle.
+static func door() -> Texture2D:
+	if _cache.has("door"):
+		return _cache["door"]
+	var img := _start("door", Color("8e9a92"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3:
+				img.set_pixel(x, y, Color("5a645e"))
+			elif x > 6 and x < 14 and y > 5 and y < 14:
+				img.set_pixel(x, y, Color("3a4a52"))  # wired-glass window
+			elif x > 24 and x < 28 and y > 14 and y < 18:
+				img.set_pixel(x, y, Color("c8ccc8"))  # handle
+	return _finish("door", img)
+
+
+## Metal filing cabinet: grey drawers with handles.
+static func cabinet() -> Texture2D:
+	if _cache.has("cabinet"):
+		return _cache["cabinet"]
+	var img := _start("cabinet", Color("7c8288"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if y % 8 == 0 or x < 2 or x > SIZE - 3:
+				img.set_pixel(x, y, Color("4e5358"))
+			if y % 8 == 3 and x > 12 and x < 20:
+				img.set_pixel(x, y, Color("c8ccd0"))  # handle
+	return _finish("cabinet", img)
+
+
+## Office desk: wood-effect top edge over a grey modesty panel.
+static func desk() -> Texture2D:
+	if _cache.has("desk"):
+		return _cache["desk"]
+	var img := _start("desk", Color("5e6268"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if y < 7:
+				img.set_pixel(x, y, Color("8a6a44").lightened(0.05 * ((x / 3) % 2)))
+			elif y == 7:
+				img.set_pixel(x, y, Color("3a3024"))
+			elif x % 16 == 0:
+				img.set_pixel(x, y, Color("45494e"))
+	return _finish("desk", img)
+
+
 ## Wooden crate: horizontal planks with dark gaps, a frame and a cross brace.
 static func crate_wood() -> Texture2D:
 	if _cache.has("crate_wood"):

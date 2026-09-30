@@ -4,22 +4,25 @@ extends Node
 ##   godot --headless --path . --fixed-fps 60 res://tests/autoplay/autoplay.tscn -- --scenario=ground
 ## Every bot but "naive" holds FIRE while there's a trooper to shoot (alarm boxes only in the
 ## alarm scenarios). Scenarios:
-##   naive       - never moves or shoots; should be killed
-##   ground      - keeps to the middle lanes: straight on via MOTOR POOL
-##   roof_quiet  - right-lane stairs to ROOFTOPS, jumps the tripwire, left-lane stairs down to
-##                 TUNNEL (open at alert 1), then a ladder up
-##   roof_loud   - trips the wire, so TUNNEL is sealed at alert 2 and the left lane carries on to
-##                 ROOF EDGE; takes the right-lane ladder down
-##   miss_ladder - as roof_loud, but stays in the middle at ROOF EDGE: should be captured
-##   late_switch - heads for the right-lane stairs, then swipes back to the middle a few metres
-##                 before the split: straight on must still be open, so MOTOR POOL
-##   cover       - runs into the cover block, holds fire until it's safe to shoot from cover,
-##                 kills the trooper from there, breaks cover and goes on untouched
-##   camper      - takes cover and never leaves it: the chopper should leave without us
-##   roof_alarm  - trips the wire (alert 2, TUNNEL locked down), shoots the alarm box on the
-##                 rooftops (back to alert 1, the door lifts) and takes the TUNNEL after all
-##   ground_loud - main route, runs through both tripwires and ignores the alarm boxes: Alert 3
-##   ground_alarms - main route, runs through both tripwires, shoots both alarm boxes: back to Alert 1
+##   naive        - never moves or shoots; should be killed
+##   ground       - keeps to the middle lanes: straight on via MAIN FLOOR and the GATE
+##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
+##                  (open at alert 1), then a ladder up
+##   tunnel_loud  - runs through MAIN FLOOR's wire: the TUNNEL locks down (alert 2), so the left
+##                  lane carries straight on to the GATE
+##   tunnel_alarm - runs through MAIN FLOOR's wire, shoots its alarm box (back to alert 1, the
+##                  door lifts) and takes the TUNNEL after all
+##   roof_down    - right-lane stairs up to ROOFTOPS, then left-lane stairs back down to the GATE
+##   roof_loud    - runs through the first wire (alert 2), up to ROOFTOPS, straight on to ROOF
+##                  EDGE, right-lane ladder down
+##   miss_ladder  - as roof_loud, but stays in the middle at ROOF EDGE: should be captured
+##   late_switch  - heads for the right-lane stairs, then swipes back to the middle a few metres
+##                  before the split: straight on must still be open, so MAIN FLOOR
+##   cover        - runs into the first cover, holds fire until it's safe to shoot from cover,
+##                  kills the trooper from there, breaks cover and goes on untouched
+##   camper       - takes cover and never leaves it: the chopper should leave without us
+##   ground_loud  - main route, runs through both wires and ignores the alarm boxes: Alert 3
+##   ground_alarms - main route, runs through both wires, shoots both alarm boxes: back to Alert 1
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -31,7 +34,8 @@ var _level: Node
 var _player: Player
 ## Which side to lean toward at each junction, by node id (-1 left, 0 straight on, 1 right).
 var _prefer := {}
-var _jump_tripwires := true
+## Segments where the bot runs through the tripwire instead of jumping it.
+var _trip_in: Array = []
 var _cooldown := 0
 var _took_cover := false
 var _cover_frames := 0
@@ -42,15 +46,26 @@ func _ready() -> void:
 		if a.begins_with("--scenario="):
 			scenario = a.get_slice("=", 1)
 	match scenario:
-		"roof_quiet", "roof_alarm":
-			_prefer = {&"compound_exit": 1, &"rooftops": -1, &"service_tunnel": -1}
+		"tunnel_quiet":
+			_prefer = {&"building_main_floor": -1, &"service_tunnel": -1}
+		"tunnel_loud":
+			_prefer = {&"building_main_floor": -1}
+			_trip_in = [&"building_main_floor"]
+		"tunnel_alarm":
+			_prefer = {&"building_main_floor": -1, &"service_tunnel": -1}
+			_trip_in = [&"building_main_floor"]
+		"roof_down":
+			_prefer = {&"compound_exit": 1, &"rooftops": -1}
 		"roof_loud":
-			_prefer = {&"compound_exit": 1, &"rooftops": -1, &"roof_edge": 1}
+			_prefer = {&"compound_exit": 1, &"roof_edge": 1}
+			_trip_in = [&"compound_exit"]
 		"miss_ladder":
-			_prefer = {&"compound_exit": 1, &"rooftops": -1, &"roof_edge": 0}
+			_prefer = {&"compound_exit": 1, &"roof_edge": 0}
+			_trip_in = [&"compound_exit"]
 		"late_switch":
 			_prefer = {&"compound_exit": 1}
-	_jump_tripwires = not scenario in ["roof_loud", "miss_ladder", "roof_alarm", "ground_loud", "ground_alarms"]
+		"ground_loud", "ground_alarms":
+			_trip_in = [&"compound_exit", &"building_main_floor"]
 	_level = LEVEL.instantiate()
 	add_child(_level)
 	_player = _level.get_node("Player")
@@ -118,7 +133,7 @@ func _physics_process(_delta: float) -> void:
 			"jump":
 				_player.handle_swipe(Vector2i.UP)
 			"jump_or_alert":
-				if _jump_tripwires:
+				if not _level._runner.current in _trip_in:
 					_player.handle_swipe(Vector2i.UP)
 			"slide":
 				_player.handle_swipe(Vector2i.DOWN)
@@ -176,11 +191,11 @@ func _report(reason: String) -> void:
 	get_tree().quit()
 
 
-## roof_alarm only shoots the ROOFTOPS box (the one that can lift the TUNNEL door).
+## tunnel_alarm only shoots MAIN FLOOR's box (the one that can lift the TUNNEL door).
 func _may_shoot_alarm() -> bool:
 	match scenario:
 		"ground_alarms":
 			return true
-		"roof_alarm":
-			return _level._runner.current == &"rooftops"
+		"tunnel_alarm":
+			return _level._runner.current == &"building_main_floor"
 	return false

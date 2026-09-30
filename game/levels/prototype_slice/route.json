@@ -30,29 +30,30 @@
         {"side": "left", "at": 132}
       ],
       "next": [
-        {"to": "motor_pool", "label": "MOTOR POOL"},
+        {"to": "building_main_floor", "label": "MAIN FLOOR"},
         {"to": "rooftops", "label": "ROOFTOPS", "side": "right", "via": "stairs"}
       ]
     },
     {
-      "id": "motor_pool",
-      "theme": "motor_pool",
+      "id": "building_main_floor",
+      "theme": "office",
       "tier": "ground",
       "length": 130,
-      "bends": [{"at": 44, "side": "left"}, {"at": 112, "side": "right"}],
+      "bends": [{"at": 44, "side": "left"}],
       "obstacles": [
         {"kind": "wall", "lanes": [0, 1], "at": 14},
         {"kind": "wall", "lanes": [3, 4], "at": 22},
         {"kind": "barrier", "lanes": [2], "at": 22},
         {"kind": "wall", "lanes": [1, 2], "at": 36},
         {"kind": "box", "lanes": [3], "at": 36, "material": "metal"},
-        {"kind": "pipe", "lanes": [0, 4], "at": 36},
         {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 50},
         {"kind": "box", "lanes": [2], "at": 58},
+        {"kind": "pipe", "lanes": [2, 3, 4], "at": 66},
         {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 76},
         {"kind": "wall", "lanes": [3, 4], "at": 88},
-        {"kind": "box", "lanes": [2], "at": 88},
-        {"kind": "pipe", "lanes": [0, 1], "at": 108},
+        {"kind": "box", "lanes": [2], "at": 88, "look": "crate"},
+        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 98},
+        {"kind": "pipe", "lanes": [0, 1], "at": 108, "look": "pipe"},
         {"kind": "box", "lanes": [4], "at": 120, "material": "metal"}
       ],
       "enemies": [
@@ -64,7 +65,8 @@
         {"side": "right", "at": 72}
       ],
       "next": [
-        {"to": "airfield_gate", "label": "GATE"}
+        {"to": "airfield_gate", "label": "GATE"},
+        {"to": "service_tunnel", "label": "TUNNEL", "side": "left", "via": "stairs", "max_alert": 1}
       ]
     },
     {
@@ -90,7 +92,7 @@
       ],
       "next": [
         {"to": "roof_edge", "label": "ROOF EDGE"},
-        {"to": "service_tunnel", "label": "TUNNEL", "side": "left", "via": "stairs", "max_alert": 1}
+        {"to": "airfield_gate", "label": "GATE", "side": "left", "via": "stairs"}
       ]
     },
     {
@@ -144,7 +146,6 @@
         {"kind": "box", "lanes": [2], "at": 15, "material": "metal"},
         {"kind": "wall", "lanes": [3, 4], "at": 30},
         {"kind": "box", "lanes": [2], "at": 30},
-        {"kind": "barrier", "lanes": [0, 1], "at": 30},
         {"kind": "box", "lanes": [1], "at": 44},
         {"kind": "box", "lanes": [3], "at": 58, "material": "metal"},
         {"kind": "wall", "lanes": [0], "at": 66},

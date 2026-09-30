@@ -17,14 +17,16 @@ expect() {  # scenario, expected substring
   if [[ "$out" == *"$2"* ]]; then echo "PASS $out"; else echo "FAIL [$1] expected '$2', got: ${out:-no result}"; fail=1; fi
 }
 expect naive       "reason=killed"
-expect ground      "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD"
-expect roof_quiet  "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > SERVICE TUNNEL > HELIPAD"
+expect ground      "reason=extracted alert=1 route=COMPOUND EXIT > BUILDING MAIN FLOOR > AIRFIELD GATE > HELIPAD"
+expect tunnel_quiet "reason=extracted alert=1 route=COMPOUND EXIT > BUILDING MAIN FLOOR > SERVICE TUNNEL > HELIPAD"
+expect tunnel_loud "reason=extracted alert=2 route=COMPOUND EXIT > BUILDING MAIN FLOOR > AIRFIELD GATE > HELIPAD"
+expect tunnel_alarm "reason=extracted alert=1 route=COMPOUND EXIT > BUILDING MAIN FLOOR > SERVICE TUNNEL > HELIPAD | covers=0 hits=0 missed=0 alarms=1"
+expect roof_down   "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > AIRFIELD GATE > HELIPAD"
 expect roof_loud   "reason=extracted alert=2 route=COMPOUND EXIT > ROOFTOPS > ROOF EDGE > HELIPAD"
 expect miss_ladder "reason=captured alert=2 route=COMPOUND EXIT > ROOFTOPS > ROOF EDGE"
-expect late_switch "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD"
-expect cover       "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=1 hits=0 missed=1"
-expect roof_alarm  "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > SERVICE TUNNEL > HELIPAD | covers=0 hits=0 missed=0 alarms=1"
+expect late_switch "reason=extracted alert=1 route=COMPOUND EXIT > BUILDING MAIN FLOOR > AIRFIELD GATE > HELIPAD"
+expect cover       "reason=extracted alert=1 route=COMPOUND EXIT > BUILDING MAIN FLOOR > AIRFIELD GATE > HELIPAD | covers=1 hits=0 missed=1"
 expect camper      "reason=chopper_left alert=1 route=COMPOUND EXIT | covers=1"
-expect ground_loud "reason=extracted alert=3 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=0"
-expect ground_alarms "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=0 hits=0 missed=0 alarms=2"
+expect ground_loud "reason=extracted alert=3 route=COMPOUND EXIT > BUILDING MAIN FLOOR > AIRFIELD GATE > HELIPAD | covers=0"
+expect ground_alarms "reason=extracted alert=1 route=COMPOUND EXIT > BUILDING MAIN FLOOR > AIRFIELD GATE > HELIPAD | covers=0 hits=0 missed=0 alarms=2"
 exit $fail

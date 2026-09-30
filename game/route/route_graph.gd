@@ -22,6 +22,15 @@ const OBSTACLE_KINDS := ["barrier", "pipe", "tripwire", "box", "wall"]
 ## Fairness (user rule): walls are solid, so no trooper may stand in a wall's lanes within this
 ## many metres behind it. No unfair surprises when you run round one.
 const WALL_TROOPER_CLEARANCE := 15.0
+## Fairness (user rule): where cover fills 3+ lanes, the open lanes are the only way through, so
+## no jump/slide obstacle may be within this many metres in them. You can't swipe and jump at once.
+const CROSSING_WINDOW := 4.0
+## How deep each object is along the route (metres), and the clear gap needed between two
+## objects in the same lane (user rule: nothing overlaps).
+const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "trooper": 0.5}
+const MIN_GAP := 1.0
+## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
+const LOOKS := {"pipe": ["pipe", "wires"], "box": ["crate", "desk", "cabinet"], "barrier": ["cabinet", "blockade"]}
 const VIAS := ["corridor", "stairs", "ladder"]
 ## Height tiers, in tier steps (Tuning.tier_height metres each).
 const TIERS := {"roof": 1, "ground": 0, "underground": -1}
@@ -121,6 +130,55 @@ static func is_choice(options: Array[Dictionary]) -> bool:
 	return options.size() >= 2 or (options.size() == 1 and side_of(options[0]) != "straight")
 
 
+## Spots where cover fills 3+ lanes and a jump/slide obstacle sits in an open lane close by.
+static func _forced_crossings(id: StringName, obstacles: Array) -> PackedStringArray:
+	var problems := PackedStringArray()
+	var reported := {}
+	for c in obstacles:
+		if not String(c.get("kind", "")) in ["box", "wall"]:
+			continue
+		var at := float(c.get("at", 0))
+		var covered := {}
+		for o in obstacles:
+			if String(o.get("kind", "")) in ["box", "wall"] and absf(float(o.get("at", 0)) - at) <= CROSSING_WINDOW:
+				for l in o.get("lanes", []):
+					covered[int(l)] = true
+		if covered.size() < 3:
+			continue
+		for o in obstacles:
+			if not String(o.get("kind", "")) in ["barrier", "pipe"] or absf(float(o.get("at", 0)) - at) > CROSSING_WINDOW:
+				continue
+			for l in o.get("lanes", []):
+				if not covered.has(int(l)) and not reported.has(o):
+					reported[o] = true
+					problems.append("node '%s': %s at %s m blocks the only way past the cover at %s m (you can't swipe and jump at once)"
+							% [id, o["kind"], o.get("at"), c.get("at")])
+					break
+	return problems
+
+
+## Objects that would overlap: two things sharing a lane closer than their depths plus MIN_GAP.
+static func _overlaps(id: StringName, obstacles: Array, enemies: Array) -> PackedStringArray:
+	var things: Array[Dictionary] = []
+	for o in obstacles:
+		things.append({"what": String(o.get("kind", "")), "at": float(o.get("at", 0)), "lanes": o.get("lanes", [])})
+	for e in enemies:
+		things.append({"what": "trooper", "at": float(e.get("at", 0)), "lanes": [e.get("lane", -1)]})
+	var problems := PackedStringArray()
+	for i in things.size():
+		for j in range(i + 1, things.size()):
+			var a := things[i]
+			var b := things[j]
+			var shared := false
+			for l in a["lanes"]:
+				if int(l) in b["lanes"].map(func(v: Variant) -> int: return int(v)):
+					shared = true
+			var room: float = (DEPTHS.get(a["what"], 0.5) + DEPTHS.get(b["what"], 0.5)) / 2.0 + MIN_GAP
+			if shared and absf(a["at"] - b["at"]) < room:
+				problems.append("node '%s': %s at %s m overlaps %s at %s m" % [id, a["what"], a["at"], b["what"], b["at"]])
+	return problems
+
+
 ## Returns a list of problems. Empty means the graph is valid.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
@@ -142,6 +200,8 @@ func validate() -> PackedStringArray:
 		for ob in n.get("obstacles", []):
 			var kind := String(ob.get("kind", ""))
 			var lanes: Array = ob.get("lanes", [])
+			if ob.has("look") and not String(ob["look"]) in LOOKS.get(kind, []):
+				problems.append("node '%s': %s at %s m can't look like '%s'" % [id, kind, ob.get("at"), ob["look"]])
 			if not kind in OBSTACLE_KINDS:
 				problems.append("node '%s': unknown obstacle kind '%s'" % [id, kind])
 			elif kind == "wall":
@@ -157,6 +217,8 @@ func validate() -> PackedStringArray:
 					var behind := float(e.get("at", 0)) - float(ob.get("at", 0))
 					if int(e.get("lane", -1)) in lanes and behind >= 0.0 and behind < WALL_TROOPER_CLEARANCE:
 						problems.append("node '%s': trooper at %s m is hidden right behind the wall at %s m" % [id, e.get("at"), ob.get("at")])
+		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
+		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
 		for e in n.get("enemies", []):
 			if String(e.get("kind", "")) != "rifle_trooper":
 				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
@@ -190,6 +252,9 @@ func validate() -> PackedStringArray:
 				problems.append("%s -> %s: straight on can't change height" % [id, to])
 			if via in ["stairs", "ladder"] and not changes_tier:
 				problems.append("%s -> %s: %s must change height" % [id, to, via])
+			# Tiers are stacked (underground, ground, roof): you can only climb or drop one at a time.
+			if absi(tier_of(to) - tier_of(id)) > 1:
+				problems.append("%s -> %s: stairs and ladders only move one level (tunnels - main level - rooftops)" % [id, to])
 			if via == "ladder" and String(node_data(to).get("end", "")) == "":
 				problems.append("%s -> %s: ladders only lead to the end of the level" % [id, to])
 			if side == "straight" and (edge.has("min_alert") or edge.has("max_alert")):

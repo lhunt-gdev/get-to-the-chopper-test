@@ -45,8 +45,8 @@ func _test_route_json_is_valid() -> void:
 
 func _test_alert_gating() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	_check(g.available_next(&"rooftops", 1).size() == 2, "tunnel open at alert 1")
-	_check(g.available_next(&"rooftops", 2).size() == 1, "tunnel sealed at alert 2")
+	_check(g.available_next(&"building_main_floor", 1).size() == 2, "tunnel open at alert 1")
+	_check(g.available_next(&"building_main_floor", 2).size() == 1, "tunnel sealed at alert 2")
 
 
 func _test_pick_edge() -> void:
@@ -70,7 +70,7 @@ func _test_pick_edge() -> void:
 ## Every route has a trooper set per alert level, with fewer at Alert 1 than at 2, and at 2 than at 3.
 func _test_trooper_tiers() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	for id in ["compound_exit", "motor_pool", "rooftops", "roof_edge", "service_tunnel", "airfield_gate"]:
+	for id in ["compound_exit", "building_main_floor", "rooftops", "roof_edge", "service_tunnel", "airfield_gate"]:
 		var counts := [0, 0, 0]
 		for e in g.node_data(StringName(id)).get("enemies", []):
 			for alert in [1, 2, 3]:
@@ -141,6 +141,36 @@ func _test_route_rules() -> void:
 	_check("trooper at 28 m is hidden right behind the wall" in problems, "no trooper right behind a wall")
 	_check(not "trooper at 24 m" in problems, "a trooper in another lane is fine")
 	_check(not "trooper at 50 m" in problems, "a trooper well behind a wall is fine")
+	var squeeze := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "length": 100, "end": "extract", "obstacles": [
+			{"kind": "wall", "lanes": [0, 1], "at": 20}, {"kind": "box", "lanes": [2], "at": 21},
+			{"kind": "pipe", "lanes": [3, 4], "at": 22},
+			{"kind": "wall", "lanes": [0, 1], "at": 50}, {"kind": "barrier", "lanes": [2, 3, 4], "at": 51},
+			{"kind": "wall", "lanes": [3, 4], "at": 70}, {"kind": "box", "lanes": [2], "at": 70},
+			{"kind": "barrier", "lanes": [0, 1], "at": 80},
+			{"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 73}]},
+	]})
+	problems = " ".join(squeeze.validate())
+	_check("pipe at 22" in problems, "cover on 3 lanes + a pipe in the open lanes is rejected (forced swipe-and-jump)")
+	_check(not "barrier at 51" in problems, "cover on only 2 lanes leaves room: a barrier nearby is fine")
+	_check(not "barrier at 80" in problems, "a barrier well after the cover is fine")
+	_check(not "tripwire" in problems, "a tripwire next to cover is fine (it only raises alert)")
+	var stacked := RouteGraph.from_dict({"start": "roof", "nodes": [
+		{"id": "roof", "tier": "roof", "next": [{"to": "sewer_straight"}, {"to": "sewer", "side": "left", "via": "stairs"}]},
+		{"id": "sewer_straight", "tier": "roof", "end": "extract"},
+		{"id": "sewer", "tier": "underground", "end": "extract"},
+	]})
+	_check("only move one level" in " ".join(stacked.validate()), "no stairs from the roof straight into a tunnel")
+	var crowded := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "length": 60, "end": "extract",
+			"obstacles": [{"kind": "box", "lanes": [2], "at": 20}, {"kind": "barrier", "lanes": [1, 2], "at": 20.8},
+				{"kind": "pipe", "lanes": [3], "at": 20.5}],
+			"enemies": [{"kind": "rifle_trooper", "lane": 2, "at": 40}, {"kind": "rifle_trooper", "lane": 3, "at": 40.2}]},
+	]})
+	problems = " ".join(crowded.validate())
+	_check("box at 20.0 m overlaps barrier at 20.8 m" in problems, "objects in the same lane can't overlap")
+	_check(not "pipe at 20.5" in problems, "objects in different lanes can sit side by side")
+	_check(not "trooper at 40.2" in problems, "troopers in different lanes can stand side by side")
 
 
 func _test_swipe_direction() -> void:

@@ -95,11 +95,39 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Box cover:** metal or wood crates, one lane each. You crouch behind them.
 - Both follow the LOCKED cover rule: run into it and you take cover; swipe sideways to leave; swipe early to go round it and keep your speed. Running into cover no longer kills you the way a truck did.
 - More cover throughout the level. Rooftops and the sewer (service tunnel) get fewer walls and mostly boxes.
+- **Playtest (2026-09-30, user):** plays smoothly, as expected.
+- **No forced swipe-and-jump (user rule):** when cover fills 3 or more lanes at a spot, the open lanes are the only way through. So no jump or slide obstacle may sit within 4 m of it in those lanes (`RouteGraph.CROSSING_WINDOW`). Otherwise the player would have to swipe and jump at the same moment, which the controls can't do, and the run ends. Tripwires are exempt (running through one only raises alert). Enforced by route validation.
 
 ### PROPOSED — Two tripwires and two alarm boxes on the main route (user decision)
 - The main (ground) route has 2 tripwires: COMPOUND EXIT and MOTOR POOL. Each is followed a little later by an alarm box on a side wall, so a player who trips a wire gets a chance to shoot the alert back down. The ROOFTOPS alarm box (which can lift the TUNNEL's lockdown door) stays.
 - Alarm boxes get a small light on top that blinks the whole time the box is live, so they're seen instantly. The face light still shows the shootable window.
 - Tripping both wires reaches Alert 3, so the Alert 3 trooper tier is now testable.
+
+### PROPOSED — Levels stack realistically: tunnels, main level, rooftops (user decision)
+- The tiers are physically stacked: underground (tunnels, sewer) under the main (ground) level, under the rooftops. **Stairs only move one tier** (no stairs from a roof straight into a tunnel). Ladders still only lead to the end of the level. Enforced by route validation.
+- **The tunnel is reached only from the main route.** In the test level, MOTOR POOL's left lane takes stairs down to SERVICE TUNNEL (sealed above Alert 1, with a lockdown door). MOTOR POOL's own tripwire and alarm box now drive that door: trip the wire and the tunnel locks, shoot the box and it reopens.
+- ROOFTOPS gets a left-lane staircase back down to AIRFIELD GATE (main level) and still carries straight on to ROOF EDGE and its ladders.
+- This replaces the earlier layout (ROOFTOPS → stairs down → TUNNEL).
+
+### PROPOSED — Readable, grounded obstacles (user direction)
+- **Tripwire emitters:** each laser comes out of an emitter box at each end, set in the side wall. If a wire stops mid-road, the emitter sits on a floor post. That makes the beam easier to spot.
+- **Pipes are plumbed in:** nuts where pipe pieces join. A pipe end next to a wall runs into the wall with a mounting plate; an end in the open bends down into the floor with a foot. No pipe is left floating.
+- **No overlapping objects (user rule):** obstacles and troopers sharing a lane need a clear gap between them (`RouteGraph.MIN_GAP`, allowing for each object's depth). Enforced by route validation.
+
+### PROPOSED — BUILDING MAIN FLOOR replaces MOTOR POOL (user decision)
+- The main route's second segment is now inside a building: an MGS PS1-style complex/office. Blue-grey panelled walls with a dado stripe, a grey tiled floor, and a ceiling with fluorescent light panels. The fork sign reads MAIN FLOOR.
+- **Pipes belong underground (user decision):** pipes are mostly in the tunnels. The main floor gets only the odd small pipe.
+
+### PROPOSED — Each level has its own obstacle set (user direction; main floor built, the rest proposed)
+- Gameplay kinds don't change (jump, slide, cover, tripwire); each level changes how they look, so levels are distinct and still read the same way.
+- **Main floor (user spec, 2026-09-30):**
+  - Interior: blue-grey panelled walls with a dado stripe, a grey tiled floor, and a ceiling with fluorescent light panels.
+  - Jump: low filing cabinets, and makeshift blockades of doors and chairs thrown on their sides.
+  - Slide: **live electrical wires hanging low, with sparks.** Some are cut, with sparks at the end. This replaces the air-con ducts, which didn't fit visually.
+  - Cover: tall metal cabinets and desks, only a few wooden crates. Walls are office partitions.
+  - Pipes: only the odd small pipe (`"look": "pipe"`).
+- **Walls at the edge join the outer wall (user rule, every level):** a wall cover in an edge lane runs right into the side wall, with no gap.
+- **Proposed for the rest, needs the user's pick:** COMPOUND: concrete road barriers, boom-gate arms, sandbags / crates / concrete walls. SERVICE TUNNEL: valve housings, pipes, concrete pillars / metal crates. ROOFTOPS: low parapets or skylight frames, antenna cables / water pipes, air-con units / water tanks. AIRFIELD GATE: barriers, boom-gate arms, sandbags / containers.
 
 ### OPEN — FIRE button position setting (later)
 - User wants a player setting to put FIRE on the left, the right or in the middle. Build it when there's a settings screen. The button's position is already one function (`SwipeInput.fire_button`), so it's a small change.
