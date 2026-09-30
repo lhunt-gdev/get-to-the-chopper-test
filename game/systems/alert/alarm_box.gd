@@ -12,6 +12,8 @@ const DARK := Color("3a1a16")
 
 ## Distance along the route.
 var at: float = 0.0
+## Across the route (out on the kerb).
+var x: float = 0.0
 var in_window: bool = false
 var _alive: bool = true
 var _light: MeshInstance3D

@@ -51,20 +51,20 @@
         {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 50},
         {"kind": "box", "lanes": [2], "at": 58},
         {"kind": "pipe", "lanes": [2, 3, 4], "at": 62},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 80},
-        {"kind": "wall", "lanes": [3, 4], "at": 88},
-        {"kind": "box", "lanes": [2], "at": 88, "look": "crate"},
-        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 98},
-        {"kind": "pipe", "lanes": [0, 1], "at": 108, "look": "pipe"},
-        {"kind": "box", "lanes": [4], "at": 120, "material": "metal"}
+        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 90},
+        {"kind": "wall", "lanes": [3, 4], "at": 100},
+        {"kind": "box", "lanes": [2], "at": 100, "look": "crate"},
+        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 107},
+        {"kind": "pipe", "lanes": [0, 1], "at": 113, "look": "pipe"},
+        {"kind": "box", "lanes": [4], "at": 122, "material": "metal"}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 1, "at": 62},
-        {"kind": "rifle_trooper", "lane": 3, "at": 106, "min_alert": 2},
-        {"kind": "rifle_trooper", "lane": 0, "at": 82, "min_alert": 3}
+        {"kind": "rifle_trooper", "lane": 3, "at": 116, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 0, "at": 94, "min_alert": 3}
       ],
       "alarms": [
-        {"side": "right", "at": 76}
+        {"side": "left", "at": 96}
       ],
       "marker": {"at": 70},
       "next": [
@@ -129,13 +129,13 @@
       "obstacles": [
         {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 34},
         {"kind": "box", "lanes": [2], "at": 44, "material": "metal"},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 58},
-        {"kind": "box", "lanes": [0], "at": 66}
+        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 72},
+        {"kind": "box", "lanes": [0], "at": 82}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 3, "at": 40},
-        {"kind": "rifle_trooper", "lane": 1, "at": 74, "min_alert": 2},
-        {"kind": "rifle_trooper", "lane": 4, "at": 62, "min_alert": 3}
+        {"kind": "rifle_trooper", "lane": 1, "at": 88, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 4, "at": 76, "min_alert": 3}
       ],
       "marker": {"at": 51},
       "next": [

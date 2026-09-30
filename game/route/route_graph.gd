@@ -39,8 +39,10 @@ const WIRE_LANES := [3, 4]
 ## Nothing (obstacle or trooper) this close to the start of an area reached by stairs: the flight
 ## is 12 m, then you burst out of the exit door (user rule: not too close to the exit).
 const STAIR_EXIT_CLEAR := 20.0
-## Nothing (obstacle or trooper) this close either side of a halfway marker's double door.
-const MARKER_CLEAR := 6.0
+## Nothing (obstacle or trooper) this close before a halfway marker's double door, or this far
+## after it: you burst through blind, so you need time to see what's ahead (like a stairwell's exit).
+const MARKER_CLEAR_BEFORE := 6.0
+const MARKER_CLEAR_AFTER := 20.0
 ## Areas with no walls to mount tripwire emitters on (user rule: no tripwires on the rooftops).
 const NO_TRIPWIRE_THEMES := ["rooftops"]
 const VIAS := ["corridor", "stairs", "ladder"]
@@ -289,7 +291,8 @@ func validate() -> PackedStringArray:
 			if m_at <= 0.0 or m_at >= length:
 				problems.append("node '%s': halfway marker at %s m is outside the area" % [id, m_at])
 			for thing in n.get("obstacles", []) + n.get("enemies", []):
-				if absf(float(thing.get("at", 0)) - m_at) < MARKER_CLEAR:
+				var gap := float(thing.get("at", 0)) - m_at
+				if gap > -MARKER_CLEAR_BEFORE and gap < MARKER_CLEAR_AFTER:
 					problems.append("node '%s': %s at %s m is too close to the halfway marker at %s m" % [id, thing.get("kind"), thing.get("at"), m_at])
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))

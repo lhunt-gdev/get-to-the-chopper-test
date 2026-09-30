@@ -133,6 +133,25 @@ static func tunnel_wall() -> Texture2D:
 	return _finish("tunnel_wall", img)
 
 
+## Inside a stairwell: painted blockwork, pale above and dark green-grey below a yellow line
+## (the paint line runs parallel to the stairs, like a real stairwell), scuffed near the steps.
+static func stairwell() -> Texture2D:
+	if _cache.has("stairwell"):
+		return _cache["stairwell"]
+	var img := _start("stairwell", Color("8c9088"), 0.035)
+	_courses(img, "stairwell", 16, 32)
+	for y in range(40, SIZE):
+		for x in SIZE:
+			_put(img, x, y, img.get_pixel(x, y).lerp(Color("485650"), 0.75))
+	for x in SIZE:
+		_put(img, x, 38, Color("c9a227"))
+		_put(img, x, 39, Color("a8861e"))
+	_blotches(img, "stairwell_scuffs", 5, 1, 3, Color("2a302c"), 0.4, Rect2i(0, 52, SIZE, 12))
+	_streaks(img, "stairwell_streaks", 3, Color("5a5e56"), 0.25)
+	_grime_bottom(img, "stairwell", 46, 0.3)
+	return _finish("stairwell", img)
+
+
 ## The service tunnel's ceiling: stained concrete between cast ribs, with a conduit and a
 ## cable tray running along it.
 static func tunnel_ceiling() -> Texture2D:

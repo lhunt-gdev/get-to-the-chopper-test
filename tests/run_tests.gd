@@ -91,14 +91,15 @@ func _test_mission_layout() -> void:
 	_check(not "node 'a' can never" in problems, "a node with one good route is fine")
 	var marked := RouteGraph.from_dict({"start": "a", "nodes": [
 		{"id": "a", "tier": "ground", "theme": "office", "length": 100, "marker": {"at": 50}, "next": [{"to": "e"}],
-			"obstacles": [{"kind": "box", "lanes": [1], "at": 46}, {"kind": "box", "lanes": [1], "at": 60}],
+			"obstacles": [{"kind": "box", "lanes": [1], "at": 46}, {"kind": "box", "lanes": [2], "at": 65}, {"kind": "box", "lanes": [1], "at": 72}],
 			"enemies": [{"kind": "rifle_trooper", "lane": 2, "at": 53}]},
 		{"id": "r", "tier": "ground", "theme": "rooftops", "length": 60, "marker": {"at": 30}, "next": [{"to": "e"}]},
 		{"id": "e", "tier": "ground", "end": "extract"},
 	]})
 	problems = " ".join(marked.validate())
 	_check("box at 46" in problems and "rifle_trooper at 53" in problems, "nothing right by a halfway marker's doors")
-	_check(not "box at 60" in problems, "things further from a halfway marker are fine")
+	_check("box at 65" in problems, "nothing too soon after a halfway marker (you burst through blind)")
+	_check(not "box at 72" in problems, "things further on after a halfway marker are fine")
 	_check("no halfway marker on open roofs" in problems, "no halfway marker on the rooftops")
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
 	_check(g.display_name(&"rooftops_far") == "ROOFTOPS", "the far rooftops show as ROOFTOPS")
@@ -171,6 +172,21 @@ func _test_trooper_rules() -> void:
 	_check(not RifleTrooper.shot_hits(1.4, 0.0, false, w), "change lane before the shot and he misses")
 	_check(RifleTrooper.shot_hits(0.5, 0.0, false, w), "halfway through a lane change you're still hit")
 	_check(not RifleTrooper.shot_hits(0.0, 0.0, true, w), "cover blocks the shot")
+	# Line of sight: walls are solid; boxes aren't blockers, so you shoot over them.
+	var wall := {"at": 20.0, "x0": 1.4, "x1": 4.5}  # a wall across the two right lanes
+	var walls := [wall]
+	_check(Sightlines.blocked(0.0, 2.8, 40.0, 2.8, walls), "can't shoot through a wall")
+	_check(not Sightlines.blocked(0.0, -2.8, 40.0, -2.8, walls), "a wall in other lanes doesn't block")
+	_check(not Sightlines.blocked(0.0, -2.8, 40.0, 2.8, walls), "you can shoot round a wall's edge at someone well behind it")
+	_check(Sightlines.blocked(18.6, 2.8, 40.0, 2.8, walls), "in the wall's lane just behind it, you're blocked...")
+	_check(not Sightlines.blocked(18.6, 2.8, 40.0, 2.8, walls, Sightlines.cover_wall(18.6, 2.8, walls)),
+			"...unless you're in cover there: you lean out round it")
+	_check(Sightlines.cover_wall(10.0, 2.8, walls) == null, "not in cover behind a wall 10 m away")
+	var shut := {"done": false}
+	var doorway := [{"at": 20.0, "x0": -2.1, "x1": 2.1, "open": func() -> bool: return shut["done"]}]
+	_check(Sightlines.blocked(0.0, 0.0, 40.0, 0.0, doorway), "a shut door blocks the shot")
+	shut["done"] = true
+	_check(not Sightlines.blocked(0.0, 0.0, 40.0, 0.0, doorway), "burst open, you can shoot through the doorway")
 	var t := Tuning.new()
 	_check(RifleTrooper.aim_time(t, 1) > RifleTrooper.aim_time(t, 2) and RifleTrooper.aim_time(t, 2) > RifleTrooper.aim_time(t, 3),
 			"higher alert, less time to dodge")

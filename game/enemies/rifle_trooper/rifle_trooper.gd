@@ -19,6 +19,8 @@ var at: float = 0.0
 var x: float = 0.0
 var min_alert: int = 1
 var max_alert: int = 3
+## False while a wall stands between him and you (set by the level each frame): he can't aim.
+var sight_clear: bool = true
 var health: int = 2
 var state: State = State.IDLE
 ## The lane position he's aiming at, fixed when he starts aiming.
@@ -111,8 +113,8 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 	if not is_alive():
 		return Shot.NONE
 	var ahead := at - player_d
-	if not is_active(alert) or ahead < 1.0 or ahead > tuning.trooper_aim_range:
-		# Out of range, or you've run past him: he can't shoot behind him.
+	if not is_active(alert) or ahead < 1.0 or ahead > tuning.trooper_aim_range or not sight_clear:
+		# Out of range, you've run past him (he can't shoot behind him), or a wall is in the way.
 		if state == State.AIMING:
 			_stop_aiming()
 			state = State.IDLE
@@ -149,6 +151,9 @@ func hit() -> void:
 	health -= 1
 	_body.scale = Vector3(1.15, 0.9, 1.15)
 	create_tween().tween_property(_body, "scale", Vector3.ONE, 0.12)
+	# A mist of blood bursting from the front of his chest, up and out to the sides (you're toward
+	# his -Z), so you see it.
+	Blood.mist(self, Vector3(0, 1.25, -0.25), Vector3(0, 1.0, -0.35), get_instance_id() + health)
 	if health <= 0:
 		knock_down()
 
@@ -162,6 +167,8 @@ func knock_down() -> void:
 	var tween := create_tween()
 	tween.tween_property(_body, "rotation:x", -PI / 2.0, 0.3).set_ease(Tween.EASE_IN)
 	tween.parallel().tween_property(_body, "position:y", 0.2, 0.3)
+	# Once he's down (he falls forward, toward you), blood spreads out under him and stays.
+	tween.tween_callback(func() -> void: Blood.pool(self, Vector3(0, 0.035, -0.8), 1.2, 2.2, get_instance_id()))
 
 
 func _stop_aiming() -> void:

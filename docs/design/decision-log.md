@@ -96,6 +96,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Auto-priority order: an aiming trooper (50) > a live alarm box in its window (20) > the nearest idle trooper (0).
 - **First playtest (2026-09-30, user):** the trooper is easy enough to spot, ~1 s (Alert 1) is enough time to dodge, and the FIRE button bottom right is comfortable. Keep these values for now.
 
+### PROPOSED — Blood (user direction, 2026-09-30)
+- **When a trooper is shot:** a quick mist of blood bursts out of him, away from you. It's a handful of tiny red flecks that spray out and drop, in the PS1 style: no soft particles or alpha fades; the flecks shrink away.
+- **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
+- Just for looks: no change to gameplay.
+
 ### PROPOSED — Chopper countdown (Point 9 / extraction pressure; user direction)
 - **Clock (user decision):** an old-style analog timer dial, top centre. The hand sweeps round as the chopper's window runs out, and the last stretch of the dial is red. This replaces the handover's "no big HUD timer" working direction (which was never locked). It stays small.
 - **Messages (user decision):** centred just under the clock, short and readable: CHOPPER INBOUND → LANDED → LIFTING OFF. Each shows for a few seconds when its stage starts; LIFTING OFF stays up and blinks.
@@ -118,6 +123,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Fairness rule (user decision):** no trooper may stand in a wall's lanes within 15 m behind it (`RouteGraph.WALL_TROOPER_CLEARANCE`), so running round a wall never drops you onto a hidden trooper. Enforced by route validation, so CI fails if a level breaks it.
 - **Box cover:** metal or wood crates, one lane each. You crouch behind them.
 - Both follow the LOCKED cover rule: run into it and you take cover; swipe sideways to leave; swipe early to go round it and keep your speed. Running into cover no longer kills you the way a truck did.
+- **Line of sight (user direction, 2026-09-30):** shots don't go through walls. Playtest: "the player can shoot through walls". You can shoot over small cover (boxes, barriers) and round the edge of walls, not through them.
+  - What blocks a shot: cover walls, the halfway marker's wall, its closed doors (until you burst through), and a stairwell's closed doors.
+  - **Leaning out (proposed):** in cover behind a wall, you lean round its edge to shoot, so that wall doesn't block your shots (MGS corner peek). Other walls still do.
+  - **The same rule for troopers (proposed):** a trooper with a wall between you can't aim at you. Walls being solid is already the user rule, so it should cut both ways.
+  - Checked in route space (distance along the route and position across it), like the rest of the game logic.
 - More cover throughout the level. Rooftops and the sewer (service tunnel) get fewer walls and mostly boxes.
 - **Playtest (2026-09-30, user):** plays smoothly, as expected.
 - **No forced swipe-and-jump (user rule):** when cover fills 3 or more lanes at a spot, the open lanes are the only way through. So no jump or slide obstacle may sit within 4 m of it in those lanes (`RouteGraph.CROSSING_WINDOW`). Otherwise the player would have to swipe and jump at the same moment, which the controls can't do, and the run ends. Tripwires are exempt (running through one only raises alert). Enforced by route validation.
@@ -152,7 +162,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 ### PROPOSED — Halfway markers (user decision, 2026-09-30)
 - Roughly halfway through BUILDING MAIN FLOOR and the SERVICE TUNNEL: a wall right across the area (floor to ceiling) with a double door in the middle. You burst through it like the other doors (both leaves swing open, the camera shakes). Main floor: an ordinary pair of office doors. Tunnel: barred "prison" style double gates. Not a checkpoint, just a marker. None on the rooftops.
 - The doorway spans the middle 3 lanes; the outer two are wall. If you're in an outer lane you're steered into the nearest middle lane over the last few metres, so you never hit the wall (proposed).
-- **Clear zone (proposed rule):** nothing within `RouteGraph.MARKER_CLEAR` (6 m) either side of a marker. Authored as `"marker": {"at": ...}` in `route.json`; validation enforces the clear zone, and no markers on open-sky areas.
+- **Clear zone (proposed rule):** nothing within `RouteGraph.MARKER_CLEAR_BEFORE` (6 m) before a marker. After it, nothing within `RouteGraph.MARKER_CLEAR_AFTER` (20 m, the same as a stairwell's exit). Playtest (user): things just after the doors were hit before you could see them properly. Authored as `"marker": {"at": ...}` in `route.json`; validation enforces the clear zone, and no markers on open-sky areas.
 
 ### OPEN — Missions / story stages (Point 10)
 - The full game has story stages that act as missions. Each reuses the main / up / down structure with its own layout, obstacle looks, trooper sets and chopper time. The test level is one mission.

@@ -18,6 +18,8 @@ const START_ALERT := 1
 const CEILING_Y := 4.6
 ## A halfway marker's double doorway spans this many middle lanes.
 const MARKER_LANES := 3
+## Height of a stairwell's ceiling above the stairs.
+const STAIR_HEADROOM := 2.9
 ## How far before a halfway marker the outer lanes are steered into its doorway.
 const MARKER_FUNNEL := 8.0
 
@@ -108,6 +110,9 @@ var _intro_left := 0.0
 var _doors: Array[Dictionary] = []
 ## Halfway markers built so far: {at (route distance), seg}. See _build_marker.
 var _markers: Array[Dictionary] = []
+## Solid things shots can't pass: walls, the halfway markers' walls and doors, stairwell doors.
+## {at, x0, x1, open (Callable or null), seg, owner}. See Sightlines.
+var _blockers: Array[Dictionary] = []
 ## Mood lighting: the lamps, the area's ambient and moonlight (see Ambience).
 var _ambience: Ambience
 ## Snow drifting round the camera on the night rooftops.
@@ -342,6 +347,7 @@ func _update_environment(delta: float) -> void:
 	var edges := _ambience.screen_alert()
 	_hud.set_grade(edges.x, edges.y)
 	_snow.emitting = theme.get("snow", false)
+	_snow.visible = not in_stairwell()  # it follows the camera: none inside, in front of the security camera
 	_snow.global_position = _camera.global_position - _camera.global_basis.z * 6.0 + Vector3(0, 5.0, 0)
 	if _beacon_mat:
 		_beacon_mat.albedo_color = Color("ff3020") if fmod(Time.get_ticks_msec() / 1000.0, 1.6) < 0.5 else Color("401010")
@@ -591,6 +597,8 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				var w := _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
 				w.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
 				one_piece = w
+			# Solid: shots don't go through it, only round its edge (see Sightlines).
+			_blockers.append({"at": start + at, "x0": x0, "x1": x1, "seg": seg, "owner": node})
 		var box_look: String = ob.get("look", _skin(id, "box_look", "")) if ob["kind"] == "box" else ""
 		for lane: int in lanes:
 			var x := _player.lane_x(lane)
@@ -635,6 +643,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		var s := -1.0 if String(a.get("side", "left")) == "left" else 1.0
 		node.add_child(box)
 		var ax := s * (tuning.lane_count * tuning.lane_width / 2.0 + 0.45)  # out on the kerb, in front of the pillars
+		box.x = ax
 		box.transform = _frame_at(seg, float(a["at"])) * Transform3D(Basis(Vector3.UP, -s * PI / 2.0), Vector3(ax, 1.8, 0))
 		box.destroyed.connect(_on_alarm_destroyed.bind(id))
 		# It sits on a metal control box standing on the floor, never floating (user).
@@ -701,6 +710,7 @@ func _discard(branch: Dictionary) -> void:
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
+	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	node.queue_free()
 
 
@@ -728,6 +738,7 @@ func _on_segment_needed(id: StringName, _start: float, edge: Dictionary) -> void
 func _retire(node: Node3D, gone_at: float) -> void:
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
+	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	for c in _combatants:
 		if c["owner"] == node and c["node"] is RifleTrooper:
 			c["node"].visible = false  # nobody left standing on a road you didn't take
@@ -874,12 +885,17 @@ func _build_surfaces(parent: Node3D, seg: Dictionary, road_end: float, open_l: f
 	for i in range(1, seg["legs"].size()):
 		var j: float = seg["legs"][i]["start"]
 		if j >= ramp:
+			# 3 m either side of the bend, but never back over the stairs (it would cut through
+			# the stairwell).
+			var back := minf(3.0, j - ramp)
+			var plen := back + 3.0
+			var shift := -(3.0 - back) / 2.0  # forward (-Z) by what was cut off the back
 			for k in [i - 1, i]:
-				var patch := _plane(parent, Vector2(road_w + 2.0, 6.0), Vector3.ZERO, _ground(id), Vector2(tuning.lane_count, 1.5))
-				patch.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis.IDENTITY, Vector3(0, -0.02, 0))
+				var patch := _plane(parent, Vector2(road_w + 2.0, plen), Vector3.ZERO, _ground(id), Vector2(tuning.lane_count, plen / 4.0))
+				patch.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis.IDENTITY, Vector3(0, -0.02, shift))
 				if has_ceiling:
-					var cap := _plane(parent, Vector2(road_w + 2.0, 6.0), Vector3.ZERO, _ceiling_texture(theme), Vector2(road_w / 2.0, 3.0))
-					cap.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis(Vector3.FORWARD, PI), Vector3(0, CEILING_Y + 0.02, 0))
+					var cap := _plane(parent, Vector2(road_w + 2.0, plen), Vector3.ZERO, _ceiling_texture(theme), Vector2(road_w / 2.0, plen / 2.0))
+					cap.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis(Vector3.FORWARD, PI), Vector3(0, CEILING_Y + 0.02, shift))
 	if theme.get("ceiling", false):
 		for piece in _pieces(seg, ramp, length):
 			var roof := _strip(parent, seg, piece.x, piece.y, 0.0, road_w + 2.0, CEILING_Y,
@@ -1022,12 +1038,22 @@ func _build_stairwell_parts(parent: Node3D, seg: Dictionary) -> void:
 					Vector3(0.2, top - bottom, ramp / 2.0 + 0.2), Color.WHITE).material_override = hmat
 		_item_box(parent, seg, hz, Vector3(x, top + 0.12 - hh, 0), Vector3(tuning.lane_width + 0.7, 0.24, ramp / 2.0 + 0.3), Color.WHITE) \
 				.material_override = PsxMaterials.textured(PsxTextures.concrete(), Vector2(2, 2))
-	# A dim lamp inside, over the exit door.
-	_item_box(parent, seg, ramp - 0.5, Vector3(x, 2.35, 0), Vector3(0.3, 0.08, 0.15), Color.WHITE).material_override = \
+	# Inside, it's one clean tube between the doors: walls and a ceiling that follow the stairs, in
+	# one stairwell texture, so none of the outside (the halves above, the areas' walls and floors
+	# it passes through) shows in the security-camera view.
+	var slope := _frame_at(seg, 0.1).origin.distance_to(_frame_at(seg, ramp - 0.1).origin)
+	var inner := tuning.lane_width / 2.0 + 0.03
+	var tube_mat := PsxMaterials.textured(PsxTextures.stairwell(), Vector2(3.0 * slope / 2.0, 2.0))
+	for side in [-1, 1]:
+		_slope_box(parent, seg, 0.1, ramp - 0.1, x + side * (inner + 0.02), -0.4, 0.04, STAIR_HEADROOM + 0.4).material_override = tube_mat
+	_slope_box(parent, seg, 0.1, ramp - 0.1, x, STAIR_HEADROOM, inner * 2.0 + 0.1, 0.05).material_override = \
+			PsxMaterials.textured(PsxTextures.concrete(), Vector2(3.0 * slope / 4.0, 2.0))
+	# A dim lamp on the ceiling, a little before the exit door.
+	_item_box(parent, seg, ramp - 1.6, Vector3(x, STAIR_HEADROOM - 0.05, 0), Vector3(0.3, 0.08, 0.3), Color.WHITE).material_override = \
 			PsxMaterials.glow(Color("c8b890"))
 	var lamp := Node3D.new()
 	parent.add_child(lamp)
-	lamp.transform = _frame_at(seg, ramp - 0.8) * Transform3D(Basis.IDENTITY, Vector3(x, 2.0, 0))
+	lamp.transform = _frame_at(seg, ramp - 1.6) * Transform3D(Basis.IDENTITY, Vector3(x, STAIR_HEADROOM - 0.6, 0))
 	_ambience.add_lamp(lamp, Color(1.0, 0.85, 0.6), 5.0)
 	# A green exit sign over each door, on the side you run up to it from.
 	for into in [0.02, ramp - 0.38]:
@@ -1056,6 +1082,21 @@ func _build_stairwell_parts(parent: Node3D, seg: Dictionary) -> void:
 						.material_override = mat1
 
 
+## A box sheared to follow a slope (stairs): vertical sides and ends, its bottom running from
+## `into0` to `into1` at `y` above the route there, `size_x` across and `size_y` tall.
+func _slope_box(parent: Node3D, seg: Dictionary, into0: float, into1: float, x: float, y: float,
+		size_x: float, size_y: float) -> MeshInstance3D:
+	var f0 := _frame_at(seg, into0)
+	var p0 := f0 * Vector3(x, y, 0)
+	var p1 := _frame_at(seg, into1) * Vector3(x, y, 0)
+	var m := MeshInstance3D.new()
+	m.mesh = BoxMesh.new()  # a unit box, stretched and sheared by its transform
+	parent.add_child(m)
+	var up := f0.basis.y
+	m.transform = Transform3D(Basis(f0.basis.x * size_x, up * size_y, p1 - p0), (p0 + p1) / 2.0 + up * size_y / 2.0)
+	return m
+
+
 func _stair_wall_texture(theme: Dictionary) -> Texture2D:
 	return _obstacle_texture(theme.get("stair_wall", "roof_hut"))
 
@@ -1079,7 +1120,11 @@ func _build_door(parent: Node3D, seg: Dictionary, into: float, x: float, top: fl
 	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
 	panel.material_override = PsxMaterials.textured(_obstacle_texture(theme.get("stair_door", "door")), Vector2(3, 2))
 	if not seg.get("no_doors", false):  # a locked-down branch's doors never open
-		_doors.append({"node": hinge, "at": seg["start"] + into, "owner": seg["node"], "seg": seg})
+		var door := {"node": hinge, "at": seg["start"] + into, "owner": seg["node"], "seg": seg}
+		_doors.append(door)
+		# Shut, the stairwell is sealed: no shots in or out until you burst the door.
+		_blockers.append({"at": door["at"], "x0": -INF, "x1": INF, "seg": seg, "owner": seg["node"],
+				"open": func() -> bool: return door.get("done", false)})
 
 
 ## Open-sky areas (rooftops): no side walls. The roofing runs out to a low lip at the edge, and
@@ -1745,7 +1790,14 @@ func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
 			_box(hinge, Vector3(0.05, 0.3, 0.1), Vector3(-s * (leaf_w - 0.15), 1.05, 0), Color("b8b08a"))  # push bar
 		if not seg.get("no_doors", false):
 			# Each leaf swings away from you round its own hinge: the left one way, the right the other.
-			_doors.append({"node": hinge, "at": seg["start"] + at, "owner": seg["node"], "seg": seg, "swing": -s})
+			var door := {"node": hinge, "at": seg["start"] + at, "owner": seg["node"], "seg": seg, "swing": -s}
+			_doors.append(door)
+			if s < 0:  # the doorway is solid until the doors are burst open (they go together)
+				_blockers.append({"at": door["at"], "x0": -ow / 2.0, "x1": ow / 2.0, "seg": seg, "owner": seg["node"],
+						"open": func() -> bool: return door.get("done", false)})
+	# The wall either side of the doorway is always solid.
+	_blockers.append({"at": seg["start"] + at, "x0": -INF, "x1": -ow / 2.0, "seg": seg, "owner": seg["node"]})
+	_blockers.append({"at": seg["start"] + at, "x0": ow / 2.0, "x1": INF, "seg": seg, "owner": seg["node"]})
 	# Over the doorway: a red emergency lamp at the tunnel gates, a green exit sign at office doors.
 	var sign_col := Color("ff3a28") if barred else Color("40d070")
 	var sign := _item_box(parent, seg, at - 0.2, Vector3(0, dh + 0.3, 0), Vector3(0.7 if not barred else 0.3, 0.18 if not barred else 0.25, 0.06), Color.WHITE)
@@ -1806,6 +1858,44 @@ func _build_ladder(parent: Node3D, seg: Dictionary, side: String) -> void:
 	for i in 8:
 		var t := (i + 0.5) / 8.0
 		_item_box(parent, seg, ramp * t, Vector3(x, 0.9, 0), Vector3(0.9, 0.06, 0.06), metal)
+	if seg["dy"] > 0.0:
+		_build_ladder_shaft(parent, seg, x)
+
+
+## Climbing out (a ladder up from the tunnel): a shaft round the ladder, closed off from the rest
+## of the tunnel's end, and the ground above floored over round the hatch, so going up you never
+## see through to the sky or the void, only up the shaft.
+func _build_ladder_shaft(parent: Node3D, seg: Dictionary, x: float) -> void:
+	var ramp: float = seg["ramp_len"]
+	var dy: float = seg["dy"]
+	var w := tuning.lane_width
+	var edge := tuning.lane_count * w / 2.0 + 1.0
+	var below := _theme(seg.get("from_id", seg["id"]))
+	var mid := ramp / 2.0
+	var shaft := PsxMaterials.textured(_wall_texture(below), Vector2(3.0 * (ramp + 0.4) / 2.0, 2.0 * dy / 2.0))
+	for side in [-1, 1]:
+		_item_box(parent, seg, mid, Vector3(x + side * (w / 2.0 + 0.12), dy / 2.0 - _height(seg, mid), 0),
+				Vector3(0.2, dy, ramp + 0.4), Color.WHITE).material_override = shaft
+	# The tunnel's end beside the shaft, out to its side wall.
+	var out := signf(x)
+	var from := absf(x) + w / 2.0 + 0.2
+	if edge + 0.2 - from > 0.05:
+		_item_box(parent, seg, 0.0, Vector3(out * (from + edge + 0.2) / 2.0, CEILING_Y / 2.0, 0), Vector3(edge + 0.2 - from, CEILING_Y, 0.3),
+				Color.WHITE).material_override = PsxMaterials.textured(_wall_texture(below), Vector2(1, 2))
+	# The ground round the hatch: the middle lanes and this side's edge. (The other ladder's lane
+	# stays open: it's floored by its own branch, which leaves its own hatch open.)
+	var ground := PsxMaterials.textured(_ground(seg["id"]), Vector2(3.0, 2.0))
+	var inner := (tuning.lane_count - 2) * w / 2.0
+	var hatch_lo := absf(x) - w / 2.0
+	var outer_from := absf(x) + w / 2.0
+	var y := dy - 0.03 - _height(seg, mid)
+	_item_box(parent, seg, mid, Vector3(0, y, 0), Vector3(inner * 2.0, 0.06, ramp + 0.1), Color.WHITE).material_override = ground
+	_item_box(parent, seg, mid, Vector3(out * (outer_from + edge + 0.2) / 2.0, y, 0), Vector3(edge + 0.2 - outer_from, 0.06, ramp + 0.1),
+			Color.WHITE).material_override = ground
+	# Hazard edging round the hatch.
+	var hz := PsxMaterials.textured(PsxTextures.hazard(), Vector2(3.0, 2.0))
+	for e in [hatch_lo, absf(x) + w / 2.0]:
+		_item_box(parent, seg, mid, Vector3(out * e, dy + 0.01 - _height(seg, mid), 0), Vector3(0.12, 0.04, ramp + 0.1), Color.WHITE).material_override = hz
 
 
 ## The first few metres of a branch closed by alert, behind a lockdown shutter.
@@ -2172,6 +2262,7 @@ func _update_combat(delta: float) -> void:
 	var d := _player.distance_run()
 	var alert := GameState.alert_level
 	var half_hit := tuning.lane_width * 0.5 + 0.15
+	var live := _live_blockers()
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
 		if not is_instance_valid(n):
@@ -2187,6 +2278,7 @@ func _update_combat(delta: float) -> void:
 			n.update(delta, tuning, d)
 			continue
 		var t: RifleTrooper = n
+		t.sight_clear = not Sightlines.blocked(t.at, t.x, d, _player.track_x, live)
 		var shot := t.update(delta, tuning, alert, d, _player.track_x, _player.in_cover,
 				_player.global_position, _route_point)
 		if shot == RifleTrooper.Shot.MISSED:
@@ -2234,15 +2326,26 @@ func _route_point(d: float, x: float, y: float) -> Vector3:
 func fire_target() -> Node3D:
 	var alert := GameState.alert_level
 	var candidates: Array[Node3D] = []
+	# Only what you can see: over boxes and barriers, round walls' edges, never through them. In
+	# cover behind a wall you lean out round it, so that wall doesn't block your shots.
+	var d := _player.distance_run()
+	var live := _live_blockers()
+	var lean = Sightlines.cover_wall(d, _player.track_x, live) if _player.in_cover else null
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
-		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert):
+		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert) \
+				and not Sightlines.blocked(d, _player.track_x, n.at, n.x, live, lean):
 			candidates.append(n)
 	var origin := _player.global_position + Vector3(0, 1.2, 0)
 	var forward := -_player.global_transform.basis.z
 	if _tapped != null and (not is_instance_valid(_tapped) or not _tapped.call("is_targetable", alert)):
 		_tapped = null
 	return Targeting.pick(candidates, origin, forward, tuning, _tapped)
+
+
+## The blockers on the path you're on (a branch ahead isn't in play until you're on it).
+func _live_blockers() -> Array:
+	return _blockers.filter(func(b: Dictionary) -> bool: return b["seg"].get("promoted", false))
 
 
 func set_fire_held(held: bool) -> void:
@@ -2395,12 +2498,19 @@ func _update_camera(delta: float) -> void:
 	# the flight at the player. Hard cut back to the normal camera when you're out.
 	if in_stairwell():
 		var ramp: float = seg["ramp_len"]
-		var cam_at := ramp - 0.7
+		# Up in the corner just inside the exit door, under the ceiling, looking back down the stairs.
+		var cam_at := ramp - 0.4
 		var lane_x := _player.lane_x(_stair_lane(seg))
 		var cf: Transform3D = seg["node"].global_transform * _frame_at(seg, cam_at)
-		var cam_pos := cf * Vector3(lane_x + 0.45, 2.1, 0)
-		_camera.global_transform = Transform3D(Basis.IDENTITY, cam_pos).looking_at(
-				_player.global_position + Vector3(0, 1.0, 0), Vector3.UP)
+		var cam_pos := cf * Vector3(lane_x + 0.5, STAIR_HEADROOM - 0.3, 0)
+		# As you pass under it, it stops tilting down (it never looks straight down): it keeps
+		# looking at least a couple of metres back down the stairs.
+		var target := _player.global_position + Vector3(0, 1.0, 0)
+		var back := cf * Vector3(lane_x, 0, 2.2)
+		var flat := Vector2(target.x - cam_pos.x, target.z - cam_pos.z)
+		if flat.length() < 2.2:
+			target = Vector3(back.x, target.y, back.z)
+		_camera.global_transform = Transform3D(Basis.IDENTITY, cam_pos).looking_at(target, Vector3.UP)
 		_cam_base = _camera.global_transform
 		_was_cctv = true
 		return
