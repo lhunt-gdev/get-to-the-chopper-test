@@ -7,17 +7,22 @@
       "id": "compound_exit",
       "theme": "compound",
       "tier": "ground",
-      "length": 82,
-      "bends": [{"at": 6, "side": "right"}],
+      "length": 150,
+      "bends": [{"at": 6, "side": "right"}, {"at": 76, "side": "left"}],
       "obstacles": [
         {"kind": "cover", "lanes": [1], "at": 22},
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 30},
         {"kind": "truck", "lanes": [3, 4], "at": 38},
         {"kind": "pipe", "lanes": [1, 2, 3], "at": 50},
-        {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 58}
+        {"kind": "truck", "lanes": [0, 1], "at": 64},
+        {"kind": "barrier", "lanes": [2, 3, 4], "at": 72},
+        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 96},
+        {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 108}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 2, "at": 44}
+        {"kind": "rifle_trooper", "lane": 2, "at": 44},
+        {"kind": "rifle_trooper", "lane": 0, "at": 86, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 4, "at": 80, "min_alert": 3}
       ],
       "next": [
         {"to": "motor_pool", "label": "MOTOR POOL"},
@@ -28,17 +33,22 @@
       "id": "motor_pool",
       "theme": "motor_pool",
       "tier": "ground",
-      "length": 70,
-      "bends": [{"at": 44, "side": "left"}],
+      "length": 130,
+      "bends": [{"at": 44, "side": "left"}, {"at": 112, "side": "right"}],
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1], "at": 14},
         {"kind": "truck", "lanes": [3, 4], "at": 22},
         {"kind": "barrier", "lanes": [2], "at": 22},
         {"kind": "truck", "lanes": [1, 2, 3], "at": 36},
-        {"kind": "pipe", "lanes": [0, 4], "at": 36}
+        {"kind": "pipe", "lanes": [0, 4], "at": 36},
+        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 76},
+        {"kind": "truck", "lanes": [2, 3, 4], "at": 88},
+        {"kind": "pipe", "lanes": [0, 1], "at": 108}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 1, "at": 62}
+        {"kind": "rifle_trooper", "lane": 1, "at": 62},
+        {"kind": "rifle_trooper", "lane": 3, "at": 100, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 0, "at": 82, "min_alert": 3}
       ],
       "next": [
         {"to": "airfield_gate", "label": "GATE"}
@@ -48,13 +58,17 @@
       "id": "rooftops",
       "theme": "rooftops",
       "tier": "roof",
-      "length": 60,
+      "length": 110,
       "obstacles": [
         {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 18},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30}
+        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30},
+        {"kind": "cover", "lanes": [2], "at": 54},
+        {"kind": "barrier", "lanes": [0, 1, 3, 4], "at": 70}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 3, "at": 48, "min_alert": 2}
+        {"kind": "rifle_trooper", "lane": 3, "at": 48, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 1, "at": 64},
+        {"kind": "rifle_trooper", "lane": 4, "at": 90, "min_alert": 3}
       ],
       "alarms": [
         {"side": "left", "at": 40}
@@ -68,9 +82,15 @@
       "id": "roof_edge",
       "theme": "rooftops",
       "tier": "roof",
-      "length": 45,
+      "length": 80,
       "obstacles": [
-        {"kind": "barrier", "lanes": [1, 2, 3], "at": 14}
+        {"kind": "barrier", "lanes": [1, 2, 3], "at": 14},
+        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30}
+      ],
+      "enemies": [
+        {"kind": "rifle_trooper", "lane": 2, "at": 44},
+        {"kind": "rifle_trooper", "lane": 1, "at": 60, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 4, "at": 22, "min_alert": 3}
       ],
       "next": [
         {"to": "helipad", "label": "LADDER", "side": "left", "via": "ladder"},
@@ -81,12 +101,15 @@
       "id": "service_tunnel",
       "theme": "tunnel",
       "tier": "underground",
-      "length": 60,
+      "length": 100,
       "obstacles": [
-        {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 34}
+        {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 34},
+        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 58}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 3, "at": 47}
+        {"kind": "rifle_trooper", "lane": 3, "at": 47},
+        {"kind": "rifle_trooper", "lane": 1, "at": 74, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 4, "at": 62, "min_alert": 3}
       ],
       "next": [
         {"to": "helipad", "label": "LADDER", "side": "left", "via": "ladder"},
@@ -97,14 +120,19 @@
       "id": "airfield_gate",
       "theme": "gate",
       "tier": "ground",
-      "length": 60,
+      "length": 110,
       "obstacles": [
         {"kind": "truck", "lanes": [0, 1, 2], "at": 15},
         {"kind": "truck", "lanes": [2, 3, 4], "at": 30},
-        {"kind": "barrier", "lanes": [0, 1], "at": 30}
+        {"kind": "barrier", "lanes": [0, 1], "at": 30},
+        {"kind": "cover", "lanes": [3], "at": 58},
+        {"kind": "pipe", "lanes": [1, 2, 3], "at": 84},
+        {"kind": "barrier", "lanes": [0, 4], "at": 84}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 2, "at": 48}
+        {"kind": "rifle_trooper", "lane": 2, "at": 48},
+        {"kind": "rifle_trooper", "lane": 1, "at": 72, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 3, "at": 95, "min_alert": 3}
       ],
       "next": [
         {"to": "helipad", "label": "HELIPAD"}

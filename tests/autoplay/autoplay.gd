@@ -15,6 +15,7 @@ extends Node
 ##                 before the split: straight on must still be open, so MOTOR POOL
 ##   cover       - runs into the cover block, holds fire until it's safe to shoot from cover,
 ##                 kills the trooper from there, breaks cover and goes on untouched
+##   camper      - takes cover and never leaves it: the chopper should leave without us
 ##   roof_alarm  - trips the wire (alert 2, TUNNEL locked down), shoots the alarm box on the
 ##                 rooftops (back to alert 1, the door lifts) and takes the TUNNEL after all
 
@@ -53,7 +54,7 @@ func _ready() -> void:
 	_player = _level.get_node("Player")
 	GameState.run_ended.connect(_on_end)
 	_level.start_run()
-	get_tree().create_timer(60.0).timeout.connect(func() -> void: _report("timeout"))
+	get_tree().create_timer(150.0).timeout.connect(func() -> void: _report("timeout"))
 
 
 func _physics_process(_delta: float) -> void:
@@ -68,7 +69,7 @@ func _physics_process(_delta: float) -> void:
 		_took_cover = true
 		_cover_frames += 1
 		# Break cover once nobody ahead is alive to shoot at us.
-		if not _trooper_ahead(d):
+		if scenario != "camper" and not _trooper_ahead(d):
 			_player.handle_swipe(Vector2i.RIGHT if _player.lane < lane_count / 2 else Vector2i.LEFT)
 		return
 
@@ -89,7 +90,7 @@ func _physics_process(_delta: float) -> void:
 			var score := -absf(lane - _player.lane) * 0.5
 			if _blocked_ahead(obstacles, lane, d):
 				score -= 100.0
-			if scenario == "cover" and d < COVER_AT and not _took_cover:
+			if scenario in ["cover", "camper"] and d < COVER_AT and not _took_cover:
 				score -= absf(lane - 1) * 200.0  # head for the cover block's lane
 			if not _level._runner._shown_labels.is_empty() or _junction_soon():
 				var lean := int(_prefer.get(_level._runner.current, 0))
@@ -127,7 +128,7 @@ func _shoot() -> void:
 	var want := target != null
 	if target is AlarmBox and scenario != "roof_alarm":
 		want = false
-	if scenario == "cover" and not _player.in_cover and _level._runner.current == &"compound_exit":
+	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
 		want = false  # prove the cover works: only shoot once we're behind it...
 	if scenario == "cover" and _player.in_cover and _cover_frames < 90:
 		want = false  # ...and only after he's had a shot at us (1.5 s)
@@ -145,7 +146,7 @@ func _trooper_ahead(d: float) -> bool:
 func _blocked_ahead(obstacles: Array, lane: int, d: float) -> bool:
 	var x := _player.lane_x(lane)
 	for o: Dictionary in obstacles:
-		var blocks: bool = o["pass"] == "dodge" or (o["pass"] == "cover" and scenario != "cover")
+		var blocks: bool = o["pass"] == "dodge" or (o["pass"] == "cover" and not scenario in ["cover", "camper"])
 		if blocks and absf(o["x"] - x) < 0.1 and o["at"] + o["depth"] > d - 0.5 and o["at"] - d < LOOK_AHEAD:
 			return true
 	return false
@@ -167,6 +168,6 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d" % [scenario, reason,
-			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit")])
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d time=%.1f" % [scenario, reason,
+			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _level._clock.elapsed])
 	get_tree().quit()

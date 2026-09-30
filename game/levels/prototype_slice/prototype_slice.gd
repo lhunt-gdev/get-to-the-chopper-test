@@ -61,6 +61,7 @@ var _fire_cooldown := 0.0
 ## HYBRID / TAP_TO_TARGET: the enemy the player last tapped.
 var _tapped: Node3D = null
 var _shot_tracer: MeshInstance3D
+var _clock: ExtractionClock
 
 @onready var _player: Player = $Player
 @onready var _camera: Camera3D = $Camera3D
@@ -81,6 +82,11 @@ func _ready() -> void:
 	_input.fire_pressed.connect(_on_fire)
 	_input.fire_released.connect(set_fire_held.bind(false))
 	_hud.setup(tuning)
+	_clock = ExtractionClock.new()
+	_clock.name = "ExtractionClock"
+	_clock.tuning = tuning
+	add_child(_clock)
+	_clock.stage_changed.connect(_on_chopper_stage)
 	_shot_tracer = _box(self, Vector3(0.05, 0.05, 1.0), Vector3.ZERO, Color("fff0b0"))
 	_shot_tracer.top_level = true
 	_shot_tracer.visible = false
@@ -110,6 +116,7 @@ func start_run() -> void:
 	_hud.hide_title()
 	GameState.start_run(START_ALERT)
 	_runner.begin(_graph, false)
+	_clock.start()
 
 
 func _physics_process(delta: float) -> void:
@@ -120,6 +127,26 @@ func _physics_process(delta: float) -> void:
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
+	_hud.show_clock(_clock.fraction())
+
+
+## The chopper's stages: a message under the clock, the helicopter lifting, and THE CHOPPER LEFT.
+func _on_chopper_stage(stage: ExtractionClock.Stage) -> void:
+	RunLog.record_event("chopper", {"stage": ExtractionClock.MESSAGES[stage]})
+	match stage:
+		ExtractionClock.Stage.INBOUND:
+			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("f0e8c8"), tuning.chopper_message_time, false)
+		ExtractionClock.Stage.LANDED:
+			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("9fd36b"), tuning.chopper_message_time, false)
+		ExtractionClock.Stage.LIFTING_OFF:
+			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("ff4b3a"), 0.0, true)
+			for c in get_tree().get_nodes_in_group("chopper"):
+				c.create_tween().tween_property(c, "position:y", c.position.y + 2.5,
+						tuning.chopper_gone_at - tuning.chopper_lifts_at)
+		ExtractionClock.Stage.GONE:
+			for c in get_tree().get_nodes_in_group("chopper"):
+				c.visible = false
+			_end(GameState.END_CHOPPER_LEFT)
 
 
 # --- Route frames -------------------------------------------------------------------
@@ -805,6 +832,12 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 	chopper.name = "Chopper"
 	parent.add_child(chopper)
 	chopper.transform = xf
+	chopper.add_to_group("chopper")
+	# Built late (with the helipad), so catch up if it's already lifting off.
+	if _clock and _clock.stage == ExtractionClock.Stage.LIFTING_OFF:
+		var t := (_clock.elapsed - tuning.chopper_lifts_at) / (tuning.chopper_gone_at - tuning.chopper_lifts_at)
+		chopper.position.y += 2.5 * t
+		chopper.create_tween().tween_property(chopper, "position:y", xf.origin.y + 2.5, tuning.chopper_gone_at - _clock.elapsed)
 	_box(chopper, Vector3(2.2, 1.6, 4.5), Vector3(0, 1.2, 0), Color("2f3b2a"))
 	_box(chopper, Vector3(0.5, 0.5, 4.0), Vector3(0, 1.6, 4.0), Color("2f3b2a"))
 	var rotor := _box(chopper, Vector3(9.0, 0.08, 0.35), Vector3(0, 2.2, 0), Color("111111"))
@@ -1038,6 +1071,7 @@ func _on_junction_cleared() -> void:
 
 func _on_run_ended(reason: StringName) -> void:
 	Engine.time_scale = 1.0
+	_clock.stop()
 	_fire_held = false
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)

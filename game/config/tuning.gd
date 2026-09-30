@@ -57,6 +57,15 @@ enum TargetingMode {
 ## How long a lockdown door takes to slam shut.
 @export var lockdown_close_time: float = 0.7
 
+@export_group("Chopper countdown")
+## Seconds from the start of the run. INBOUND until it lands, LANDED until it starts lifting off,
+## LIFTING OFF until it's gone. Reaching the helipad any time before it's gone extracts you.
+@export var chopper_lands_at: float = 15.0
+@export var chopper_lifts_at: float = 48.0
+@export var chopper_gone_at: float = 58.0
+## How long a stage's message stays under the clock (LIFTING OFF stays until the end).
+@export var chopper_message_time: float = 3.0
+
 @export_group("Capture")
 ## Missing the exit at a no-way-on end stops the player this far from the end.
 @export var capture_stop_distance: float = 2.0

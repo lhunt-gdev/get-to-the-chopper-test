@@ -24,6 +24,53 @@ var _flash: ColorRect
 var _fire: FireButton
 
 
+var _clock: ClockDial
+var _chopper_msg: Label
+var _msg_left: float = 0.0
+var _msg_blink: bool = false
+
+
+## An old-style analog timer, top centre. The hand sweeps clockwise from 12 as the chopper's
+## window runs out; the red wedge is LIFTING OFF.
+class ClockDial extends Control:
+	const R := 15.0
+	var tuning: Tuning
+	var fraction := 0.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		if tuning == null:
+			return
+		var c := Vector2(get_viewport_rect().size.x / 2.0, 4.0 + R)
+		draw_circle(c, R + 2.0, Color("1c1c1a"))
+		draw_circle(c, R, Color("d8d0b0"))
+		# LIFTING OFF: the last stretch of the dial.
+		var lift := tuning.chopper_lifts_at / tuning.chopper_gone_at
+		_wedge(c, R - 1.0, lift, 1.0, Color("c8402e"))
+		# Spent time greys out, so the dial also reads as "how much is left".
+		_wedge(c, R - 5.0, 0.0, fraction, Color(0.25, 0.24, 0.2, 0.55))
+		for i in 12:
+			var a := TAU * i / 12.0 - PI / 2.0
+			var d := Vector2(cos(a), sin(a))
+			draw_line(c + d * (R - (4.0 if i % 3 == 0 else 2.5)), c + d * (R - 0.5), Color("2a2a26"), 1.0)
+		var ha := TAU * fraction - PI / 2.0
+		draw_line(c, c + Vector2(cos(ha), sin(ha)) * (R - 2.0), Color("1c1c1a"), 2.0)
+		draw_circle(c, 2.0, Color("c8402e"))
+
+	func _wedge(c: Vector2, r: float, from: float, to: float, color: Color) -> void:
+		if to <= from:
+			return
+		var pts := PackedVector2Array([c])
+		var steps := maxi(2, int((to - from) * 32.0))
+		for i in steps + 1:
+			var a := TAU * lerpf(from, to, float(i) / steps) - PI / 2.0
+			pts.append(c + Vector2(cos(a), sin(a)) * r)
+		draw_colored_polygon(pts, color)
+
+
 ## The one FIRE control (LOCKED Controls v1): a chunky circle, bottom right. SwipeInput decides
 ## what counts as touching it; this just draws it in the same place.
 class FireButton extends Control:
@@ -100,12 +147,40 @@ func setup(tuning: Tuning) -> void:
 	_fire = FireButton.new()
 	_fire.tuning = tuning
 	add_child(_fire)
+	_clock = ClockDial.new()
+	_clock.tuning = tuning
+	add_child(_clock)
+	_chopper_msg = _label(Vector2(0, 40), HORIZONTAL_ALIGNMENT_CENTER)
 	show_hp(tuning.player_hits, tuning.player_hits)
 
 
 func show_hp(left: int, total: int) -> void:
 	_hp.text = "HP " + "#".repeat(left) + "-".repeat(maxi(0, total - left))
 	_hp.modulate = Color("f0e8c8") if left > 1 else Color("ff4b3a")
+
+
+func show_clock(fraction: float) -> void:
+	if _clock and absf(_clock.fraction - fraction) > 0.001:
+		_clock.fraction = fraction
+		_clock.queue_redraw()
+
+
+## A chopper message under the clock. Persistent ones blink until cleared; others fade after a while.
+func show_chopper_message(text: String, color: Color, seconds: float, persistent: bool) -> void:
+	_chopper_msg.text = text
+	_chopper_msg.modulate = color
+	_msg_left = INF if persistent else seconds
+	_msg_blink = persistent
+
+
+func _process(delta: float) -> void:
+	if _chopper_msg == null or _chopper_msg.text == "":
+		return
+	_msg_left -= delta
+	if _msg_left <= 0.0:
+		_chopper_msg.text = ""
+	elif _msg_blink:
+		_chopper_msg.visible = fmod(Time.get_ticks_msec() / 1000.0, 0.6) < 0.4
 
 
 func show_hit() -> void:
@@ -147,6 +222,8 @@ func clear_junction() -> void:
 
 func show_end(reason: StringName, route_summary: String) -> void:
 	clear_junction()
+	if _chopper_msg:
+		_chopper_msg.text = ""
 	_end.text = "%s\n\nROUTE\n%s\n\nTAP TO RETRY" % [END_TEXT.get(reason, String(reason).to_upper()), route_summary]
 
 

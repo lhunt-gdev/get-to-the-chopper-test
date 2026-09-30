@@ -24,4 +24,5 @@ expect miss_ladder "reason=captured alert=2 route=COMPOUND EXIT > ROOFTOPS > ROO
 expect late_switch "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD"
 expect cover       "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=1 hits=0 missed=1"
 expect roof_alarm  "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > SERVICE TUNNEL > HELIPAD | covers=0 hits=0 missed=0 alarms=1"
+expect camper      "reason=chopper_left alert=1 route=COMPOUND EXIT | covers=1"
 exit $fail

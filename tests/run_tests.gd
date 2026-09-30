@@ -18,6 +18,8 @@ func _run() -> void:
 	_test_pick_edge()
 	_test_route_rules()
 	_test_trooper_rules()
+	_test_chopper_stages()
+	_test_trooper_tiers()
 	_test_swipe_direction()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
@@ -63,6 +65,28 @@ func _test_pick_edge() -> void:
 	var only_straight: Array[Dictionary] = [straight]
 	_check(not RouteGraph.is_choice(only_straight), "a single straight road is not a choice")
 	_check(RouteGraph.is_choice(ladders), "ladders are a choice")
+
+
+## Every route has a trooper set per alert level, with fewer at Alert 1 than at 2, and at 2 than at 3.
+func _test_trooper_tiers() -> void:
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	for id in ["compound_exit", "motor_pool", "rooftops", "roof_edge", "service_tunnel", "airfield_gate"]:
+		var counts := [0, 0, 0]
+		for e in g.node_data(StringName(id)).get("enemies", []):
+			for alert in [1, 2, 3]:
+				if alert >= int(e.get("min_alert", 1)) and alert <= int(e.get("max_alert", 3)):
+					counts[alert - 1] += 1
+		_check(counts[0] >= 1 and counts[0] < counts[1] and counts[1] < counts[2],
+				"%s: more troopers at each alert level (%s)" % [id, counts])
+
+
+func _test_chopper_stages() -> void:
+	var t := Tuning.new()
+	_check(ExtractionClock.stage_at(0.0, t) == ExtractionClock.Stage.INBOUND, "chopper inbound at the start")
+	_check(ExtractionClock.stage_at(t.chopper_lands_at, t) == ExtractionClock.Stage.LANDED, "chopper landed on time")
+	_check(ExtractionClock.stage_at(t.chopper_lifts_at + 0.1, t) == ExtractionClock.Stage.LIFTING_OFF, "chopper lifting off")
+	_check(ExtractionClock.stage_at(t.chopper_gone_at, t) == ExtractionClock.Stage.GONE, "chopper gone at the end")
+	_check(t.chopper_lands_at < t.chopper_lifts_at and t.chopper_lifts_at < t.chopper_gone_at, "chopper stages in order")
 
 
 func _test_trooper_rules() -> void:

@@ -71,6 +71,21 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Placeholder — damage (Point 4 is OPEN):** 3 hits and you're KILLED IN ACTION, with a short invulnerability after each hit. No recovery yet. HUD shows HP.
 - **Placeholder — weapon (Point 5 is OPEN):** one rifle, unlimited ammo, `fire_interval` between shots; troopers take `trooper_health` hits.
 - Auto-priority order: an aiming trooper (50) > a live alarm box in its window (20) > the nearest idle trooper (0).
+- **First playtest (2026-09-30, user):** the trooper is easy enough to spot, ~1 s (Alert 1) is enough time to dodge, and the FIRE button bottom right is comfortable. Keep these values for now.
+
+### PROPOSED — Chopper countdown (Point 9 / extraction pressure; user direction)
+- **Clock (user decision):** an old-style analog timer dial, top centre. The hand sweeps round as the chopper's window runs out, and the last stretch of the dial is red. This replaces the handover's "no big HUD timer" working direction (which was never locked). It stays small.
+- **Messages (user decision):** centred just under the clock, short and readable: CHOPPER INBOUND → LANDED → LIFTING OFF. Each shows for a few seconds when its stage starts; LIFTING OFF stays up and blinks.
+- **Rules:** the stages run on game time from the start of the run (`chopper_*` in `Tuning`). You can extract any time before the chopper is gone; arriving during LIFTING OFF still counts. When it's gone, the run ends THE CHOPPER LEFT, wherever you are. The helicopter on the helipad starts lifting during LIFTING OFF.
+- Numbers are sized to the lengthened test level: lands 15 s, lifts off 48 s, gone 58 s. A clean bot run takes 34–40 s, so a clean run arrives with ~10 s before lift-off. Stopping in cover, taking hits or a long route costs something real.
+
+### PROPOSED — Longer test level, more troopers (user direction)
+- User felt the level was a little short. Every route is roughly doubled, with more obstacles and more cover blocks. Still one test level; the aim is to feel out length.
+- **Troopers are tiered by alert on every route (user decision):** each route has a set for each alert level, with fewer at Alert 1 than at 2 or 3. In the test level each segment has 1 trooper at Alert 1, 2 at Alert 2 and 3 at Alert 3 (`min_alert` in `route.json`). They appear or disappear live as alert goes up or down, so raising or lowering alert changes the pressure on whatever route you're on.
+- Note: the test level has only one tripwire, so Alert 3 can't be reached yet. The Alert 3 troopers are authored, ready for a second alert trigger.
+
+### OPEN — FIRE button position setting (later)
+- User wants a player setting to put FIRE on the left, the right or in the middle. Build it when there's a settings screen. The button's position is already one function (`SwipeInput.fire_button`), so it's a small change.
 
 ### OPEN — Who captures the player?
 - Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).
