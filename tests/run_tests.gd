@@ -171,6 +171,19 @@ func _test_route_rules() -> void:
 	_check("box at 20.0 m overlaps barrier at 20.8 m" in problems, "objects in the same lane can't overlap")
 	_check(not "pipe at 20.5" in problems, "objects in different lanes can sit side by side")
 	_check(not "trooper at 40.2" in problems, "troopers in different lanes can stand side by side")
+	var wired := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "theme": "office", "length": 90, "end": "extract", "obstacles": [
+			{"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 10},
+			{"kind": "pipe", "lanes": [0, 1], "at": 25},
+			{"kind": "pipe", "lanes": [1, 2, 3], "at": 40},
+			{"kind": "pipe", "lanes": [0, 1, 2, 3], "at": 55},
+			{"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 70, "look": "pipe"}]},
+	]})
+	problems = " ".join(wired.validate())
+	_check("live wires at 10 m must span 3 or 4" in problems, "live wires can't cross all 5 lanes")
+	_check("live wires at 25 m must span 3 or 4" in problems, "live wires need at least 3 lanes")
+	_check(not "at 40 m" in problems and not "at 55 m" in problems, "live wires across 3 or 4 lanes are fine")
+	_check(not "at 70 m" in problems, "an ordinary pipe can still cross all 5 lanes")
 
 
 func _test_swipe_direction() -> void:

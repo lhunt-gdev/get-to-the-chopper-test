@@ -18,7 +18,7 @@
         {"kind": "wall", "lanes": [0, 1], "at": 64},
         {"kind": "barrier", "lanes": [2, 3, 4], "at": 72},
         {"kind": "box", "lanes": [1], "at": 90},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 96},
+        {"kind": "pipe", "lanes": [0, 1, 2, 3], "at": 96},
         {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 108}
       ],
       "enemies": [
@@ -52,7 +52,7 @@
         {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 76},
         {"kind": "wall", "lanes": [3, 4], "at": 88},
         {"kind": "box", "lanes": [2], "at": 88, "look": "crate"},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 98},
+        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 98},
         {"kind": "pipe", "lanes": [0, 1], "at": 108, "look": "pipe"},
         {"kind": "box", "lanes": [4], "at": 120, "material": "metal"}
       ],

@@ -31,6 +31,10 @@ const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall
 const MIN_GAP := 1.0
 ## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
 const LOOKS := {"pipe": ["pipe", "wires"], "box": ["crate", "desk", "cabinet"], "barrier": ["cabinet", "blockade"]}
+## Themes whose slide obstacles are live wires (unless "look" says otherwise).
+const WIRE_THEMES := ["office"]
+## Live wires span only this many neighbouring lanes (user rule: never all 5).
+const WIRE_LANES := [3, 4]
 const VIAS := ["corridor", "stairs", "ladder"]
 ## Height tiers, in tier steps (Tuning.tier_height metres each).
 const TIERS := {"roof": 1, "ground": 0, "underground": -1}
@@ -200,6 +204,13 @@ func validate() -> PackedStringArray:
 		for ob in n.get("obstacles", []):
 			var kind := String(ob.get("kind", ""))
 			var lanes: Array = ob.get("lanes", [])
+			var wires := kind == "pipe" and String(ob.get("look", "wires" if n.get("theme", "") in WIRE_THEMES else "pipe")) == "wires"
+			if wires:
+				var span := lanes.duplicate()
+				span.sort()
+				var contiguous := not span.is_empty() and int(span[-1]) - int(span[0]) == span.size() - 1
+				if not contiguous or not span.size() in WIRE_LANES:
+					problems.append("node '%s': live wires at %s m must span 3 or 4 neighbouring lanes" % [id, ob.get("at")])
 			if ob.has("look") and not String(ob["look"]) in LOOKS.get(kind, []):
 				problems.append("node '%s': %s at %s m can't look like '%s'" % [id, kind, ob.get("at"), ob["look"]])
 			if not kind in OBSTACLE_KINDS:
