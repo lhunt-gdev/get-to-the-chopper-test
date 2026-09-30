@@ -16,6 +16,8 @@ var jump_y: float = 0.0
 var halted: bool = false
 ## In cover: stopped, crouched, safe from shots ahead. Swipe left/right to leave.
 var in_cover: bool = false
+## Behind a box you crouch; behind a wall you stand.
+var cover_crouch: bool = false
 ## Placeholder damage model (Point 4 OPEN): this many hits and you're down.
 var hits_left: int = 3
 var _invulnerable: float = 0.0
@@ -71,7 +73,7 @@ func _physics_process(delta: float) -> void:
 
 	if _slide_left > 0.0:
 		_slide_left -= delta
-	var target_scale := 0.45 if is_sliding() else (0.65 if in_cover else 1.0)
+	var target_scale := 0.45 if is_sliding() else (0.65 if in_cover and cover_crouch else 1.0)
 	_body.scale.y = move_toward(_body.scale.y, target_scale, delta * 10.0)
 	_update_visuals()
 
@@ -101,9 +103,10 @@ func handle_swipe(dir: Vector2i) -> void:
 				_y_velocity = minf(_y_velocity, -tuning.jump_velocity)  # fast-fall into the slide
 
 
-## Ran into cover: stop just in front of it and crouch.
-func enter_cover(stop_at: float) -> void:
+## Ran into cover: stop just in front of it, and crouch if it's low (a box).
+func enter_cover(stop_at: float, crouch: bool) -> void:
 	in_cover = true
+	cover_crouch = crouch
 	distance = minf(distance, stop_at)
 	jump_y = 0.0
 	_y_velocity = 0.0

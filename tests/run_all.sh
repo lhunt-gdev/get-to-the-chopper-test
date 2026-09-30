@@ -25,4 +25,6 @@ expect late_switch "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > 
 expect cover       "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=1 hits=0 missed=1"
 expect roof_alarm  "reason=extracted alert=1 route=COMPOUND EXIT > ROOFTOPS > SERVICE TUNNEL > HELIPAD | covers=0 hits=0 missed=0 alarms=1"
 expect camper      "reason=chopper_left alert=1 route=COMPOUND EXIT | covers=1"
+expect ground_loud "reason=extracted alert=3 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=0"
+expect ground_alarms "reason=extracted alert=1 route=COMPOUND EXIT > MOTOR POOL > AIRFIELD GATE > HELIPAD | covers=0 hits=0 missed=0 alarms=2"
 exit $fail

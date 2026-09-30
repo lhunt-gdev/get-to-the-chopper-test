@@ -119,6 +119,28 @@ func _test_route_rules() -> void:
 	problems = " ".join(no_straight.validate())
 	_check("straight on must always be open" in problems, "an alert-gated straight road is rejected")
 	_check("node 'd' has side exits but no straight road" in problems, "side exits without a straight road are rejected")
+	var bad_cover := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "length": 50, "end": "extract", "obstacles": [
+			{"kind": "wall", "lanes": [0, 1, 2], "at": 10},
+			{"kind": "wall", "lanes": [0, 3], "at": 20},
+			{"kind": "box", "lanes": [2], "at": 30, "material": "glass"},
+			{"kind": "truck", "lanes": [2], "at": 40}]},
+	]})
+	problems = " ".join(bad_cover.validate())
+	_check("wall at 10 m must cover 1 or 2" in problems, "a wall wider than 2 lanes is rejected")
+	_check("wall at 20 m must cover 1 or 2" in problems, "a wall across non-neighbouring lanes is rejected")
+	_check("box at 30 m must be wood or metal" in problems, "a box must be wood or metal")
+	_check("unknown obstacle kind 'truck'" in problems, "trucks are gone")
+	var ambush := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "length": 80, "end": "extract",
+			"obstacles": [{"kind": "wall", "lanes": [3, 4], "at": 20}],
+			"enemies": [{"kind": "rifle_trooper", "lane": 4, "at": 28}, {"kind": "rifle_trooper", "lane": 2, "at": 24},
+				{"kind": "rifle_trooper", "lane": 3, "at": 50}]},
+	]})
+	problems = " ".join(ambush.validate())
+	_check("trooper at 28 m is hidden right behind the wall" in problems, "no trooper right behind a wall")
+	_check(not "trooper at 24 m" in problems, "a trooper in another lane is fine")
+	_check(not "trooper at 50 m" in problems, "a trooper well behind a wall is fine")
 
 
 func _test_swipe_direction() -> void:

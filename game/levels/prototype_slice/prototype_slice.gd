@@ -22,10 +22,13 @@ const CEILING_Y := 4.6
 const KINDS := {
 	"barrier": {"size": Vector3(0.9, 0.5, 0.3), "y": 0.25, "tex": "hazard", "pass": "jump"},
 	"pipe": {"size": Vector3(0.9, 0.3, 0.3), "y": 1.3, "tex": "rust_pipe", "pass": "slide"},
-	"truck": {"size": Vector3(0.95, 2.2, 3.0), "y": 1.1, "tex": "truck", "pass": "dodge"},
 	"tripwire": {"size": Vector3(1.0, 0.05, 0.05), "y": 0.3, "color": Color("ff3030"), "pass": "jump_or_alert", "shadow": false},
 	## Contextual cover (LOCKED): run into it and you take cover; swipe early to go round it.
-	"cover": {"size": Vector3(0.95, 1.2, 0.8), "y": 0.6, "tex": "cover", "pass": "cover"},
+	## Box cover: a metal or wood crate ("material" in route.json), one per lane. You crouch behind it.
+	"box": {"size": Vector3(0.9, 1.2, 0.9), "y": 0.6, "tex": "crate_wood", "pass": "cover", "crouch": true},
+	## Wall cover: floor to ceiling, one piece across 1-2 lanes. You stand behind it. It's solid:
+	## what's behind it is a surprise, but never a trooper right behind it (route validation).
+	"wall": {"size": Vector3(1.0, 4.0, 1.0), "y": 2.0, "tex": "cover_wall", "pass": "cover", "one_piece": true},
 }
 
 ## How each area looks, picked by "theme" in route.json. Placeholder art, so you can tell where you are.
@@ -324,14 +327,32 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 			lanes[_remap_lane(int(l), authored_lanes)] = true
 		var at := float(ob["at"])
 		var size: Vector3 = kind["size"] * Vector3(tuning.lane_width, 1, 1)
+		var y: float = kind["y"]
+		var tex_name: String = kind.get("tex", "")
+		if ob["kind"] == "box" and String(ob.get("material", "wood")) == "metal":
+			tex_name = "crate_metal"
+		if ob["kind"] == "wall":
+			# Floor to ceiling: up to the tunnel ceiling indoors, a tall column outside.
+			size.y = CEILING_Y if _theme(id).get("ceiling", false) else kind["size"].y
+			y = size.y / 2.0
+		var one_mesh: MeshInstance3D = null
+		if kind.get("one_piece", false):
+			var sorted: Array = lanes.keys()
+			sorted.sort()
+			var x0 := _player.lane_x(sorted[0]) - tuning.lane_width / 2.0 + 0.05
+			var x1 := _player.lane_x(sorted[-1]) + tuning.lane_width / 2.0 - 0.05
+			one_mesh = _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
+			one_mesh.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
 		for lane: int in lanes:
 			var x := _player.lane_x(lane)
-			var mesh := _item_box(node, seg, at, Vector3(x, kind["y"], 0), size, kind.get("color", Color.WHITE))
-			if kind.has("tex"):
-				# BoxMesh lays its six faces out on a 3x2 grid, so this puts one tile on each face.
-				mesh.material_override = PsxMaterials.textured(_obstacle_texture(kind["tex"]), Vector2(3, 2))
+			var mesh := one_mesh
+			if mesh == null:
+				mesh = _item_box(node, seg, at, Vector3(x, y, 0), size, kind.get("color", Color.WHITE))
+				if tex_name != "":
+					# BoxMesh lays its six faces out on a 3x2 grid, so this puts one tile on each face.
+					mesh.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
 			_obstacles.append({"x": x, "at": start + at, "depth": size.z, "kind": ob["kind"], "pass": kind["pass"],
-					"done": false, "mesh": mesh, "owner": node})
+					"crouch": kind.get("crouch", false), "done": false, "mesh": mesh, "owner": node})
 		if kind.get("shadow", true):
 			_obstacle_shadows(node, seg, lanes.keys(), at, size)
 
@@ -355,7 +376,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		var s := -1.0 if String(a.get("side", "left")) == "left" else 1.0
 		node.add_child(box)
 		box.transform = _frame_at(seg, float(a["at"])) * Transform3D(Basis(Vector3.UP, -s * PI / 2.0),
-				Vector3(s * (tuning.lane_count * tuning.lane_width / 2.0 + 0.85), 1.8, 0))
+				Vector3(s * (tuning.lane_count * tuning.lane_width / 2.0 + 0.45), 1.8, 0))  # out on the kerb, in front of the pillars
 		box.destroyed.connect(_on_alarm_destroyed.bind(id))
 		_combatants.append({"node": box, "owner": node, "seg": seg})
 
@@ -819,10 +840,12 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.hazard()
 		"rust_pipe":
 			return PsxTextures.rust_pipe()
-		"truck":
-			return PsxTextures.truck()
-		"cover":
-			return PsxTextures.wall("blocks", Color("8e8e84"))
+		"crate_wood":
+			return PsxTextures.crate_wood()
+		"crate_metal":
+			return PsxTextures.crate_metal()
+		"cover_wall":
+			return PsxTextures.cover_wall()
 	push_warning("Unknown obstacle texture '%s'" % name)
 	return PsxTextures.concrete()
 
@@ -899,7 +922,7 @@ func _check_obstacles() -> void:
 			# heading for that counts, so once you swipe away you're out, even mid-slide.
 			var stop_at: float = o["at"] - o["depth"] / 2.0 - tuning.cover_stop_gap
 			if not _player.in_cover and d >= stop_at and d < o["at"] and absf(o["x"] - _player.lane_x(_player.lane)) < 0.1:
-				_player.enter_cover(stop_at)
+				_player.enter_cover(stop_at, o["crouch"])
 				RunLog.record_event("cover", {"node": _runner.current})
 			continue
 		if o["done"] or absf(o["at"] - d) > o["depth"] / 2.0 + 0.2:

@@ -66,7 +66,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 ### PROPOSED — First combat slice: Rifle Trooper, FIRE, cover, alarm box (prototype plan §15)
 - **FIRE (LOCKED Controls v1):** one persistent on-screen FIRE button (bottom right). Hold it to keep shooting. Touches that start on it never count as swipes. Targets come from `Targeting` (auto-priority by default; tapping an enemy overrides it in HYBRID mode).
 - **Rifle Trooper (LOCKED roster, behaviour proposed):** stands in a lane ahead. Within `trooper_aim_range` he aims at **your lane**: a red "!" and a red laser dot on the road where you are. After `trooper_aim_time` he fires. Change lane before then and he misses. Cover blocks it too. Higher alert means he aims faster (LOCKED: alert changes enemy pressure), and a trooper can be alert-gated in `route.json` (`min_alert`) so loud routes are busier. He can't shoot behind him. Running into a live one costs a hit and knocks him down.
-- **Cover (LOCKED concept):** `"kind": "cover"` obstacles. Run into one in its lane and you automatically take cover: you stop, crouch, and are safe from troopers ahead. You can keep firing. Swipe left or right to leave and resume the run. Swiping early dodges it and keeps your momentum. No cover button.
+- **Cover (LOCKED concept):** `"kind": "box"` / `"wall"` obstacles (see "Two kinds of cover" below). Run into one in its lane and you automatically take cover: you stop, crouch, and are safe from troopers ahead. You can keep firing. Swipe left or right to leave and resume the run. Swiping early dodges it and keeps your momentum. No cover button.
 - **Alarm box (LOCKED recommendation):** mounted on a wall. It's only shootable in a short window as you pass (`alarm_window_near/far`) and blinks while it is. A hit lowers alert by one level, which can reopen a locked-down route (the door lifts). Miss it and it's gone.
 - **Placeholder — damage (Point 4 is OPEN):** 3 hits and you're KILLED IN ACTION, with a short invulnerability after each hit. No recovery yet. HUD shows HP.
 - **Placeholder — weapon (Point 5 is OPEN):** one rifle, unlimited ammo, `fire_interval` between shots; troopers take `trooper_health` hits.
@@ -79,10 +79,27 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Rules:** the stages run on game time from the start of the run (`chopper_*` in `Tuning`). You can extract any time before the chopper is gone; arriving during LIFTING OFF still counts. When it's gone, the run ends THE CHOPPER LEFT, wherever you are. The helicopter on the helipad starts lifting during LIFTING OFF.
 - Numbers are sized to the lengthened test level: lands 15 s, lifts off 48 s, gone 58 s. A clean bot run takes 34–40 s, so a clean run arrives with ~10 s before lift-off. Stopping in cover, taking hits or a long route costs something real.
 
+- **Playtest (2026-09-30, user):** the clock reads well at its size. The user reached the chopper with a little under a third of the time left: slightly generous, but kept as-is for the test level.
+- **Direction (user):** the chopper time will vary by level: easier levels get more time, harder levels less. When there's more than one mission, the timeline should live with each mission (e.g. in its `route.json`), with `Tuning` as the default.
+
 ### PROPOSED — Longer test level, more troopers (user direction)
 - User felt the level was a little short. Every route is roughly doubled, with more obstacles and more cover blocks. Still one test level; the aim is to feel out length.
+- **Playtest (2026-09-30, user):** the length feels good now.
 - **Troopers are tiered by alert on every route (user decision):** each route has a set for each alert level, with fewer at Alert 1 than at 2 or 3. In the test level each segment has 1 trooper at Alert 1, 2 at Alert 2 and 3 at Alert 3 (`min_alert` in `route.json`). They appear or disappear live as alert goes up or down, so raising or lowering alert changes the pressure on whatever route you're on.
 - Note: the test level has only one tripwire, so Alert 3 can't be reached yet. The Alert 3 troopers are authored, ready for a second alert trigger.
+
+### PROPOSED — Two kinds of cover replace the trucks (user decision)
+- The tall blocker boxes with the diamond (the placeholder "trucks") are removed and replaced with cover.
+- **Wall cover:** a column from floor to ceiling, 1–2 lanes wide. You stand behind it. **Walls are solid (user decision):** no see-through; not knowing what's behind one adds suspense.
+- **Fairness rule (user decision):** no trooper may stand in a wall's lanes within 15 m behind it (`RouteGraph.WALL_TROOPER_CLEARANCE`), so running round a wall never drops you onto a hidden trooper. Enforced by route validation, so CI fails if a level breaks it.
+- **Box cover:** metal or wood crates, one lane each. You crouch behind them.
+- Both follow the LOCKED cover rule: run into it and you take cover; swipe sideways to leave; swipe early to go round it and keep your speed. Running into cover no longer kills you the way a truck did.
+- More cover throughout the level. Rooftops and the sewer (service tunnel) get fewer walls and mostly boxes.
+
+### PROPOSED — Two tripwires and two alarm boxes on the main route (user decision)
+- The main (ground) route has 2 tripwires: COMPOUND EXIT and MOTOR POOL. Each is followed a little later by an alarm box on a side wall, so a player who trips a wire gets a chance to shoot the alert back down. The ROOFTOPS alarm box (which can lift the TUNNEL's lockdown door) stays.
+- Alarm boxes get a small light on top that blinks the whole time the box is live, so they're seen instantly. The face light still shows the shootable window.
+- Tripping both wires reaches Alert 3, so the Alert 3 trooper tier is now testable.
 
 ### OPEN — FIRE button position setting (later)
 - User wants a player setting to put FIRE on the left, the right or in the middle. Build it when there's a settings screen. The button's position is already one function (`SwipeInput.fire_button`), so it's a small change.

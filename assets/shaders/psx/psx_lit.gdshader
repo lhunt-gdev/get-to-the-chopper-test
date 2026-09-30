@@ -10,7 +10,6 @@ uniform vec2 uv_scale = vec2(1.0);
 uniform float snap_resolution = 90.0;
 // PS1 had no perspective-correct texturing.
 uniform bool affine_mapping = true;
-
 varying vec3 affine_uv_w;
 
 void vertex() {

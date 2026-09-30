@@ -2,8 +2,8 @@ extends Node
 ## A simple bot that plays the prototype slice, so we know the route can be
 ## finished and the rules (alert gating, extraction, death, capture, combat) work end to end.
 ##   godot --headless --path . --fixed-fps 60 res://tests/autoplay/autoplay.tscn -- --scenario=ground
-## Every bot but "naive" holds FIRE while there's a trooper to shoot (and only shoots the alarm
-## box in roof_alarm). Scenarios:
+## Every bot but "naive" holds FIRE while there's a trooper to shoot (alarm boxes only in the
+## alarm scenarios). Scenarios:
 ##   naive       - never moves or shoots; should be killed
 ##   ground      - keeps to the middle lanes: straight on via MOTOR POOL
 ##   roof_quiet  - right-lane stairs to ROOFTOPS, jumps the tripwire, left-lane stairs down to
@@ -18,6 +18,8 @@ extends Node
 ##   camper      - takes cover and never leaves it: the chopper should leave without us
 ##   roof_alarm  - trips the wire (alert 2, TUNNEL locked down), shoots the alarm box on the
 ##                 rooftops (back to alert 1, the door lifts) and takes the TUNNEL after all
+##   ground_loud - main route, runs through both tripwires and ignores the alarm boxes: Alert 3
+##   ground_alarms - main route, runs through both tripwires, shoots both alarm boxes: back to Alert 1
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -48,7 +50,7 @@ func _ready() -> void:
 			_prefer = {&"compound_exit": 1, &"rooftops": -1, &"roof_edge": 0}
 		"late_switch":
 			_prefer = {&"compound_exit": 1}
-	_jump_tripwires = not scenario in ["roof_loud", "miss_ladder", "roof_alarm"]
+	_jump_tripwires = not scenario in ["roof_loud", "miss_ladder", "roof_alarm", "ground_loud", "ground_alarms"]
 	_level = LEVEL.instantiate()
 	add_child(_level)
 	_player = _level.get_node("Player")
@@ -81,7 +83,7 @@ func _physics_process(_delta: float) -> void:
 			_prefer[&"compound_exit"] = 0
 			_cooldown = mini(_cooldown, 0)
 
-	# Steering: avoid lanes with a truck (or cover) coming up; lean to the preferred side at junctions.
+	# Steering: avoid lanes with cover (walls, boxes) coming up; lean to the preferred side at junctions.
 	_cooldown -= 1
 	if _cooldown <= 0:
 		var best := _player.lane
@@ -126,7 +128,7 @@ func _physics_process(_delta: float) -> void:
 func _shoot() -> void:
 	var target: Node3D = _level.fire_target()
 	var want := target != null
-	if target is AlarmBox and scenario != "roof_alarm":
+	if target is AlarmBox and not _may_shoot_alarm():
 		want = false
 	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
 		want = false  # prove the cover works: only shoot once we're behind it...
@@ -146,7 +148,8 @@ func _trooper_ahead(d: float) -> bool:
 func _blocked_ahead(obstacles: Array, lane: int, d: float) -> bool:
 	var x := _player.lane_x(lane)
 	for o: Dictionary in obstacles:
-		var blocks: bool = o["pass"] == "dodge" or (o["pass"] == "cover" and not scenario in ["cover", "camper"])
+		var seeking_cover := scenario in ["cover", "camper"] and not _took_cover
+		var blocks: bool = o["pass"] == "cover" and not seeking_cover
 		if blocks and absf(o["x"] - x) < 0.1 and o["at"] + o["depth"] > d - 0.5 and o["at"] - d < LOOK_AHEAD:
 			return true
 	return false
@@ -171,3 +174,13 @@ func _report(reason: String) -> void:
 	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d time=%.1f" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _level._clock.elapsed])
 	get_tree().quit()
+
+
+## roof_alarm only shoots the ROOFTOPS box (the one that can lift the TUNNEL door).
+func _may_shoot_alarm() -> bool:
+	match scenario:
+		"ground_alarms":
+			return true
+		"roof_alarm":
+			return _level._runner.current == &"rooftops"
+	return false

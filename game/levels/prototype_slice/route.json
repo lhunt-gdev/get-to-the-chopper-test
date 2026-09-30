@@ -10,12 +10,14 @@
       "length": 150,
       "bends": [{"at": 6, "side": "right"}, {"at": 76, "side": "left"}],
       "obstacles": [
-        {"kind": "cover", "lanes": [1], "at": 22},
+        {"kind": "box", "lanes": [3], "at": 20},
+        {"kind": "box", "lanes": [1], "at": 22, "material": "metal"},
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 30},
-        {"kind": "truck", "lanes": [3, 4], "at": 38},
+        {"kind": "wall", "lanes": [3, 4], "at": 38},
         {"kind": "pipe", "lanes": [1, 2, 3], "at": 50},
-        {"kind": "truck", "lanes": [0, 1], "at": 64},
+        {"kind": "wall", "lanes": [0, 1], "at": 64},
         {"kind": "barrier", "lanes": [2, 3, 4], "at": 72},
+        {"kind": "box", "lanes": [1], "at": 90},
         {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 96},
         {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 108}
       ],
@@ -23,6 +25,9 @@
         {"kind": "rifle_trooper", "lane": 2, "at": 44},
         {"kind": "rifle_trooper", "lane": 0, "at": 86, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 4, "at": 80, "min_alert": 3}
+      ],
+      "alarms": [
+        {"side": "left", "at": 132}
       ],
       "next": [
         {"to": "motor_pool", "label": "MOTOR POOL"},
@@ -36,19 +41,27 @@
       "length": 130,
       "bends": [{"at": 44, "side": "left"}, {"at": 112, "side": "right"}],
       "obstacles": [
-        {"kind": "truck", "lanes": [0, 1], "at": 14},
-        {"kind": "truck", "lanes": [3, 4], "at": 22},
+        {"kind": "wall", "lanes": [0, 1], "at": 14},
+        {"kind": "wall", "lanes": [3, 4], "at": 22},
         {"kind": "barrier", "lanes": [2], "at": 22},
-        {"kind": "truck", "lanes": [1, 2, 3], "at": 36},
+        {"kind": "wall", "lanes": [1, 2], "at": 36},
+        {"kind": "box", "lanes": [3], "at": 36, "material": "metal"},
         {"kind": "pipe", "lanes": [0, 4], "at": 36},
+        {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 50},
+        {"kind": "box", "lanes": [2], "at": 58},
         {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 76},
-        {"kind": "truck", "lanes": [2, 3, 4], "at": 88},
-        {"kind": "pipe", "lanes": [0, 1], "at": 108}
+        {"kind": "wall", "lanes": [3, 4], "at": 88},
+        {"kind": "box", "lanes": [2], "at": 88},
+        {"kind": "pipe", "lanes": [0, 1], "at": 108},
+        {"kind": "box", "lanes": [4], "at": 120, "material": "metal"}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 1, "at": 62},
-        {"kind": "rifle_trooper", "lane": 3, "at": 100, "min_alert": 2},
+        {"kind": "rifle_trooper", "lane": 3, "at": 106, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 0, "at": 82, "min_alert": 3}
+      ],
+      "alarms": [
+        {"side": "right", "at": 72}
       ],
       "next": [
         {"to": "airfield_gate", "label": "GATE"}
@@ -62,8 +75,10 @@
       "obstacles": [
         {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 18},
         {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30},
-        {"kind": "cover", "lanes": [2], "at": 54},
-        {"kind": "barrier", "lanes": [0, 1, 3, 4], "at": 70}
+        {"kind": "box", "lanes": [4], "at": 40},
+        {"kind": "box", "lanes": [2], "at": 54, "material": "metal"},
+        {"kind": "barrier", "lanes": [0, 1, 3, 4], "at": 70},
+        {"kind": "box", "lanes": [0], "at": 86, "material": "metal"}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 3, "at": 48, "min_alert": 2},
@@ -85,7 +100,8 @@
       "length": 80,
       "obstacles": [
         {"kind": "barrier", "lanes": [1, 2, 3], "at": 14},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30}
+        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30},
+        {"kind": "box", "lanes": [3], "at": 52}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 2, "at": 44},
@@ -104,7 +120,9 @@
       "length": 100,
       "obstacles": [
         {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 34},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 58}
+        {"kind": "box", "lanes": [2], "at": 44, "material": "metal"},
+        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 58},
+        {"kind": "box", "lanes": [0], "at": 66}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 3, "at": 47},
@@ -122,12 +140,17 @@
       "tier": "ground",
       "length": 110,
       "obstacles": [
-        {"kind": "truck", "lanes": [0, 1, 2], "at": 15},
-        {"kind": "truck", "lanes": [2, 3, 4], "at": 30},
+        {"kind": "wall", "lanes": [0, 1], "at": 15},
+        {"kind": "box", "lanes": [2], "at": 15, "material": "metal"},
+        {"kind": "wall", "lanes": [3, 4], "at": 30},
+        {"kind": "box", "lanes": [2], "at": 30},
         {"kind": "barrier", "lanes": [0, 1], "at": 30},
-        {"kind": "cover", "lanes": [3], "at": 58},
+        {"kind": "box", "lanes": [1], "at": 44},
+        {"kind": "box", "lanes": [3], "at": 58, "material": "metal"},
+        {"kind": "wall", "lanes": [0], "at": 66},
         {"kind": "pipe", "lanes": [1, 2, 3], "at": 84},
-        {"kind": "barrier", "lanes": [0, 4], "at": 84}
+        {"kind": "barrier", "lanes": [0, 4], "at": 84},
+        {"kind": "box", "lanes": [2], "at": 96}
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 2, "at": 48},

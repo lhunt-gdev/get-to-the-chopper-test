@@ -120,21 +120,54 @@ static func rust_pipe() -> Texture2D:
 	return _finish("rust_pipe", img)
 
 
-## Trucks: olive canvas with panel seams and a stencilled star.
-static func truck() -> Texture2D:
-	if _cache.has("truck"):
-		return _cache["truck"]
-	var img := _start("truck", Color("4a5a30"), 0.05)
-	var seam := Color("2a3318")
-	for i in SIZE:
-		img.set_pixel(i, 0, seam)
-		img.set_pixel(0, i, seam)
-		img.set_pixel(16, i, seam)
-	for y in range(10, 23):
-		for x in range(2, 15):
-			if absi(x - 8) + absi(y - 16) <= 5:
-				img.set_pixel(x, y, Color("c8c8b0"))
-	return _finish("truck", img)
+## Wooden crate: horizontal planks with dark gaps, a frame and a cross brace.
+static func crate_wood() -> Texture2D:
+	if _cache.has("crate_wood"):
+		return _cache["crate_wood"]
+	var img := _start("crate_wood", Color("8a6238"), 0.06)
+	var dark := Color("4a3218")
+	var frame := Color("6a4826")
+	for y in SIZE:
+		for x in SIZE:
+			if y % 8 == 7:
+				img.set_pixel(x, y, dark)
+			if x < 3 or x > SIZE - 4 or y < 3 or y > SIZE - 4 or absi(x - y) <= 1:
+				img.set_pixel(x, y, frame)
+	return _finish("crate_wood", img)
+
+
+## Metal crate: grey ribbed steel with rivets and a stencil stripe.
+static func crate_metal() -> Texture2D:
+	if _cache.has("crate_metal"):
+		return _cache["crate_metal"]
+	var img := _start("crate_metal", Color("5e666e"), 0.04)
+	for y in SIZE:
+		for x in SIZE:
+			var c := img.get_pixel(x, y)
+			if x % 6 == 0:
+				img.set_pixel(x, y, c.lightened(0.18))
+			elif x % 6 == 1:
+				img.set_pixel(x, y, c.darkened(0.2))
+			if y < 2 or y > SIZE - 3:
+				img.set_pixel(x, y, Color("3a3f44"))
+	for p in [Vector2i(3, 4), Vector2i(28, 4), Vector2i(3, 27), Vector2i(28, 27)]:
+		img.set_pixel(p.x, p.y, Color("b8c0c8"))
+	for x in range(8, 24):
+		for y in range(14, 18):
+			img.set_pixel(x, y, Color("c9a227"))
+	return _finish("crate_metal", img)
+
+
+## Wall cover: a concrete column with a darker base and a yellow warning band.
+static func cover_wall() -> Texture2D:
+	if _cache.has("cover_wall"):
+		return _cache["cover_wall"]
+	var img := _start("cover_wall", Color("7c7c72"), 0.04)
+	_courses(img, 8, 16, Color("54544c"))
+	for x in SIZE:
+		for y in range(SIZE - 4, SIZE):
+			img.set_pixel(x, y, Color("c9a227") if ((x + y) / 4) % 2 == 0 else Color("1c1c1a"))
+	return _finish("cover_wall", img)
 
 
 # --- Helpers ----------------------------------------------------------------------

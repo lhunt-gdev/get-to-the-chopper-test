@@ -16,6 +16,12 @@ extends RefCounted
 ## in the middle lanes when they reach its end.
 
 const SIDES := ["left", "straight", "right"]
+## barrier: jump it. pipe: slide under it. tripwire: jump it or raise alert.
+## box / wall: cover (run into it to take cover).
+const OBSTACLE_KINDS := ["barrier", "pipe", "tripwire", "box", "wall"]
+## Fairness (user rule): walls are solid, so no trooper may stand in a wall's lanes within this
+## many metres behind it. No unfair surprises when you run round one.
+const WALL_TROOPER_CLEARANCE := 15.0
 const VIAS := ["corridor", "stairs", "ladder"]
 ## Height tiers, in tier steps (Tuning.tier_height metres each).
 const TIERS := {"roof": 1, "ground": 0, "underground": -1}
@@ -133,6 +139,24 @@ func validate() -> PackedStringArray:
 			elif float(bend.get("at", -1)) <= 0.0 or float(bend.get("at", -1)) >= float(n.get("length", 50.0)):
 				problems.append("node '%s': bend at %s m is outside the segment" % [id, bend.get("at")])
 		var length := float(n.get("length", 50.0))
+		for ob in n.get("obstacles", []):
+			var kind := String(ob.get("kind", ""))
+			var lanes: Array = ob.get("lanes", [])
+			if not kind in OBSTACLE_KINDS:
+				problems.append("node '%s': unknown obstacle kind '%s'" % [id, kind])
+			elif kind == "wall":
+				# Wall cover is one piece, 1-2 neighbouring lanes wide.
+				var sorted := lanes.duplicate()
+				sorted.sort()
+				if sorted.is_empty() or sorted.size() > 2 or (sorted.size() == 2 and int(sorted[1]) - int(sorted[0]) != 1):
+					problems.append("node '%s': wall at %s m must cover 1 or 2 neighbouring lanes" % [id, ob.get("at")])
+			elif kind == "box" and not String(ob.get("material", "wood")) in ["wood", "metal"]:
+				problems.append("node '%s': box at %s m must be wood or metal" % [id, ob.get("at")])
+			if kind == "wall":
+				for e in n.get("enemies", []):
+					var behind := float(e.get("at", 0)) - float(ob.get("at", 0))
+					if int(e.get("lane", -1)) in lanes and behind >= 0.0 and behind < WALL_TROOPER_CLEARANCE:
+						problems.append("node '%s': trooper at %s m is hidden right behind the wall at %s m" % [id, e.get("at"), ob.get("at")])
 		for e in n.get("enemies", []):
 			if String(e.get("kind", "")) != "rifle_trooper":
 				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
