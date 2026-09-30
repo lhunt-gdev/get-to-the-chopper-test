@@ -43,23 +43,31 @@ const KINDS := {
 const THEMES := {
 	"compound": {"wall": "blocks", "color": Color("77776c"), "height": 3.0, "ground": "asphalt"},
 	# MGS PS1-style complex / office interior.
-	"office": {"wall": "office", "wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "stair_wall": "office_wall", "stair_door": "door", "color": Color("6f7a82"),
+	"office": {"wall": "office", "ambient": Color(0.19, 0.23, 0.26), "lamps": "ceiling", "fog_color": Color("10171a"),
+			"wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "stair_wall": "office_wall", "stair_door": "door", "color": Color("6f7a82"),
 			"height": CEILING_Y, "ground": "office_floor", "ceiling": true, "wall_decor": true,
 			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_metal": "cabinet", "box_wood": "desk",
 					"wall": "office_wall"}},
 	# Open night sky: no walls or ceiling, a low lip at the roof edge, the city all around.
-	"rooftops": {"wall": "brick", "stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "gravel", "no_walls": true,
+	"rooftops": {"wall": "brick", "ambient": Color(0.2, 0.24, 0.36), "moon": Color(0.32, 0.38, 0.58), "lamps": "posts", "snow": true,
+			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "gravel", "no_walls": true,
 			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"),
 			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "roof_vent",
 					"wall_looks": ["hvac"]}},
-	"tunnel": {"wall": "tile", "stair_wall": "tunnel_wall", "stair_door": "steel_door", "marker_door": "bars", "color": Color("4d5c52"), "height": 3.2, "ground": "asphalt", "ceiling": true},
+	"tunnel": {"wall": "tile", "ambient": Color(0.19, 0.23, 0.2), "lamps": "bulbs", "fog_color": Color("0b100d"),
+			"stair_wall": "tunnel_wall", "stair_door": "steel_door", "marker_door": "bars", "color": Color("4d5c52"), "height": CEILING_Y, "ground": "asphalt", "ceiling": true},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
-	"helipad": {"wall": "blocks", "color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
+	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "helipad", "snow": true,
+			"color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
 }
 const DEAD_END_COLOR := Color("b03a2e")
 ## Render layer for stairwell structure (see _build_stairwell). Everything else is on layer 1.
 const STAIRWELL_LAYER := 2
 const GUARD_COLOR := Color("4a5260")
+## Light in an area with no "ambient" of its own.
+const DEFAULT_AMBIENT := Color(0.4, 0.42, 0.44)
+## Where the moonlight comes from (upper left, a little behind).
+const MOON_DIR := Vector3(-0.45, 1.0, 0.35)
 
 @export var tuning: Tuning
 
@@ -100,6 +108,14 @@ var _intro_left := 0.0
 var _doors: Array[Dictionary] = []
 ## Halfway markers built so far: {at (route distance), seg}. See _build_marker.
 var _markers: Array[Dictionary] = []
+## Mood lighting: the lamps, the area's ambient and moonlight (see Ambience).
+var _ambience: Ambience
+## Snow drifting round the camera on the night rooftops.
+var _snow: CPUParticles3D
+## Red aviation lights on the city's towers, all blinking together.
+var _beacon_mat: StandardMaterial3D
+## The last area name captioned, so ROOFTOPS into ROOFTOPS doesn't caption twice.
+var _last_area := ""
 ## Camera jolt after the door bash (1 at impact, decays to 0).
 var _shake := 0.0
 ## Where the camera would be without any shake (the smoothed follow position).
@@ -127,6 +143,16 @@ func _ready() -> void:
 	_input.fire_released.connect(set_fire_held.bind(false))
 	_hud.setup(tuning)
 	_build_sky()
+	_ambience = Ambience.new()
+	_ambience.name = "Ambience"
+	_ambience.tuning = tuning
+	add_child(_ambience)
+	_build_snow()
+	# A faint cool fill from just behind you, so you (and what's right ahead) read in the dark.
+	var fill := Node3D.new()
+	_camera.add_child(fill)
+	fill.position = Vector3(0, 0.3, -1.5)
+	_ambience.add_lamp(fill, Color(0.5, 0.58, 0.68) * 0.55, 6.5, {"alert": false})
 	_clock = ExtractionClock.new()
 	_clock.name = "ExtractionClock"
 	_clock.tuning = tuning
@@ -134,6 +160,7 @@ func _ready() -> void:
 	_clock.configure(_graph.mission().get("chopper", {}))  # this mission's own timeline, if it has one
 	_clock.stage_changed.connect(_on_chopper_stage)
 	_shot_tracer = _box(self, Vector3(0.05, 0.05, 1.0), Vector3.ZERO, Color("fff0b0"))
+	_shot_tracer.material_override = PsxMaterials.glow(Color("fff0b0"))
 	_shot_tracer.top_level = true
 	_shot_tracer.visible = false
 	_runner.segment_needed.connect(_on_segment_needed)
@@ -151,6 +178,8 @@ func _ready() -> void:
 	_build_start_room(_segments[0])
 	_player.distance = -tuning.start_offset
 	_place_player()
+	_update_environment(0.0)
+	_ambience.snap()  # start in the area's own light, not fading in from bright
 	if _skip_title:
 		_update_camera(1.0)
 		start_run()
@@ -158,6 +187,7 @@ func _ready() -> void:
 		# GoldenEye-style opening: pan from the front of the player round to behind them.
 		_intro_left = tuning.intro_pan_time
 		_hud.show_mission_title(String(_graph.mission().get("title", "")))
+		_hud.set_letterbox(true)
 		_update_camera(1.0)
 
 
@@ -167,6 +197,7 @@ func start_run() -> void:
 	_started = true
 	_intro_left = 0.0  # a tap during the pan skips it
 	_hud.hide_title()
+	_hud.set_letterbox(false, tuning.letterbox_time)
 	GameState.start_run(START_ALERT)
 	_runner.begin(_graph, false)
 	_clock.start()
@@ -257,6 +288,38 @@ func _build_sky() -> void:
 	_fog_color_default = _env.fog_light_color
 
 
+## Snow drifting down round the camera (the night rooftops; Shadow Moses). The flakes stay put in
+## the world while the emitter follows the camera, so you run through them.
+func _build_snow() -> void:
+	_snow = CPUParticles3D.new()
+	_snow.name = "Snow"
+	_snow.local_coords = false
+	_snow.amount = 260
+	_snow.lifetime = 4.0
+	_snow.preprocess = 4.0
+	_snow.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_snow.emission_box_extents = Vector3(9.0, 1.0, 12.0)
+	_snow.direction = Vector3(0.3, -1.0, 0.0)
+	_snow.spread = 12.0
+	_snow.gravity = Vector3(0.2, -1.2, 0.0)
+	_snow.initial_velocity_min = 0.8
+	_snow.initial_velocity_max = 1.6
+	var flake := QuadMesh.new()
+	flake.size = Vector2(0.06, 0.06)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.albedo_color = Color("c8d4e8")
+	flake.material = mat
+	_snow.mesh = flake
+	_snow.emitting = false
+	add_child(_snow)
+	_beacon_mat = StandardMaterial3D.new()
+	_beacon_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_beacon_mat.disable_fog = true
+	_beacon_mat.albedo_color = Color("ff3020")
+
+
 ## Fog thins out where there's open sky (so you can see the city), and closes in again indoors.
 func _update_environment(delta: float) -> void:
 	if _env == null:
@@ -272,6 +335,16 @@ func _update_environment(delta: float) -> void:
 	var seg_here := _segment_at(_player.distance_run())
 	_hud.set_cctv(in_stairwell(), "CAM %02d" % (absi(hash(seg_here["id"])) % 40 + 1), _clock.elapsed)
 	_sky.global_position = _camera.global_position
+	# Mood lighting: the area's own ambient and moonlight, and the lamps nearest where you look.
+	_ambience.set_area(theme.get("ambient", DEFAULT_AMBIENT), theme.get("moon", Color.BLACK), MOON_DIR)
+	var focus := _camera.global_position - _camera.global_basis.z * 8.0
+	_ambience.update(delta, focus, GameState.alert_level if GameState.run_active else START_ALERT)
+	var edges := _ambience.screen_alert()
+	_hud.set_grade(edges.x, edges.y)
+	_snow.emitting = theme.get("snow", false)
+	_snow.global_position = _camera.global_position - _camera.global_basis.z * 6.0 + Vector3(0, 5.0, 0)
+	if _beacon_mat:
+		_beacon_mat.albedo_color = Color("ff3020") if fmod(Time.get_ticks_msec() / 1000.0, 1.6) < 0.5 else Color("401010")
 
 
 ## The chopper's stages: a message under the clock, the helicopter lifting, and THE CHOPPER LEFT.
@@ -458,6 +531,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 	_build_surfaces(node, seg, road_end, 0.0, 0.0)
 	if _theme(id).get("sky", false):
 		_build_city(node, seg)
+	_build_lamps(node, seg)
 
 	var authored_lanes := 5
 	var jumps_seen := 0  # jump obstacles alternate through the area's looks
@@ -662,7 +736,11 @@ func _retire(node: Node3D, gone_at: float) -> void:
 
 
 ## Entering a side branch: move the player into the branch's own lanes (same spot in the world).
-func _on_node_entered(_id: StringName) -> void:
+func _on_node_entered(id: StringName) -> void:
+	var area := _graph.display_name(id)
+	if area != _last_area:  # MGS-style location caption
+		_last_area = area
+		_hud.show_area(area)
 	var seg: Dictionary = _segments.back()
 	if seg["id"] != _runner.current or not _turns(seg["edge"]):
 		return
@@ -947,6 +1025,14 @@ func _build_stairwell_parts(parent: Node3D, seg: Dictionary) -> void:
 	# A dim lamp inside, over the exit door.
 	_item_box(parent, seg, ramp - 0.5, Vector3(x, 2.35, 0), Vector3(0.3, 0.08, 0.15), Color.WHITE).material_override = \
 			PsxMaterials.glow(Color("c8b890"))
+	var lamp := Node3D.new()
+	parent.add_child(lamp)
+	lamp.transform = _frame_at(seg, ramp - 0.8) * Transform3D(Basis.IDENTITY, Vector3(x, 2.0, 0))
+	_ambience.add_lamp(lamp, Color(1.0, 0.85, 0.6), 5.0)
+	# A green exit sign over each door, on the side you run up to it from.
+	for into in [0.02, ramp - 0.38]:
+		_item_box(parent, seg, into, Vector3(x, 2.5, 0), Vector3(0.5, 0.15, 0.04), Color.WHITE).material_override = \
+				PsxMaterials.glow(Color("40d070"))
 	_build_door(parent, seg, 0.2, x, tops[0], themes[0])
 	_build_door(parent, seg, ramp - 0.2, x, tops[1], themes[1])
 	# Built in: joined to the walls of the area at each indoor end.
@@ -1023,6 +1109,7 @@ func _build_roof_edges(parent: Node3D, seg: Dictionary, open_l: float, open_r: f
 				var sm := (span.x + span.y) / 2.0
 				_item_box(parent, seg, sm, Vector3(side * (edge - 0.1), lip / 2.0, 0), Vector3(0.2, lip, span.y - span.x + 0.2), Color("5e5e58"))
 			var front := _plane(parent, Vector2(l, 30.0), Vector3.ZERO, PsxTextures.building_night(), Vector2(l / 4.0, 30.0 / 4.0), PlaneMesh.FACE_Z)
+			front.material_override = PsxMaterials.textured(PsxTextures.building_night(), Vector2(l / 4.0, 30.0 / 4.0), true)
 			var leg: Dictionary = seg["legs"][i]
 			front.transform = Transform3D(leg["xf"].basis * Basis(Vector3.UP, -side * PI / 2.0),
 					leg["xf"] * Vector3(side * edge, _height(seg, mid) - 15.0, -(mid - leg["start"])))
@@ -1185,6 +1272,7 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 		else:
 			# Thick enough to stay at least a pixel tall at the low internal resolution, far off.
 			var b := _item_box(holder, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, 0.1, 0.06), Color("ff3030"))
+			b.material_override = PsxMaterials.glow(Color("ff3030"))  # a laser: it glows
 			beam = b
 			for e in ends:
 				var ex: float = e["x"]
@@ -1371,7 +1459,7 @@ func _build_city(parent: Node3D, seg: Dictionary) -> void:
 	rng.seed = hash(seg["id"])
 	var length: float = seg["length"]
 	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
-	var facade := PsxMaterials.textured(PsxTextures.building_night(), Vector2(3, 2))
+	var facade := PsxMaterials.textured(PsxTextures.building_night(), Vector2(3, 2), true)  # lit windows at night
 	var roofing := PsxMaterials.textured(PsxTextures.gravel(), Vector2(6, 4))
 	# Keep neighbours clear of the stairwell coming up and of any side exit leading off this roof.
 	var exit_sides := {}
@@ -1413,6 +1501,8 @@ func _build_city(parent: Node3D, seg: Dictionary) -> void:
 			var tx: float = side * rng.randf_range(32.0, 70.0)
 			var t_at := clampf(tz, 0.0, length)
 			_item_box(parent, seg, t_at, Vector3(tx, tall / 2.0 - 25.0, tz - t_at), Vector3(fw, tall + 50.0, fw), Color.WHITE).material_override = facade
+			if tall > 14.0:  # tall ones carry a blinking red aviation light
+				_item_box(parent, seg, t_at, Vector3(tx, tall + 0.3, tz - t_at), Vector3(0.6, 0.6, 0.6), Color.WHITE).material_override = _beacon_mat
 			tz += rng.randf_range(14.0, 26.0)
 
 
@@ -1454,6 +1544,7 @@ func _build_start_room(seg: Dictionary) -> void:
 	_strip(room, seg, -L, 0.0, 0.0, half * 2.0, 0.0, PsxTextures.office_floor(), float(tuning.lane_count), tuning.lane_width)
 	var roof := _strip(room, seg, -L, 0.0, 0.0, half * 2.0, CEILING_Y, PsxTextures.office_ceiling(), road_w / 2.0, 2.0)
 	roof.rotate_object_local(Vector3.FORWARD, PI)
+	_ceiling_lamp(room, seg, -L / 2.0, false)
 	for side in [-1, 1]:
 		_wall(room, seg, -L, 0.0, side * half, side, CEILING_Y, wall_tex)
 	var office := PsxMaterials.textured(wall_tex, Vector2(3, 2))
@@ -1485,6 +1576,126 @@ func _build_start_room(seg: Dictionary) -> void:
 			PsxMaterials.textured(PsxTextures.office_window(), Vector2(3, 2))
 	_item_box(room, seg, -9.0, Vector3(half - 0.03, 1.5, 0), Vector3(0.05, 0.75, 1.1), Color.WHITE).material_override = \
 			PsxMaterials.textured(PsxTextures.notice_board(), Vector2(3, 2))
+
+
+## The lamps that light an area (MGS-style: the light comes from fixtures you can see, with
+## dark between them). Office: fluorescent panels down the ceiling. Tunnel: caged sodium bulbs
+## on alternate walls, with a conduit along each wall. Rooftops: sodium lamp posts at the roof
+## edge and a searchlight sweeping across from a neighbouring building. Every few lamps one is
+## failing and flickers.
+func _build_lamps(parent: Node3D, seg: Dictionary) -> void:
+	var theme := _theme(seg["id"])
+	var length: float = seg["length"]
+	var ramp: float = seg["ramp_len"]
+	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
+	var n := 0
+	match theme.get("lamps", ""):
+		"ceiling":
+			var z := ramp + 3.0
+			while z < length - 1.0:
+				_ceiling_lamp(parent, seg, z, n % tuning.flicker_every == 3)
+				z += tuning.office_lamp_spacing
+				n += 1
+		"bulbs":
+			for piece in _pieces(seg, ramp, length):
+				for side in [-1, 1]:
+					var mid := (piece.x + piece.y) / 2.0
+					_item_box(parent, seg, mid, Vector3(side * (edge - 0.1), 2.95, 0), Vector3(0.12, 0.12, piece.y - piece.x), Color("2c302c"))
+			var z := ramp + 4.0
+			while z < length - 1.0:
+				var side := -1 if n % 2 == 0 else 1
+				var bulb := _item_box(parent, seg, z, Vector3(side * (edge - 0.25), 2.55, 0), Vector3(0.2, 0.2, 0.2), Color.WHITE)
+				var on := PsxMaterials.glow(Color("ffb060"))
+				bulb.material_override = on
+				# The cage and the bracket to the wall.
+				_item_box(parent, seg, z, Vector3(side * (edge - 0.25), 2.55, 0), Vector3(0.28, 0.04, 0.28), Color("202420"))
+				_item_box(parent, seg, z, Vector3(side * (edge - 0.25), 2.72, 0), Vector3(0.3, 0.06, 0.3), Color("202420"))
+				_item_box(parent, seg, z, Vector3(side * (edge - 0.13), 2.72, 0), Vector3(0.26, 0.05, 0.05), Color("202420"))
+				var at := Node3D.new()
+				parent.add_child(at)
+				at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(side * (edge - 0.7), 2.3, 0))
+				_ambience.add_lamp(at, Color(1.0, 0.6, 0.28) * 1.7, 8.5, {"flicker": 0.25 if n % tuning.flicker_every == 2 else 0.0,
+						"fixture": bulb, "on_mat": on, "off_mat": PsxMaterials.flat(Color("4a3a2a"))})
+				z += tuning.tunnel_lamp_spacing
+				n += 1
+		"posts":
+			var z := ramp + 6.0
+			var holes: Dictionary = seg.get("holes", {})
+			while z < length - 2.0:
+				var side := -1 if n % 2 == 0 else 1
+				var hole: Vector2 = holes.get(side, Vector2.ZERO)
+				if z < hole.x - 2.0 or z > hole.y + 2.0:
+					_lamp_post(parent, seg, z, side * (edge - 0.3), -side)
+				z += tuning.roof_lamp_spacing
+				n += 1
+			_searchlight(parent, seg, length * 0.45, 1 if hash(seg["id"]) % 2 == 0 else -1)
+		"helipad":
+			for side in [-1, 1]:
+				_lamp_post(parent, seg, length * 0.4, side * (edge - 0.3), -side)
+
+
+## A fluorescent ceiling panel with its pool of cold white light.
+func _ceiling_lamp(parent: Node3D, seg: Dictionary, z: float, failing: bool) -> void:
+	var tube := _item_box(parent, seg, z, Vector3(0, CEILING_Y - 0.04, 0), Vector3(0.5, 0.05, 1.5), Color.WHITE)
+	var on := PsxMaterials.glow(Color("e8f4e8"))
+	tube.material_override = on
+	_item_box(parent, seg, z, Vector3(0, CEILING_Y - 0.02, 0), Vector3(0.62, 0.03, 1.62), Color("5a6064"))  # housing
+	var at := Node3D.new()
+	parent.add_child(at)
+	at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, CEILING_Y - 1.6, 0))
+	_ambience.add_lamp(at, Color(0.88, 1.0, 0.9) * 2.0, 7.0, {"flicker": 0.3 if failing else 0.0,
+			"fixture": tube, "on_mat": on, "off_mat": PsxMaterials.flat(Color("7a8480"))})
+
+
+## A sodium lamp post at the roof edge, its head arching in over the roof.
+func _lamp_post(parent: Node3D, seg: Dictionary, z: float, x: float, inward: int) -> void:
+	var metal := Color("2e3236")
+	_item_box(parent, seg, z, Vector3(x, 1.6, 0), Vector3(0.12, 3.2, 0.12), metal)
+	_item_box(parent, seg, z, Vector3(x + inward * 0.35, 3.2, 0), Vector3(0.8, 0.08, 0.1), metal)
+	var head := _item_box(parent, seg, z, Vector3(x + inward * 0.7, 3.12, 0), Vector3(0.34, 0.1, 0.22), Color.WHITE)
+	head.material_override = PsxMaterials.glow(Color("ffc070"))
+	var at := Node3D.new()
+	parent.add_child(at)
+	at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(x + inward * 1.0, 2.8, 0))
+	_ambience.add_lamp(at, Color(1.0, 0.64, 0.3) * 1.3, 9.5)
+
+
+## From the top of a building off the roof's side, a searchlight beam sweeps back and forth
+## across the roof; its pool of light moves over the lanes (just for looks).
+func _searchlight(parent: Node3D, seg: Dictionary, z: float, side: int) -> void:
+	var src := Vector3(side * 13.0, 9.0, 0)
+	var target := Vector3(0, 0, -2.0)
+	var mount := Node3D.new()
+	parent.add_child(mount)
+	mount.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, src)
+	var swing := Node3D.new()  # turns on the mount, so the sweep is relative to the road
+	mount.add_child(swing)
+	var pivot := Node3D.new()
+	swing.add_child(pivot)
+	var down := (src - target).normalized()  # the pivot's +Y points back up the beam
+	pivot.basis = Basis(Quaternion(Vector3.UP, down))
+	var reach := src.distance_to(target)
+	var beam := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.2
+	cone.bottom_radius = 1.3
+	cone.height = reach
+	cone.radial_segments = 10
+	cone.rings = 1
+	cone.cap_top = false
+	cone.cap_bottom = false
+	beam.mesh = cone
+	beam.material_override = PsxMaterials.beam(Color(0.75, 0.82, 1.0, 0.13))
+	beam.position = Vector3(0, -reach / 2.0, 0)
+	pivot.add_child(beam)
+	_box(swing, Vector3(0.9, 0.7, 0.9), Vector3(0, -0.2, 0), Color("2a2d30"))  # the lamp housing
+	var pool := Node3D.new()
+	pivot.add_child(pool)
+	pool.position = Vector3(0, -reach + 1.5, 0)
+	_ambience.add_lamp(pool, Color(0.8, 0.88, 1.0) * 1.6, 4.5, {"alert": false})
+	var t := swing.create_tween().set_loops()
+	t.tween_property(swing, "rotation:y", 0.45, 2.6).from(-0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	t.tween_property(swing, "rotation:y", -0.45, 2.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 ## Halfway through the area (not a checkpoint): a wall right across, side wall to side wall and up
@@ -1532,6 +1743,14 @@ func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
 		if not seg.get("no_doors", false):
 			# Each leaf swings away from you round its own hinge: the left one way, the right the other.
 			_doors.append({"node": hinge, "at": seg["start"] + at, "owner": seg["node"], "seg": seg, "swing": -s})
+	# Over the doorway: a red emergency lamp at the tunnel gates, a green exit sign at office doors.
+	var sign_col := Color("ff3a28") if barred else Color("40d070")
+	var sign := _item_box(parent, seg, at - 0.2, Vector3(0, dh + 0.3, 0), Vector3(0.7 if not barred else 0.3, 0.18 if not barred else 0.25, 0.06), Color.WHITE)
+	sign.material_override = PsxMaterials.glow(sign_col)
+	var glow_at := Node3D.new()
+	parent.add_child(glow_at)
+	glow_at.transform = _frame_at(seg, at - 1.0) * Transform3D(Basis.IDENTITY, Vector3(0, dh + 0.2, 0))
+	_ambience.add_lamp(glow_at, sign_col * (1.2 if barred else 0.7), 5.0 if barred else 3.5, {"alert": false})
 	_markers.append({"at": seg["start"] + at, "seg": seg})
 
 
@@ -1816,6 +2035,15 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 		chopper.create_tween().tween_property(chopper, "position:y", xf.origin.y + 2.5, _clock.gone_at - _clock.elapsed)
 	_box(chopper, Vector3(2.2, 1.6, 4.5), Vector3(0, 1.2, 0), Color("2f3b2a"))
 	_box(chopper, Vector3(0.5, 0.5, 4.0), Vector3(0, 1.6, 4.0), Color("2f3b2a"))
+	# A blinking red light on the tail, and a white one under the nose lighting the pad.
+	var tail := _box(chopper, Vector3(0.18, 0.18, 0.18), Vector3(0, 1.95, 5.9), Color.WHITE)
+	tail.material_override = PsxMaterials.glow(Color("ff3020"))
+	_ambience.add_lamp(tail, Color(1.0, 0.15, 0.1) * 1.5, 5.0, {"blink": 1.1, "alert": false, "fixture": tail,
+			"on_mat": PsxMaterials.glow(Color("ff3020")), "off_mat": PsxMaterials.flat(Color("401010"))})
+	var nose := Node3D.new()
+	chopper.add_child(nose)
+	nose.position = Vector3(0, 1.0, -3.0)
+	_ambience.add_lamp(nose, Color(0.9, 0.95, 1.0) * 1.2, 7.0, {"alert": false})
 	var rotor := _box(chopper, Vector3(9.0, 0.08, 0.35), Vector3(0, 2.2, 0), Color("111111"))
 	var tween := rotor.create_tween().set_loops()
 	tween.tween_property(rotor, "rotation:y", TAU, 0.35).from(0.0)

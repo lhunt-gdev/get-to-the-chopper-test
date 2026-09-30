@@ -194,7 +194,7 @@ func _loose_box(size: Vector3, color: Color) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	m.mesh = mesh
-	m.material_override = PsxMaterials.flat(color)
+	m.material_override = PsxMaterials.glow(color)  # lasers and muzzle tracers glow in the dark
 	m.top_level = true
 	m.visible = false
 	add_child(m)

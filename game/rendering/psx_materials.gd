@@ -52,13 +52,42 @@ static func shadow_mesh(size: Vector2) -> PlaneMesh:
 	return mesh
 
 
-## uv_scale sets how often the texture repeats across the mesh.
-static func textured(tex: Texture2D, uv_scale: Vector2 = Vector2.ONE) -> ShaderMaterial:
-	var key := "%d_%s" % [tex.get_rid().get_id(), uv_scale]
+## uv_scale sets how often the texture repeats across the mesh. unlit: it gives off its own light
+## (lit windows at night) and ignores the area's lighting.
+static func textured(tex: Texture2D, uv_scale: Vector2 = Vector2.ONE, unlit: bool = false) -> ShaderMaterial:
+	var key := "%d_%s_%s" % [tex.get_rid().get_id(), uv_scale, unlit]
 	if not _cache.has(key):
 		var m := ShaderMaterial.new()
 		m.shader = SHADER
 		m.set_shader_parameter("albedo_texture", tex)
 		m.set_shader_parameter("uv_scale", uv_scale)
+		m.set_shader_parameter("unlit", unlit)
+		_cache[key] = m
+	return _cache[key]
+
+
+## Additive, unlit and see-through: light you can see in the air (searchlight beams, lamp haze).
+static func beam(color: Color) -> StandardMaterial3D:
+	var key := "beam_" + color.to_html()
+	if not _cache.has(key):
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.no_depth_test = false
+		m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		m.albedo_color = color
+		# Brightest at the lamp (the mesh's top, v = 0), fading to nothing at the far end.
+		var fade := Gradient.new()
+		fade.set_color(0, Color(1, 1, 1, 1))
+		fade.set_color(1, Color(1, 1, 1, 0))
+		var tex := GradientTexture2D.new()
+		tex.gradient = fade
+		tex.fill_from = Vector2(0, 0)
+		tex.fill_to = Vector2(0, 1)
+		tex.width = 4
+		tex.height = 32
+		m.albedo_texture = tex
 		_cache[key] = m
 	return _cache[key]

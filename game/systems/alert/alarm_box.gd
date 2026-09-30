@@ -38,7 +38,7 @@ func _init() -> void:
 	var bm := BoxMesh.new()
 	bm.size = Vector3(0.32, 0.26, 0.32)
 	_beacon.mesh = bm
-	_beacon.material_override = PsxMaterials.flat(LIT)
+	_beacon.material_override = PsxMaterials.glow(LIT)
 	_beacon.position = Vector3(0, 0.58, 0)  # on top
 	add_child(_beacon)
 
@@ -65,9 +65,9 @@ func update(delta: float, tuning: Tuning, player_d: float) -> void:
 	# The beacon always blinks; it goes fast, with the face light, while the box can be shot.
 	var period := 0.3 if in_window else 0.7
 	var beacon_on := fmod(_blink, period) < period * 0.55
-	_beacon.material_override = PsxMaterials.flat(Color("ff6a4a") if beacon_on else DARK)
+	_beacon.material_override = PsxMaterials.glow(Color("ff6a4a")) if beacon_on else PsxMaterials.flat(DARK)
 	var on := in_window and beacon_on
-	_light.material_override = PsxMaterials.flat(LIT if on else DARK)
+	_light.material_override = PsxMaterials.glow(LIT) if on else PsxMaterials.flat(DARK)
 
 
 func hit() -> void:

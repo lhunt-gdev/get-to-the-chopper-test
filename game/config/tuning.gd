@@ -145,3 +145,17 @@ enum TargetingMode {
 ## The box can be shot while it's between these distances ahead of you.
 @export var alarm_window_near: float = 3.0
 @export var alarm_window_far: float = 20.0
+
+@export_group("Ambience")
+## Lamps further than this from where the camera looks fade out (hidden in the fog).
+@export var lamp_fade_far: float = 34.0
+## How fast the lamps and screen edges pulse red at ALERT.
+@export var alert_pulse_speed: float = 5.0
+## Metres between office ceiling lights / tunnel wall lamps / rooftop lamp posts.
+@export var office_lamp_spacing: float = 7.0
+@export var tunnel_lamp_spacing: float = 8.0
+@export var roof_lamp_spacing: float = 18.0
+## Every how-many-th lamp is a failing one that flickers.
+@export var flicker_every: int = 5
+## Seconds the letterbox bars take to slide away when the run starts.
+@export var letterbox_time: float = 0.5

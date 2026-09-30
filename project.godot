@@ -37,3 +37,114 @@ textures/canvas_textures/default_texture_filter=0
 textures/vram_compression/import_etc2_astc=true
 textures/default_filters/use_nearest_mipmap_filter=true
 anti_aliasing/quality/msaa_3d=0
+
+[shader_globals]
+
+amb_color={
+"type": "vec4",
+"value": Vector4(1, 1, 1, 1)
+}
+moon_color={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+moon_dir={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_6={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_6={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_7={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_7={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_8={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_8={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_9={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_9={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_10={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_10={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_pos_11={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_11={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}

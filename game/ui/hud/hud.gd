@@ -4,7 +4,9 @@ extends CanvasLayer
 
 const ALERT_COLORS := {1: Color("9fd36b"), 2: Color("f0c040"), 3: Color("ff4b3a")}
 ## Each side of a fork has a colour. The road paint, sign and this prompt all use the same ones.
-const SIDE_COLORS := {"left": Color("d9a032"), "straight": Color("a8a898"), "right": Color("4f9fd0")}
+## Height of the cinema bars during the opening pan (pixels at 270x480).
+const LETTERBOX := 44.0
+const SIDE_COLORS :={"left": Color("d9a032"), "straight": Color("a8a898"), "right": Color("4f9fd0")}
 const SIDE_DIRS := {"left": -1, "straight": 0, "right": 1}
 const END_TEXT := {
 	&"extracted": "EXTRACTED",
@@ -172,6 +174,8 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 	_cctv.visible = on
 	_cctv_label.visible = on
 	_cctv_rec.visible = on
+	if _grade:
+		_grade.visible = not on  # the footage has its own look
 	if not on:
 		return
 	_cctv_mat.set_shader_parameter("amount", 1.0)
@@ -180,6 +184,72 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 	_cctv_label.text = "%s\n03:%02d:%02d:%02d" % [cam, 14 + t / 60, t % 60, int(fmod(seconds, 1.0) * 24.0)]
 	_cctv_rec.text = "● REC" if fmod(seconds, 1.0) < 0.6 else ""
 	_cctv_label.modulate = Color("d8f0d8")
+
+
+var _grade: ColorRect
+var _grade_mat: ShaderMaterial
+var _bars: Array[ColorRect] = []
+var _area: Label
+var _area_tween: Tween
+
+
+## The MGS colour grade over the whole game view (under the HUD). alert / caution: 0..1, pulsing.
+func set_grade(alert: float, caution: float) -> void:
+	if _grade == null:
+		_grade_mat = ShaderMaterial.new()
+		_grade_mat.shader = preload("res://assets/shaders/psx/grade.gdshader")
+		_grade = ColorRect.new()
+		_grade.material = _grade_mat
+		_grade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_grade.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(_grade)
+		move_child(_grade, 0)
+	_grade_mat.set_shader_parameter("alert", alert)
+	_grade_mat.set_shader_parameter("caution", caution)
+
+
+## Cinema bars top and bottom (the opening pan); they slide away when the run starts.
+func set_letterbox(on: bool, seconds: float = 0.0) -> void:
+	if _bars.is_empty() and not on:
+		return  # never shown (a retry skips the opening pan)
+	if _bars.is_empty():
+		for top in [true, false]:
+			var bar := ColorRect.new()
+			bar.color = Color.BLACK
+			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			bar.set_anchors_preset(Control.PRESET_TOP_WIDE if top else Control.PRESET_BOTTOM_WIDE)
+			bar.offset_top = 0.0 if top else -LETTERBOX
+			bar.offset_bottom = LETTERBOX if top else 0.0
+			add_child(bar)
+			_bars.append(bar)
+	for i in _bars.size():
+		var bar := _bars[i]
+		var shown := 0.0 if on else (-LETTERBOX if i == 0 else LETTERBOX)
+		var prop := "offset_top" if i == 0 else "offset_bottom"
+		var other := "offset_bottom" if i == 0 else "offset_top"
+		var t := create_tween().set_parallel()
+		t.tween_property(bar, prop, shown, seconds)
+		t.tween_property(bar, other, shown + (LETTERBOX if i == 0 else -LETTERBOX), seconds)
+
+
+## MGS-style location caption: the area's name types out bottom left, then fades.
+func show_area(area_name: String) -> void:
+	if _area == null:
+		_area = _label(Vector2(10, 0), HORIZONTAL_ALIGNMENT_LEFT)
+		_area.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		_area.offset_left = 10
+		_area.offset_top = -92
+		_area.add_theme_font_size_override("font_size", 11)
+		_area.modulate = Color("e8f0e0")
+	if _area_tween:
+		_area_tween.kill()
+	_area.text = area_name
+	_area.visible_ratio = 0.0
+	_area.modulate.a = 1.0
+	_area_tween = create_tween()
+	_area_tween.tween_property(_area, "visible_ratio", 1.0, 0.04 * area_name.length())
+	_area_tween.tween_interval(2.2)
+	_area_tween.tween_property(_area, "modulate:a", 0.0, 0.6)
 
 
 func setup(tuning: Tuning) -> void:

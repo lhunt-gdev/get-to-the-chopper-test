@@ -41,8 +41,21 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Each shadow is directly below its object. Under an overhead pipe you see a gap between the pipe and its shadow ("duck"). A barrier's shadow touches it ("jump"). The player's shadow shrinks as they rise, so you can judge jump height.
 - Numbers in `Tuning` (Shadows group).
 
-### OPEN — Ambient lighting pass
-- User wants a general lighting pass later. Not now.
+### PROPOSED — MGS ambience pass (user direction, 2026-09-30; replaces OPEN "Ambient lighting pass")
+- Playtest (user): "it looks very plain and bland", so give it proper Metal Gear Solid polish, ambience and vibe. Stays inside LOCKED §11 (PS1 low-poly, fog, retro UI, not bright or glossy). No change to gameplay, controls or the camera.
+- **What makes MGS1 look good, and what we take from it:**
+  - **Dark, with light pools.** Most of the frame is dim. The light comes from lamps you can see (fixtures on ceilings and walls), so the floor has bright pools and dark gaps between them. Nothing is flat-lit.
+  - **A cold base with warm lights.** Night blue and steel teal in the shadows. Against it: sodium orange lamps, fluorescent white-green strips, red alarm beacons, green exit signs.
+  - **Heavy atmosphere.** Fog you can see, drifting dust in the lamp light, steam and drips underground, snow on the night rooftops (the Shadow Moses nod), sweeping searchlights.
+  - **PS1 colour.** 15-bit colour with ordered dithering, and a soft vignette.
+  - **The alert changes the mood.** At alert 3 the lamps pulse red and the screen edges throb red, like MGS's ALERT phase. Alert 2 gets a faint amber tint (CAUTION).
+  - **Cinematic touches.** Letterbox bars during the intro pan. An MGS-style caption types out the area name (and the mission time) in the corner when you enter an area.
+- **How it's built (proposed):**
+  - The PS1 shader does its own lighting: an ambient and a moonlight colour per area, plus the nearest 8 lamps, lit per pixel in stepped, dithered bands so it stays pixel-crisp. It's cheap on iPhone web, and it replaces the flat sun and ambient.
+  - Lamps are authored per area theme: office ceiling strips, caged tunnel bulbs, rooftop floodlights, and blinking aviation beacons on the skyline.
+  - A full-screen grade and dither pass sits under the HUD. The stairwell CCTV view replaces it while you're in a stairwell.
+- **Not in this pass:** sound (there is none yet, and it's the other half of MGS's mood, so it's worth doing next); new models; a Codec-style radio HUD.
+- Numbers in `Tuning` (Ambience).
 
 ### PROPOSED — Route splits change the actual geometry (user direction, not built yet)
 - The level physically splits at a fork and the player runs down the branch they chose. No more straight road with a label.
