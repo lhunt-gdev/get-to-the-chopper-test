@@ -79,7 +79,27 @@ func _test_mission_layout() -> void:
 	]})
 	var problems := " ".join(loop.validate())
 	_check("node 'c' can never reach the end" in problems, "a branch that never reaches the end is rejected")
+	var cramped := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "next": [{"to": "e"}, {"to": "r", "side": "right", "via": "stairs"}]},
+		{"id": "r", "tier": "roof", "length": 60, "next": [{"to": "e", "side": "left", "via": "ladder"}],
+			"obstacles": [{"kind": "barrier", "lanes": [2], "at": 15}, {"kind": "box", "lanes": [1], "at": 25}]},
+		{"id": "e", "tier": "ground", "end": "extract"},
+	]})
+	problems = " ".join(cramped.validate())
+	_check("barrier at 15" in problems and "too close to the stairs' exit" in problems, "nothing right outside a stairwell's exit door")
+	_check(not "box at 25" in problems, "things further on after the stairs are fine")
 	_check(not "node 'a' can never" in problems, "a node with one good route is fine")
+	var marked := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "theme": "office", "length": 100, "marker": {"at": 50}, "next": [{"to": "e"}],
+			"obstacles": [{"kind": "box", "lanes": [1], "at": 46}, {"kind": "box", "lanes": [1], "at": 60}],
+			"enemies": [{"kind": "rifle_trooper", "lane": 2, "at": 53}]},
+		{"id": "r", "tier": "ground", "theme": "rooftops", "length": 60, "marker": {"at": 30}, "next": [{"to": "e"}]},
+		{"id": "e", "tier": "ground", "end": "extract"},
+	]})
+	problems = " ".join(marked.validate())
+	_check("box at 46" in problems and "rifle_trooper at 53" in problems, "nothing right by a halfway marker's doors")
+	_check(not "box at 60" in problems, "things further from a halfway marker are fine")
+	_check("no halfway marker on open roofs" in problems, "no halfway marker on the rooftops")
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
 	_check(g.display_name(&"rooftops_far") == "ROOFTOPS", "the far rooftops show as ROOFTOPS")
 	var run_log: Node = root.get_node_or_null("RunLog")  # an autoload; not a global name in -s scripts

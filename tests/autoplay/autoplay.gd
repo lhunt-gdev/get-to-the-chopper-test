@@ -87,8 +87,8 @@ func _physics_process(_delta: float) -> void:
 	var lane_count: int = _player.tuning.lane_count
 
 	_shoot()
-	if d < 0.3:
-		return  # still in the start room: no steering until we're through the door
+	if d < 0.3 or _level.in_stairwell():
+		return  # in the start room or a stairwell: no swipes until we're through the door
 	if _player.in_cover:
 		_took_cover = true
 		_cover_frames += 1
@@ -196,8 +196,8 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d time=%.1f" % [scenario, reason,
-			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _level._clock.elapsed])
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d time=%.1f" % [scenario, reason,
+			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"), _level._clock.elapsed])
 	get_tree().quit()
 
 

@@ -52,6 +52,8 @@ enum TargetingMode {
 @export var branch_out_length: float = 14.0
 ## A route heading for the end angles back toward the centre line, then runs straight for this long.
 @export var converge_tail: float = 6.0
+## Branches you didn't take stay as scenery until you're this far past the split (no pop-out).
+@export var fork_scenery_keep: float = 45.0
 ## How much of a locked-down branch you can see behind its door.
 @export var locked_stub_length: float = 10.0
 ## How long a lockdown door takes to slam shut.

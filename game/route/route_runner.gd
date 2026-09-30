@@ -97,9 +97,14 @@ func _show_if_changed(opts: Array[Dictionary]) -> void:
 	if not RouteGraph.is_choice(opts):
 		_clear_prompt()
 		return
+	# What the prompt shows for each exit (UP / DOWN for stairs), carried along as "shown".
 	var labels := PackedStringArray()
+	var shown: Array[Dictionary] = []
 	for o in opts:
-		labels.append(String(o.get("label", o["to"])))
+		var s := o.duplicate()
+		s["shown"] = graph.edge_label(current, o)
+		labels.append(s["shown"])
+		shown.append(s)
 	if labels != _shown_labels:
 		_shown_labels = labels
-		junction_approaching.emit(opts)
+		junction_approaching.emit(shown)

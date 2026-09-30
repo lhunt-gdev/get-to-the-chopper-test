@@ -123,7 +123,13 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Tap to start:** the character breaks into a run and bashes the door open (it swings off its hinges; the camera jolts), straight into the lobby. No swipes until you're through the door.
 - The player model gets a head with a face and a backpack, so front and back read during the pan.
 - Retry skips the pan (fast loop) but still starts in the room and bashes the door.
+- **Playtest (2026-09-30, user):** pan, door bash and shake feel good; keep the current values.
 - Numbers in `Tuning` (Intro).
+
+### PROPOSED — Halfway markers (user decision, 2026-09-30)
+- Roughly halfway through BUILDING MAIN FLOOR and the SERVICE TUNNEL: a wall right across the area (floor to ceiling) with a double door in the middle. You burst through it like the other doors (both leaves swing open, the camera shakes). Main floor: an ordinary pair of office doors. Tunnel: barred "prison" style double gates. Not a checkpoint, just a marker. None on the rooftops.
+- The doorway spans the middle 3 lanes; the outer two are wall. If you're in an outer lane you're steered into the nearest middle lane over the last few metres, so you never hit the wall (proposed).
+- **Clear zone (proposed rule):** nothing within `RouteGraph.MARKER_CLEAR` (6 m) either side of a marker. Authored as `"marker": {"at": ...}` in `route.json`; validation enforces the clear zone, and no markers on open-sky areas.
 
 ### OPEN — Missions / story stages (Point 10)
 - The full game has story stages that act as missions. Each reuses the main / up / down structure with its own layout, obstacle looks, trooper sets and chopper time. The test level is one mission.
@@ -148,6 +154,28 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - **Wire span rule (user rule):** low-hanging live wires only ever span 3 or 4 neighbouring lanes, never all 5. Enforced by route validation.
 - **Details (user, 2026-09-30):** now and then an office door, a window or a notice board on the side walls. Loose paper scattered on the floor around the low filing cabinets, as if they were tipped over or shoved aside in a hurry.
 - **The main route is all office for now (user decision):** the player starts inside the building. COMPOUND EXIT becomes MAIN FLOOR LOBBY and AIRFIELD GATE becomes MAIN FLOOR EXIT, both office-themed; no road sections on the main route. The helipad stays outside. Stairs up to the ROOFTOPS and down to the TUNNEL now start inside the building (consistent with the stacked tiers). The compound and gate themes are kept for later levels.
+- **ROOFTOPS (user spec, 2026-09-30):**
+  - No walls, no ceiling: a night sky with stars and a city skyline. A few 3D buildings in the distance for scale and depth, and neighbouring buildings' roofs on either side.
+  - Floor: gravelly roofing.
+  - Jump: ventilation shafts.
+  - Slide: pipes, but a rooftop type: a double pipe (two stacked), taking the same room as one.
+  - Build notes (proposed): a low lip marks the roof edge so the drop reads. The stairwell coming up from the building keeps its walls. Fog thins on the rooftops (and camera draw distance grows) so the city is visible; it thickens again indoors. With no walls, pipe runs stand on floor supports at both ends.
+  - Cover (user spec): box cover = small ventilation openings with light steam coming out. ~~Wall cover = electrical boxes and open vent stacks~~. **Revised after first look (user): wall cover = rooftop air-conditioning units** (a big grilled unit with fans on top, on a base frame).
+  - Rooftop pipes that reach the roof edge go over the lip and down the side of the building; mid-roof ends keep a stand (user).
+  - ~~Stair bulkheads: a full-width rooftop stair hut over the stairs.~~ Replaced by the stairwells below.
+- **Stairwells (user decision, 2026-09-30), all stairs:**
+  - A door at the entrance and the exit of every staircase (the office door from the start room). You burst through each with the same swing-open and camera shake.
+  - The stairs are **one lane wide**, in the lane you took them from. You're locked to that lane (no swipes) until you're out of the exit door; the area opens back to 5 lanes after it. On the roof, the stairwell's top is a narrow one-lane hut with the door.
+  - ~~Dark inside: near-black fog and a dithered darkness ring.~~ The user didn't like it after playing.
+  - **CCTV view (user decision):** in a stairwell the view hard-cuts to a security camera high in the far corner, looking back down the flight at the player. It looks like CCTV footage: grainy black and white with a slight green tint, scanlines, noise, a slightly curved lens, a vignette and the odd glitch line, with a camera number, a blinking REC and a timestamp. It cuts straight back to the normal camera as you burst out of the exit door.
+  - **Playtest (user):** the CCTV effect looks good for now.
+  - **Indoor stairwells are built in (user):** where a stairwell opens into an area with walls and a ceiling, it's seamless. Its walls and the wall over the door go up to that area's ceiling. At the entrance, a wall piece joins the stairwell to the side wall. At the exit, a full end wall runs across the area, side wall to side wall and floor to ceiling, with the door in it. The rooftop end stays a free-standing stair hut.
+  - **Stairwells themed per area (user):** the concrete stair hut only suits the rooftops. Each end of a stairwell (its walls and its door) takes the look of the area it opens into. Main floor: office wall panels and the office door. Rooftops: the concrete-block hut and a steel roof-access door. Tunnel: the tunnel's tiled wall and a steel door. Every area sets its own (`stair_wall` / `stair_door` in `THEMES`), so each new level must too.
+  - **No pop-in or pop-out, no gaps (user, playtest):** branches you don't take stay standing as scenery until you're `fork_scenery_keep` past the split (they just stop being part of the game). Walls meet at every bend (a short joining wall, plus floor and ceiling patches). A stairwell only leaves a hole in the side wall (or roof lip) where its narrow tube passes through, not a wide opening. City scenery around the rooftops is only built on the side facing away from the rest of the mission, so it never ends up inside another area. Below the skyline the dark city carries on down, so its bottom edge never shows (e.g. from the helipad).
+  - **Clear exit (user rule):** no obstacle or trooper within `RouteGraph.STAIR_EXIT_CLEAR` (20 m: the 12 m flight plus 8 m) of the start of an area you reach by stairs. Enforced by route validation.
+  - **No tripwires on the rooftops (user rule):** there are no walls to mount the emitters on. Enforced by route validation.
+- **Alarm boxes sit on a metal control box standing on the floor (user),** everywhere, never floating.
+- **Fork cues (user decision):** the lane paint and floor arrows are removed; the overhead sign and the HUD prompt are enough. Stairs read **UP** or **DOWN** rather than the area they lead to; straight-on routes keep their name; ladders say LADDER.
 - **Walls at the edge join the outer wall (user rule, every level):** a wall cover in an edge lane runs right into the side wall, with no gap.
 - **Proposed for the rest, needs the user's pick:** COMPOUND: concrete road barriers, boom-gate arms, sandbags / crates / concrete walls. SERVICE TUNNEL: valve housings, pipes, concrete pillars / metal crates. ROOFTOPS: low parapets or skylight frames, antenna cables / water pipes, air-con units / water tanks. AIRFIELD GATE: barriers, boom-gate arms, sandbags / containers.
 

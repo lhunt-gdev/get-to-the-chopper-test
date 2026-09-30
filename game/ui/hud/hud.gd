@@ -145,6 +145,43 @@ func _ready() -> void:
 	GameState.alert_changed.connect(_on_alert_changed)
 
 
+var _cctv: ColorRect
+var _cctv_mat: ShaderMaterial
+var _cctv_label: Label
+var _cctv_rec: Label
+
+
+## Stairwell security-camera footage over the game view (off when cam is empty). The labels read
+## like a CCTV monitor: camera number and timestamp top left, a blinking REC top right.
+func set_cctv(on: bool, cam: String, seconds: float) -> void:
+	if _cctv == null:
+		_cctv_mat = ShaderMaterial.new()
+		_cctv_mat.shader = preload("res://assets/shaders/psx/cctv.gdshader")
+		_cctv = ColorRect.new()
+		_cctv.material = _cctv_mat
+		_cctv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_cctv.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(_cctv)
+		move_child(_cctv, 0)  # under the rest of the HUD: only the game view looks like footage
+		_cctv_label = _label(Vector2(8, 64), HORIZONTAL_ALIGNMENT_LEFT)
+		_cctv_rec = _label(Vector2(0, 64), HORIZONTAL_ALIGNMENT_LEFT)
+		_cctv_rec.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		_cctv_rec.offset_left = -52
+		_cctv_rec.offset_top = 64
+		_cctv_rec.modulate = Color("ff4b3a")
+	_cctv.visible = on
+	_cctv_label.visible = on
+	_cctv_rec.visible = on
+	if not on:
+		return
+	_cctv_mat.set_shader_parameter("amount", 1.0)
+	_cctv_mat.set_shader_parameter("time", Time.get_ticks_msec() / 1000.0)
+	var t := int(seconds)
+	_cctv_label.text = "%s\n03:%02d:%02d:%02d" % [cam, 14 + t / 60, t % 60, int(fmod(seconds, 1.0) * 24.0)]
+	_cctv_rec.text = "● REC" if fmod(seconds, 1.0) < 0.6 else ""
+	_cctv_label.modulate = Color("d8f0d8")
+
+
 func setup(tuning: Tuning) -> void:
 	_fire = FireButton.new()
 	_fire.tuning = tuning
@@ -222,7 +259,7 @@ func show_junction(options: Array[Dictionary]) -> void:
 		for o in options:
 			if RouteGraph.side_of(o) == side:
 				parts.append("[color=#%s]%s[/color]" % [side_color(side).lightened(0.3).to_html(false),
-						route_prompt(String(o.get("label", o["to"])), side_dir(side))])
+						route_prompt(String(o.get("shown", o.get("label", o["to"]))), side_dir(side))])
 	_junction.text = "[center]%s[/center]" % "    ".join(parts)
 
 

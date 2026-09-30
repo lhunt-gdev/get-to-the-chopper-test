@@ -30,11 +30,19 @@ const CROSSING_WINDOW := 4.0
 const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "trooper": 0.5}
 const MIN_GAP := 1.0
 ## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
-const LOOKS := {"pipe": ["pipe", "wires"], "box": ["crate", "desk", "cabinet"], "barrier": ["cabinet", "blockade"]}
+const LOOKS := {"pipe": ["pipe", "wires", "double_pipe"], "box": ["crate", "desk", "cabinet", "roof_vent"],
+		"barrier": ["cabinet", "blockade", "vent"]}
 ## Themes whose slide obstacles are live wires (unless "look" says otherwise).
 const WIRE_THEMES := ["office"]
 ## Live wires span only this many neighbouring lanes (user rule: never all 5).
 const WIRE_LANES := [3, 4]
+## Nothing (obstacle or trooper) this close to the start of an area reached by stairs: the flight
+## is 12 m, then you burst out of the exit door (user rule: not too close to the exit).
+const STAIR_EXIT_CLEAR := 20.0
+## Nothing (obstacle or trooper) this close either side of a halfway marker's double door.
+const MARKER_CLEAR := 6.0
+## Areas with no walls to mount tripwire emitters on (user rule: no tripwires on the rooftops).
+const NO_TRIPWIRE_THEMES := ["rooftops"]
 const VIAS := ["corridor", "stairs", "ladder"]
 ## Height tiers, in tier steps (Tuning.tier_height metres each).
 const TIERS := {"roof": 1, "ground": 0, "underground": -1}
@@ -76,6 +84,13 @@ func node_data(id: StringName) -> Dictionary:
 
 func length_of(id: StringName) -> float:
 	return float(node_data(id).get("length", 50.0))
+
+
+## What a fork shows for an exit: UP or DOWN for stairs; otherwise its label (or the area name).
+func edge_label(from: StringName, edge: Dictionary) -> String:
+	if via_of(edge) == "stairs":
+		return "UP" if tier_of(StringName(edge.get("to", ""))) > tier_of(from) else "DOWN"
+	return String(edge.get("label", display_name(StringName(edge.get("to", "")))))
 
 
 ## What the area is called on screen: its "name", or its id in capitals.
@@ -248,6 +263,8 @@ func validate() -> PackedStringArray:
 				var contiguous := not span.is_empty() and int(span[-1]) - int(span[0]) == span.size() - 1
 				if not contiguous or not span.size() in WIRE_LANES:
 					problems.append("node '%s': live wires at %s m must span 3 or 4 neighbouring lanes" % [id, ob.get("at")])
+			if kind == "tripwire" and n.get("theme", "") in NO_TRIPWIRE_THEMES:
+				problems.append("node '%s': no tripwires here (nothing to mount the emitters on)" % id)
 			if ob.has("look") and not String(ob["look"]) in LOOKS.get(kind, []):
 				problems.append("node '%s': %s at %s m can't look like '%s'" % [id, kind, ob.get("at"), ob["look"]])
 			if not kind in OBSTACLE_KINDS:
@@ -265,6 +282,15 @@ func validate() -> PackedStringArray:
 					var behind := float(e.get("at", 0)) - float(ob.get("at", 0))
 					if int(e.get("lane", -1)) in lanes and behind >= 0.0 and behind < WALL_TROOPER_CLEARANCE:
 						problems.append("node '%s': trooper at %s m is hidden right behind the wall at %s m" % [id, e.get("at"), ob.get("at")])
+		if n.has("marker"):
+			var m_at := float(n["marker"].get("at", -1))
+			if n.get("theme", "") in NO_TRIPWIRE_THEMES:
+				problems.append("node '%s': no halfway marker on open roofs" % id)
+			if m_at <= 0.0 or m_at >= length:
+				problems.append("node '%s': halfway marker at %s m is outside the area" % [id, m_at])
+			for thing in n.get("obstacles", []) + n.get("enemies", []):
+				if absf(float(thing.get("at", 0)) - m_at) < MARKER_CLEAR:
+					problems.append("node '%s': %s at %s m is too close to the halfway marker at %s m" % [id, thing.get("kind"), thing.get("at"), m_at])
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
 		for e in n.get("enemies", []):
@@ -303,6 +329,11 @@ func validate() -> PackedStringArray:
 			# Tiers are stacked (underground, ground, roof): you can only climb or drop one at a time.
 			if absi(tier_of(to) - tier_of(id)) > 1:
 				problems.append("%s -> %s: stairs and ladders only move one level (tunnels - main level - rooftops)" % [id, to])
+			if via == "stairs":
+				var dest := node_data(to)
+				for thing in dest.get("obstacles", []) + dest.get("enemies", []):
+					if float(thing.get("at", 0)) < STAIR_EXIT_CLEAR:
+						problems.append("%s -> %s: %s at %s m is too close to the stairs' exit door" % [id, to, thing.get("kind"), thing.get("at")])
 			if via == "ladder" and String(node_data(to).get("end", "")) == "":
 				problems.append("%s -> %s: ladders only lead to the end of the level" % [id, to])
 			if side == "straight" and (edge.has("min_alert") or edge.has("max_alert")):

@@ -16,6 +16,10 @@ extends Node3D
 const ROUTE_PATH := "res://game/levels/prototype_slice/route.json"
 const START_ALERT := 1
 const CEILING_Y := 4.6
+## A halfway marker's double doorway spans this many middle lanes.
+const MARKER_LANES := 3
+## How far before a halfway marker the outer lanes are steered into its doorway.
+const MARKER_FUNNEL := 8.0
 
 ## Obstacle kinds: size, height off the ground, look, and how to get past it.
 ## "tex" names a PsxTextures function; without one the obstacle is flat "color".
@@ -34,20 +38,27 @@ const KINDS := {
 ## How each area looks, picked by "theme" in route.json. Placeholder art, so you can tell where you are.
 ## Optional keys: "wall_tex" / "ceiling_tex" name a PsxTextures function (instead of a wall
 ## pattern); "skins" give this area its own look for obstacles, e.g. {"pipe": "duct"}; the
-## gameplay (jump / slide / cover) never changes.
+## gameplay (jump / slide / cover) never changes. "stair_wall" / "stair_door": how a stairwell looks
+## where it opens into this area (every area should set its own).
 const THEMES := {
 	"compound": {"wall": "blocks", "color": Color("77776c"), "height": 3.0, "ground": "asphalt"},
 	# MGS PS1-style complex / office interior.
-	"office": {"wall": "office", "wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "color": Color("6f7a82"),
+	"office": {"wall": "office", "wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "stair_wall": "office_wall", "stair_door": "door", "color": Color("6f7a82"),
 			"height": CEILING_Y, "ground": "office_floor", "ceiling": true, "wall_decor": true,
 			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_metal": "cabinet", "box_wood": "desk",
 					"wall": "office_wall"}},
-	"rooftops": {"wall": "brick", "color": Color("7a4a38"), "height": 1.0, "ground": "concrete"},
-	"tunnel": {"wall": "tile", "color": Color("4d5c52"), "height": 3.2, "ground": "asphalt", "ceiling": true},
+	# Open night sky: no walls or ceiling, a low lip at the roof edge, the city all around.
+	"rooftops": {"wall": "brick", "stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "gravel", "no_walls": true,
+			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"),
+			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "roof_vent",
+					"wall_looks": ["hvac"]}},
+	"tunnel": {"wall": "tile", "stair_wall": "tunnel_wall", "stair_door": "steel_door", "marker_door": "bars", "color": Color("4d5c52"), "height": 3.2, "ground": "asphalt", "ceiling": true},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
 	"helipad": {"wall": "blocks", "color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
 }
 const DEAD_END_COLOR := Color("b03a2e")
+## Render layer for stairwell structure (see _build_stairwell). Everything else is on layer 1.
+const STAIRWELL_LAYER := 2
 const GUARD_COLOR := Color("4a5260")
 
 @export var tuning: Tuning
@@ -74,10 +85,21 @@ var _shot_tracer: MeshInstance3D
 var _clock: ExtractionClock
 ## How far the camera follows the player across the road (0.6 normally, 1.0 beside a wall).
 var _camera_follow := 0.6
+var _sky: Node3D
+var _env: Environment
+var _fog_default := 0.045
+## Branches not taken, kept as scenery until the player passes: {node, gone_at}.
+var _retired: Array[Dictionary] = []
+## Was the camera on a stairwell's security camera last frame? (So leaving it is a hard cut back.)
+var _was_cctv := false
+var _fog_color_default := Color(0.16, 0.17, 0.15)
 ## The opening camera pan: seconds left (0 once it's over or skipped).
 var _intro_left := 0.0
-## The start room's door, until the player bashes through it.
-var _door: Node3D = null
+## Doors you burst through (the start room and every stairwell): {node, at, owner, seg}. Each
+## bursts open when you reach it, but only on the route you're actually on.
+var _doors: Array[Dictionary] = []
+## Halfway markers built so far: {at (route distance), seg}. See _build_marker.
+var _markers: Array[Dictionary] = []
 ## Camera jolt after the door bash (1 at impact, decays to 0).
 var _shake := 0.0
 ## Where the camera would be without any shake (the smoothed follow position).
@@ -104,6 +126,7 @@ func _ready() -> void:
 	_input.fire_pressed.connect(_on_fire)
 	_input.fire_released.connect(set_fire_held.bind(false))
 	_hud.setup(tuning)
+	_build_sky()
 	_clock = ExtractionClock.new()
 	_clock.name = "ExtractionClock"
 	_clock.tuning = tuning
@@ -155,15 +178,100 @@ func _physics_process(delta: float) -> void:
 		if _intro_left <= 0.0 and not _started:
 			_hud.show_title()  # the pan has ended behind the player: TAP TO START
 	if GameState.run_active:
-		if _door != null and _player.distance_run() >= -0.9:
-			_bash_door()
+		for door in _doors:
+			if not door.get("done", false) and _player.distance_run() >= door["at"] - 0.9 and door["seg"].get("promoted", false):
+				door["done"] = true
+				_bash_door(door["node"], door.get("swing", 1.0))
+			_funnel_to_markers()
 		_runner.update(_player.distance_run(), _player.lane)
 		_check_obstacles()
 		_update_combat(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
+	_update_environment(delta)
 	_hud.show_clock(_clock.fraction(), _clock.lift_fraction())
+
+
+## The night sky and the far city skyline, centred on the camera so they always stay far away.
+## Only seen where there's no ceiling or walls in the way (the rooftops, the helipad).
+func _build_sky() -> void:
+	_sky = Node3D.new()
+	_sky.name = "Sky"
+	add_child(_sky)
+	var dome := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 140.0
+	sphere.height = 280.0
+	sphere.radial_segments = 16
+	sphere.rings = 8
+	dome.mesh = sphere
+	var sky_mat := StandardMaterial3D.new()
+	sky_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sky_mat.cull_mode = BaseMaterial3D.CULL_FRONT  # we're inside it
+	sky_mat.disable_fog = true
+	sky_mat.albedo_texture = PsxTextures.night_sky()
+	sky_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	dome.material_override = sky_mat
+	_sky.add_child(dome)
+	var ring := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 120.0
+	cyl.bottom_radius = 120.0
+	cyl.height = 40.0
+	cyl.radial_segments = 24
+	cyl.cap_top = false
+	cyl.cap_bottom = false
+	ring.mesh = cyl
+	var ring_mat := StandardMaterial3D.new()
+	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	ring_mat.disable_fog = true
+	ring_mat.albedo_texture = PsxTextures.skyline()
+	ring_mat.uv1_scale = Vector3(6, 1, 1)
+	ring_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	ring.material_override = ring_mat
+	ring.position.y = -8.0  # the skyline's tops sit a little above eye level
+	_sky.add_child(ring)
+	# Below the skyline, the dark city carries on all the way down: no bottom edge to see.
+	var base := MeshInstance3D.new()
+	var base_cyl := CylinderMesh.new()
+	base_cyl.top_radius = 119.0
+	base_cyl.bottom_radius = 119.0
+	base_cyl.height = 120.0
+	base_cyl.radial_segments = 24
+	base_cyl.cap_top = false
+	base.mesh = base_cyl
+	var base_mat := StandardMaterial3D.new()
+	base_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	base_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	base_mat.disable_fog = true
+	base_mat.albedo_color = Color("080a10")
+	base.material_override = base_mat
+	base.position.y = -8.0 - 20.0 - 60.0 + 2.0  # its top tucks just inside the skyline's lower edge
+	_sky.add_child(base)
+	_camera.far = 170.0
+	_env = $WorldEnvironment.environment
+	_fog_default = _env.fog_density
+	_fog_color_default = _env.fog_light_color
+
+
+## Fog thins out where there's open sky (so you can see the city), and closes in again indoors.
+func _update_environment(delta: float) -> void:
+	if _env == null:
+		return
+	var seg := _segment_at(_player.distance_run())
+	var theme := _theme(seg["id"]) if _player.distance_run() >= 0.0 else THEMES["office"]
+	var fog: float = theme.get("fog", _fog_default)
+	var fog_color: Color = theme.get("fog_color", _fog_color_default)
+	var k := clampf(delta * 1.5, 0.0, 1.0)
+	_env.fog_density = lerpf(_env.fog_density, fog, k)
+	_env.fog_light_color = _env.fog_light_color.lerp(fog_color, k)
+	# In a stairwell the view is the stairwell's security camera.
+	var seg_here := _segment_at(_player.distance_run())
+	_hud.set_cctv(in_stairwell(), "CAM %02d" % (absi(hash(seg_here["id"])) % 40 + 1), _clock.elapsed)
+	_sky.global_position = _camera.global_position
 
 
 ## The chopper's stages: a message under the clock, the helicopter lifting, and THE CHOPPER LEFT.
@@ -311,7 +419,7 @@ func _segment_shape(id: StringName, edge: Dictionary, from_id: StringName) -> Di
 		dy = (_graph.tier_of(id) - _graph.tier_of(from_id)) * tuning.tier_height
 		if dy != 0.0:
 			ramp_len = tuning.ladder_length if RouteGraph.via_of(edge) == "ladder" else absf(dy) * tuning.stairs_run
-	return {"id": id, "length": _graph.length_of(id), "dy": dy, "ramp_len": ramp_len, "edge": edge,
+	return {"id": id, "from_id": from_id, "length": _graph.length_of(id), "dy": dy, "ramp_len": ramp_len, "edge": edge,
 			"branches": {}, "locked": {}}
 
 
@@ -348,9 +456,12 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 	if _is_authored_fork(id):
 		road_end = maxf(seg["ramp_len"], length - tuning.decision_lead - tuning.fork_cue_length)
 	_build_surfaces(node, seg, road_end, 0.0, 0.0)
+	if _theme(id).get("sky", false):
+		_build_city(node, seg)
 
 	var authored_lanes := 5
 	var jumps_seen := 0  # jump obstacles alternate through the area's looks
+	var walls_seen := 0  # so do walls
 	for ob: Dictionary in _graph.node_data(id).get("obstacles", []):
 		var kind: Dictionary = KINDS.get(ob["kind"], {})
 		if kind.is_empty():
@@ -397,9 +508,16 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				x0 = -side_wall
 			if sorted[-1] == tuning.lane_count - 1:
 				x1 = side_wall
-			var w := _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
-			w.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
-			one_piece = w
+			var wall_looks: Array = _theme(id).get("skins", {}).get("wall_looks", [])
+			if not wall_looks.is_empty():
+				# Outdoors with no walls to lean on: an electrical cabinet or a stack of open vent pipes.
+				one_piece = _build_roof_wall(node, seg, at, x0, x1, wall_looks[walls_seen % wall_looks.size()])
+				walls_seen += 1
+			else:
+				var w := _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
+				w.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
+				one_piece = w
+		var box_look: String = ob.get("look", _skin(id, "box_look", "")) if ob["kind"] == "box" else ""
 		for lane: int in lanes:
 			var x := _player.lane_x(lane)
 			var mesh: Node3D = one_piece
@@ -407,6 +525,10 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				_scatter_papers(node, seg, at, x, lane)
 			if jump_look == "blockade":
 				mesh = _build_blockade(node, seg, at, x, lane)
+			elif jump_look == "vent":
+				mesh = _build_vent_shaft(node, seg, at, x)
+			elif box_look == "roof_vent":
+				mesh = _build_roof_vent(node, seg, at, x, lane)
 			elif mesh == null:
 				var m := _item_box(node, seg, at, Vector3(x, y, 0), size, kind.get("color", Color.WHITE))
 				if tex_name != "":
@@ -438,11 +560,17 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		box.at = start + float(a["at"])
 		var s := -1.0 if String(a.get("side", "left")) == "left" else 1.0
 		node.add_child(box)
-		box.transform = _frame_at(seg, float(a["at"])) * Transform3D(Basis(Vector3.UP, -s * PI / 2.0),
-				Vector3(s * (tuning.lane_count * tuning.lane_width / 2.0 + 0.45), 1.8, 0))  # out on the kerb, in front of the pillars
+		var ax := s * (tuning.lane_count * tuning.lane_width / 2.0 + 0.45)  # out on the kerb, in front of the pillars
+		box.transform = _frame_at(seg, float(a["at"])) * Transform3D(Basis(Vector3.UP, -s * PI / 2.0), Vector3(ax, 1.8, 0))
 		box.destroyed.connect(_on_alarm_destroyed.bind(id))
+		# It sits on a metal control box standing on the floor, never floating (user).
+		var stand := _item_box(node, seg, float(a["at"]), Vector3(ax, 0.675, 0), Vector3(0.55, 1.35, 0.72), Color.WHITE)
+		stand.material_override = PsxMaterials.textured(PsxTextures.cabinet(), Vector2(3, 2))
+		_item_box(node, seg, float(a["at"]), Vector3(ax, 1.37, 0), Vector3(0.6, 0.05, 0.78), Color("4e5358"))  # top plate
 		_combatants.append({"node": box, "owner": node, "seg": seg})
 
+	if _graph.node_data(id).has("marker"):
+		_build_marker(node, seg, float(_graph.node_data(id)["marker"].get("at", length / 2.0)))
 	if not _has_straight(id) and _graph.end_type(id) == "":
 		_build_dead_end(node, seg)
 	if RouteGraph.via_of(edge) == "ladder":
@@ -498,6 +626,7 @@ func _discard(branch: Dictionary) -> void:
 	var node: Node3D = branch["node"]
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
+	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
 	node.queue_free()
 
 
@@ -507,16 +636,29 @@ func _on_segment_needed(id: StringName, _start: float, edge: Dictionary) -> void
 	var chosen: Dictionary = branches.get(key, {})
 	if chosen.is_empty():  # shouldn't happen; build it now rather than fail
 		chosen = _make_segment(id, _current["end"], edge, _frame_after(_current, edge), _current["id"])
+	# The branches you didn't take stay standing as scenery until you're well past (nothing pops
+	# out in front of you); they just stop being part of the game.
+	var gone_at: float = _current["end"] + tuning.fork_scenery_keep
 	for k in branches:
 		if k != key:
-			_discard(branches[k])
+			_retire(branches[k]["node"], gone_at)
 	for k in _current["locked"]:
-		_current["locked"][k].queue_free()
+		_retire(_current["locked"][k], gone_at)
 	branches.clear()
 	_current["locked"].clear()
-	# Now that there's only one way on, close up the walls you could see the other branches through.
-	_rebuild_walls(chosen, 0.0, 0.0)
 	_promote(chosen)
+
+
+## A branch not taken: its obstacles, troopers and doors go at once; its scenery stays until
+## the player reaches `gone_at`.
+func _retire(node: Node3D, gone_at: float) -> void:
+	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
+	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
+	for c in _combatants:
+		if c["owner"] == node and c["node"] is RifleTrooper:
+			c["node"].visible = false  # nobody left standing on a road you didn't take
+	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
+	_retired.append({"node": node, "gone_at": gone_at})
 
 
 ## Entering a side branch: move the player into the branch's own lanes (same spot in the world).
@@ -564,18 +706,53 @@ func _cut_openings(seg: Dictionary, branch: Dictionary) -> void:
 			sides[RouteGraph.side_of(edge)] = true
 	var open_l := 0.0
 	var open_r := 0.0
+	var holes := {}
 	if side == "straight":
-		open_l = clear if sides.has("left") else 0.0
-		open_r = clear if sides.has("right") else 0.0
-	elif _turns(branch["edge"]):
+		# A corridor branch needs the wall open where it overlaps; a stairwell only needs a hole
+		# where its narrow tube passes through the wall, so nothing else shows the outside.
+		for edge in _graph.all_next(seg["id"]):
+			if not _turns(edge):
+				continue
+			var s := -1 if RouteGraph.side_of(edge) == "left" else 1
+			if RouteGraph.via_of(edge) == "stairs":
+				holes[s] = _stairwell_hole(seg, edge, branch, s)
+			elif s < 0:
+				open_l = clear
+			else:
+				open_r = clear
+	elif _turns(branch["edge"]) and RouteGraph.via_of(branch["edge"]) != "stairs":
 		open_l = clear if side == "right" else 0.0
 		open_r = clear if side == "left" else 0.0
+	branch["holes"] = holes
 	_rebuild_walls(branch, open_l, open_r)
 
 
+## Where a stairwell leaving `seg` by `edge` passes through the side wall of `road` (on `side`):
+## the stretch [from, to] metres along `road` to leave out of that wall.
+func _stairwell_hole(seg: Dictionary, edge: Dictionary, road: Dictionary, side: int) -> Vector2:
+	var tube := _frame_after(seg, edge)
+	var road_xf: Transform3D = road["node"].transform
+	var wall_x := side * (tuning.lane_count * tuning.lane_width / 2.0 + 1.0)
+	var lane_x := _player.lane_x(_handover_lanes(edge).y)
+	var hw := tuning.lane_width / 2.0 + 0.25
+	var zs: Array[float] = []
+	for off in [-hw, hw]:
+		# Two points along this stairwell wall, in the road's own frame; where does it cross the wall?
+		var a := road_xf.affine_inverse() * (tube * Vector3(lane_x + off, 0, 0))
+		var b := road_xf.affine_inverse() * (tube * Vector3(lane_x + off, 0, -10.0))
+		if absf(b.x - a.x) > 0.001:
+			var t := (wall_x - a.x) / (b.x - a.x)
+			zs.append(-lerpf(a.z, b.z, t))
+	if zs.is_empty():
+		return Vector2.ZERO
+	return Vector2(maxf(0.0, zs.min() - 0.15), zs.max() + 0.15)
+
+
 func _rebuild_walls(seg: Dictionary, open_l: float, open_r: float) -> void:
-	if seg.get("open", Vector2(-1, -1)) == Vector2(open_l, open_r):
+	var key := "%s %s" % [Vector2(open_l, open_r), seg.get("holes", {})]
+	if seg.get("walls_key", "") == key:
 		return
+	seg["walls_key"] = key
 	seg["open"] = Vector2(open_l, open_r)
 	var node: Node3D = seg["node"]
 	var old := node.get_node_or_null("Walls")
@@ -607,15 +784,24 @@ func _build_surfaces(parent: Node3D, seg: Dictionary, road_end: float, open_l: f
 			var lane := 0 if RouteGraph.side_of(seg["edge"]) == "left" else tuning.lane_count - 1
 			_strip(parent, seg, piece.x, piece.y, _player.lane_x(lane), tuning.lane_width, 0.0, PsxTextures.stairs(), 1.0)
 		elif on_ramp:
-			_strip(parent, seg, piece.x, piece.y, 0.0, road_w, 0.0, PsxTextures.stairs(), float(tuning.lane_count))
+			# Stairs are one lane wide, in the lane you took them from (user decision).
+			_strip(parent, seg, piece.x, piece.y, _player.lane_x(_stair_lane(seg)), tuning.lane_width, 0.0, PsxTextures.stairs(), 1.0)
 		else:
 			_strip(parent, seg, piece.x, piece.y, 0.0, road_w, 0.0, _ground(id), float(tuning.lane_count), _ground_tile(id))
-	# Patches under each bend, so the outside corner has no gap.
+	if _is_stairs(seg):
+		_build_stairwell(parent, seg)
+	# Patches under (and over) each bend, from both legs' side, so the outside corner has no gap
+	# in the floor or the ceiling.
+	var has_ceiling: bool = theme.get("ceiling", false)
 	for i in range(1, seg["legs"].size()):
 		var j: float = seg["legs"][i]["start"]
 		if j >= ramp:
-			var patch := _plane(parent, Vector2(road_w + 2.0, 4.0), Vector3.ZERO, _ground(id), Vector2(tuning.lane_count, 1.0))
-			patch.transform = _frame_in_leg(seg, i - 1, j) * Transform3D(Basis.IDENTITY, Vector3(0, -0.02, 0))
+			for k in [i - 1, i]:
+				var patch := _plane(parent, Vector2(road_w + 2.0, 6.0), Vector3.ZERO, _ground(id), Vector2(tuning.lane_count, 1.5))
+				patch.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis.IDENTITY, Vector3(0, -0.02, 0))
+				if has_ceiling:
+					var cap := _plane(parent, Vector2(road_w + 2.0, 6.0), Vector3.ZERO, _ceiling_texture(theme), Vector2(road_w / 2.0, 3.0))
+					cap.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis(Vector3.FORWARD, PI), Vector3(0, CEILING_Y + 0.02, 0))
 	if theme.get("ceiling", false):
 		for piece in _pieces(seg, ramp, length):
 			var roof := _strip(parent, seg, piece.x, piece.y, 0.0, road_w + 2.0, CEILING_Y,
@@ -628,6 +814,35 @@ func _build_surfaces(parent: Node3D, seg: Dictionary, road_end: float, open_l: f
 	_build_walls(walls, seg, open_l, open_r)
 
 
+## [from, to] with a hole (a stairwell passing through the wall) taken out.
+static func _wall_spans(from: float, to: float, hole: Vector2) -> Array[Vector2]:
+	if hole.y <= hole.x or hole.y <= from or hole.x >= to:
+		return [Vector2(from, to)]
+	var out: Array[Vector2] = []
+	if hole.x > from:
+		out.append(Vector2(from, hole.x))
+	if hole.y < to:
+		out.append(Vector2(hole.y, to))
+	return out
+
+
+## At each bend, the walls of the two legs don't meet on the outside of the corner. A short wall
+## (height h, from the floor) joins them, from where one leg's wall ends to where the next begins.
+func _join_bends(parent: Node3D, seg: Dictionary, side: int, wx: float, from: float, h: float, mat: Material) -> void:
+	for k in range(1, seg["legs"].size()):
+		var j: float = seg["legs"][k]["start"]
+		if j < from:
+			continue
+		var a := _frame_in_leg(seg, k - 1, j) * Vector3(wx, 0, 0)
+		var b := _frame_in_leg(seg, k, j) * Vector3(wx, 0, 0)
+		var l := a.distance_to(b)
+		if l < 0.05:
+			continue
+		var m := _box(parent, Vector3(0.25, h, l + 0.3), Vector3.ZERO, Color.WHITE)
+		m.material_override = mat
+		m.transform = Transform3D(Basis.looking_at((b - a).normalized(), Vector3.UP), (a + b) / 2.0 + Vector3(0, h / 2.0, 0))
+
+
 ## Kerbs, walls and pillars either side, leaving the first open_l / open_r metres open.
 func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float) -> void:
 	var length: float = seg["length"]
@@ -637,19 +852,27 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 	var h: float = theme["height"]
 	var wall_tex := _wall_texture(theme)
 	var via := RouteGraph.via_of(seg["edge"])
+	if theme.get("no_walls", false):
+		_build_roof_edges(parent, seg, open_l, open_r)
+		return
 	for side in [-1, 1]:
 		var open := open_l if side < 0 else open_r
 		var wx: float = side * (road_w / 2.0 + 1.0)
-		for piece in _pieces(seg, open, length):
-			var on_ramp: bool = piece.y <= ramp + 0.001 and ramp > 0.0
-			if on_ramp and via == "ladder":
-				continue  # no walls by a ladder: you can see the drop
-			if not on_ramp:
+		var hole: Vector2 = seg.get("holes", {}).get(side, Vector2.ZERO)
+		for span in _wall_spans(open, length, hole):
+			for piece in _pieces(seg, span.x, span.y):
+				var on_ramp: bool = piece.y <= ramp + 0.001 and ramp > 0.0
+				if on_ramp:
+					continue  # a ladder has none (you see the drop); stairs have their own stairwell
 				_strip(parent, seg, piece.x, piece.y, side * (road_w / 2.0 + 0.5), 1.0, 0.02, PsxTextures.concrete(), 1.0, 2.0)
-			_wall(parent, seg, piece.x, piece.y, wx, side, h, wall_tex)
+				_wall(parent, seg, piece.x, piece.y, wx, side, h, wall_tex)
+		# At every bend, a short wall joins the two legs' walls, so no gap shows the outside.
+		_join_bends(parent, seg, side, wx, maxf(open, ramp), h, PsxMaterials.textured(wall_tex, Vector2(1, h / 2.0)))
 		# Pillars every 5 m, alternating light and dark, give a sense of speed. Big ones hide bend corners.
 		var ph := maxf(h, 1.2)
 		for i in range(ceili(maxf(open, ramp) / 5.0) * 5, int(length), 5):
+			if i > hole.x - 0.5 and i < hole.y + 0.5:
+				continue
 			var c: Color = theme["color"].lightened(0.25) if (i / 5) % 2 == 0 else theme["color"].darkened(0.5)
 			_item_box(parent, seg, i, Vector3(side * (road_w / 2.0 + 0.8), ph / 2.0, 0), Vector3(0.35, ph, 0.35), c)
 		for k in range(1, seg["legs"].size()):
@@ -658,6 +881,152 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 				_item_box(parent, seg, j, Vector3(side * (road_w / 2.0 + 1.0), ph / 2.0, 0), Vector3(1.0, ph, 1.0), theme["color"].darkened(0.5))
 		if theme.get("wall_decor", false):
 			_wall_decor(parent, seg, side, maxf(open, ramp), length)
+
+
+func _is_stairs(seg: Dictionary) -> bool:
+	return RouteGraph.via_of(seg["edge"]) == "stairs" and seg["ramp_len"] > 0.0
+
+
+## The one lane the stairs run in: the lane you come onto them from.
+func _stair_lane(seg: Dictionary) -> int:
+	return _handover_lanes(seg["edge"]).y
+
+
+## True while the player is in a stairwell (between its doors): locked to the stair lane, and dark.
+func in_stairwell() -> bool:
+	var d := _player.distance_run()
+	var seg := _segment_at(d)
+	var into: float = d - seg["start"]
+	return _is_stairs(seg) and into > -0.2 and into < seg["ramp_len"] + 0.3
+
+
+## A narrow stairwell over a one-lane flight: concrete-block walls either side, a roof slab over it,
+## and a door at each end that you burst through (the office door from the start room). Where the
+## stairs meet the roof, the top of the stairwell is a narrow rooftop hut around that door.
+func _build_stairwell(outer: Node3D, seg: Dictionary) -> void:
+	# All of it on its own render layer: as you burst out, the camera leaves it out while it pulls
+	# back to its normal spot behind you (which is inside this stairwell for a few metres).
+	var parent := Node3D.new()
+	parent.name = "Stairwell"
+	outer.add_child(parent)
+	_build_stairwell_parts(parent, seg)
+	_set_render_layer(parent, STAIRWELL_LAYER)
+
+
+func _set_render_layer(node: Node, layer: int) -> void:
+	if node is VisualInstance3D:
+		node.layers = layer
+	for c in node.get_children():
+		_set_render_layer(c, layer)
+
+
+func _build_stairwell_parts(parent: Node3D, seg: Dictionary) -> void:
+	var ramp: float = seg["ramp_len"]
+	var x := _player.lane_x(_stair_lane(seg))
+	var hw := tuning.lane_width / 2.0 + 0.05
+	var bottom := minf(0.0, seg["dy"])
+	# Each end looks like the area it opens into (user): the entrance half like where you came
+	# from, the exit half like where you're going. Indoors, each half reaches that area's
+	# ceiling, so it's built into the building; on the roof, the half is a hut 3 m tall.
+	var themes := [_theme(seg.get("from_id", seg["id"])), _theme(seg["id"])]
+	var ends := [0.0, ramp]
+	var tops: Array[float] = []
+	for half in 2:
+		var indoor: bool = themes[half].get("ceiling", false)
+		tops.append(_height(seg, ends[half]) + (CEILING_Y if indoor else 3.0))
+	for half in 2:
+		var top: float = tops[half]
+		var hmat := PsxMaterials.textured(_stair_wall_texture(themes[half]), Vector2(2, 3))
+		var hz := ramp * (0.25 + 0.5 * half)  # centre of this half
+		var hh := _height(seg, hz)
+		for side in [-1, 1]:
+			_item_box(parent, seg, hz, Vector3(x + side * (hw + 0.1), (bottom + top) / 2.0 - hh, 0),
+					Vector3(0.2, top - bottom, ramp / 2.0 + 0.2), Color.WHITE).material_override = hmat
+		_item_box(parent, seg, hz, Vector3(x, top + 0.12 - hh, 0), Vector3(tuning.lane_width + 0.7, 0.24, ramp / 2.0 + 0.3), Color.WHITE) \
+				.material_override = PsxMaterials.textured(PsxTextures.concrete(), Vector2(2, 2))
+	# A dim lamp inside, over the exit door.
+	_item_box(parent, seg, ramp - 0.5, Vector3(x, 2.35, 0), Vector3(0.3, 0.08, 0.15), Color.WHITE).material_override = \
+			PsxMaterials.glow(Color("c8b890"))
+	_build_door(parent, seg, 0.2, x, tops[0], themes[0])
+	_build_door(parent, seg, ramp - 0.2, x, tops[1], themes[1])
+	# Built in: joined to the walls of the area at each indoor end.
+	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
+	# The stairwell is in the branch's inside lane; the side wall it runs out through (the area
+	# you came from) is toward the branch's middle.
+	var outward := -1.0 if x > 0.0 else 1.0
+	if not themes[0].get("no_walls", false):
+		# Entrance: close the gap between the stairwell and the side wall it runs out through.
+		var mat0 := PsxMaterials.textured(_stair_wall_texture(themes[0]), Vector2(1, 2))
+		_item_box(parent, seg, 0.2, Vector3(x + outward * (hw + 0.2 + 0.75), tops[0] / 2.0, 0), Vector3(1.5, tops[0], 0.25), Color.WHITE) \
+				.material_override = mat0
+	if not themes[1].get("no_walls", false):
+		# Exit: an end wall right across the area, side wall to side wall, with the door in it.
+		var mat1 := PsxMaterials.textured(_stair_wall_texture(themes[1]), Vector2(3, 2))
+		var h1 := _height(seg, ramp - 0.2)
+		var wall_h: float = tops[1] - h1
+		for span in [Vector2(-edge, x - hw - 0.1), Vector2(x + hw + 0.1, edge)]:
+			if span.y - span.x > 0.05:
+				_item_box(parent, seg, ramp - 0.2, Vector3((span.x + span.y) / 2.0, wall_h / 2.0, 0), Vector3(span.y - span.x, wall_h, 0.3), Color.WHITE) \
+						.material_override = mat1
+
+
+func _stair_wall_texture(theme: Dictionary) -> Texture2D:
+	return _obstacle_texture(theme.get("stair_wall", "roof_hut"))
+
+
+## A doorway across one lane at `into` (lintel up to `top`), with a door on a hinge that the
+## player bursts through (see _doors).
+func _build_door(parent: Node3D, seg: Dictionary, into: float, x: float, top: float, theme: Dictionary) -> void:
+	var dw := tuning.lane_width - 0.1
+	var dh := 2.3
+	var h := _height(seg, into)
+	var frame := _frame_at(seg, into)
+	_item_box(parent, seg, into, Vector3(x, (dh + top - h) / 2.0, 0), Vector3(tuning.lane_width + 0.3, top - h - dh, 0.25), Color.WHITE) \
+			.material_override = PsxMaterials.textured(_stair_wall_texture(theme), Vector2(2, 2))
+	# A door frame, so the doorway reads as part of the wall it's in.
+	for s in [-1, 1]:
+		_item_box(parent, seg, into, Vector3(x + s * (dw / 2.0 + 0.04), dh / 2.0, 0), Vector3(0.08, dh, 0.3), Color("3a3e42"))
+	_item_box(parent, seg, into, Vector3(x, dh + 0.04, 0), Vector3(dw + 0.16, 0.08, 0.3), Color("3a3e42"))
+	var hinge := Node3D.new()
+	parent.add_child(hinge)
+	hinge.transform = frame * Transform3D(Basis.IDENTITY, Vector3(x - dw / 2.0, 0, 0))
+	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
+	panel.material_override = PsxMaterials.textured(_obstacle_texture(theme.get("stair_door", "door")), Vector2(3, 2))
+	if not seg.get("no_doors", false):  # a locked-down branch's doors never open
+		_doors.append({"node": hinge, "at": seg["start"] + into, "owner": seg["node"], "seg": seg})
+
+
+## Open-sky areas (rooftops): no side walls. The roofing runs out to a low lip at the edge, and
+## below it the building's own front drops away into the dark. The stairwell coming up from the
+## building (the ramp) keeps its walls.
+func _build_roof_edges(parent: Node3D, seg: Dictionary, open_l: float, open_r: float) -> void:
+	var length: float = seg["length"]
+	var ramp: float = seg["ramp_len"]
+	var road_w := tuning.lane_count * tuning.lane_width
+	var theme := _theme(seg["id"])
+	var via := RouteGraph.via_of(seg["edge"])
+	var edge := road_w / 2.0 + 1.0
+	var lip: float = theme.get("lip", 0.3)
+	for side in [-1, 1]:
+		var open := open_l if side < 0 else open_r
+		var hole: Vector2 = seg.get("holes", {}).get(side, Vector2.ZERO)
+		for piece in _pieces(seg, open, length):
+			var on_ramp: bool = piece.y <= ramp + 0.001 and ramp > 0.0
+			if on_ramp:
+				continue  # the stairwell (or ladder) has its own walls
+			# Roofing out to the edge, the lip, and the building's front dropping away below.
+			_strip(parent, seg, piece.x, piece.y, side * (road_w / 2.0 + 0.5), 1.0, 0.0, PsxTextures.gravel(), 1.0, tuning.lane_width)
+			var i := _leg_index(seg, (piece.x + piece.y) / 2.0)
+			var mid := (piece.x + piece.y) / 2.0
+			var l: float = piece.y - piece.x
+			for span in _wall_spans(piece.x, piece.y, hole):  # the lip stops where a stairwell crosses it
+				var sm := (span.x + span.y) / 2.0
+				_item_box(parent, seg, sm, Vector3(side * (edge - 0.1), lip / 2.0, 0), Vector3(0.2, lip, span.y - span.x + 0.2), Color("5e5e58"))
+			var front := _plane(parent, Vector2(l, 30.0), Vector3.ZERO, PsxTextures.building_night(), Vector2(l / 4.0, 30.0 / 4.0), PlaneMesh.FACE_Z)
+			var leg: Dictionary = seg["legs"][i]
+			front.transform = Transform3D(leg["xf"].basis * Basis(Vector3.UP, -side * PI / 2.0),
+					leg["xf"] * Vector3(side * edge, _height(seg, mid) - 15.0, -(mid - leg["start"])))
+		_join_bends(parent, seg, side, side * (edge - 0.1), maxf(open, ramp), lip, PsxMaterials.flat(Color("5e5e58")))
 
 
 ## Office walls: now and then a door, a window or a notice board between the pillars.
@@ -782,6 +1151,35 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 					var down := _item_box(parent, seg, at, Vector3(ex, y / 2.0, 0), Vector3(0.3, y, 0.3), Color.WHITE)
 					down.material_override = PsxMaterials.textured(PsxTextures.rust_pipe(), Vector2(3, 2))
 					_item_box(parent, seg, at, Vector3(ex, 0.04, 0), Vector3(0.55, 0.08, 0.55), metal)  # foot
+		elif kind == "double_pipe":
+			# Rooftop pipework: two pipes, one above the other, in the room one pipe takes, clamped
+			# at every lane joint and standing on a frame at each end (no walls up here).
+			var pipe_mat := PsxMaterials.textured(PsxTextures.rust_pipe(), Vector2(3, 2))
+			for dy in [-0.09, 0.09]:
+				var p := _item_box(parent, seg, at, Vector3((x0 + x1) / 2.0, y + dy, 0), Vector3(x1 - x0, 0.15, 0.15), Color.WHITE)
+				p.material_override = pipe_mat
+				beam = p
+			for k in range(1, run.size()):
+				_item_box(parent, seg, at, Vector3(_player.lane_x(run[k]) - tuning.lane_width / 2.0, y, 0), Vector3(0.1, 0.44, 0.24), metal)
+			var open_sky: bool = _theme(seg["id"]).get("no_walls", false)
+			for e in ends:
+				var ex: float = e["x"]
+				if e["wall"] and open_sky:
+					# At the roof edge: carry on over the lip, bend, and run down the side of the building.
+					var out := ex + signf(ex) * 0.35
+					for dy in [-0.09, 0.09]:
+						var ext := _item_box(parent, seg, at, Vector3((ex + out) / 2.0, y + dy, 0), Vector3(absf(out - ex) + 0.15, 0.15, 0.15), Color.WHITE)
+						ext.material_override = pipe_mat
+						var drop := 6.0
+						var down := _item_box(parent, seg, at, Vector3(out + signf(ex) * (0.09 + dy), y + dy - drop / 2.0, 0),
+								Vector3(0.15, drop, 0.15), Color.WHITE)
+						down.material_override = pipe_mat
+					_item_box(parent, seg, at, Vector3(ex, y, 0), Vector3(0.1, 0.44, 0.24), metal)  # clamp over the lip
+					continue
+				_item_box(parent, seg, at, Vector3(ex, y, 0), Vector3(0.12, 0.44, 0.26), metal)  # end clamp
+				for dz in [-0.14, 0.14]:
+					_item_box(parent, seg, at, Vector3(ex, (y + 0.2) / 2.0, dz), Vector3(0.07, y + 0.2, 0.07), metal)  # legs
+				_item_box(parent, seg, at, Vector3(ex, 0.03, 0), Vector3(0.3, 0.06, 0.5), metal)  # foot
 		elif kind == "wires":
 			beam = _build_wires(parent, seg, at, y, ends)
 		else:
@@ -901,6 +1299,123 @@ func _scatter_papers(parent: Node3D, seg: Dictionary, at: float, x: float, lane:
 		sheet.transform = frame * Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), p)
 
 
+## Rooftop ventilation shaft (a jump obstacle): a louvred galvanised box with a cap on top.
+func _build_vent_shaft(parent: Node3D, seg: Dictionary, at: float, x: float) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var body := _box(holder, Vector3(tuning.lane_width * 0.86, 0.44, 0.55), Vector3(0, 0.22, 0), Color.WHITE)
+	body.material_override = PsxMaterials.textured(PsxTextures.vent(), Vector2(3, 2))
+	_box(holder, Vector3(tuning.lane_width * 0.92, 0.06, 0.62), Vector3(0, 0.47, 0), Color("6e7478"))  # cap
+	return holder
+
+
+## Rooftop box cover: a small ventilation opening (a hooded vent), with light steam coming out.
+func _build_roof_vent(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var body := _box(holder, Vector3(0.9, 0.95, 0.9), Vector3(0, 0.475, 0), Color.WHITE)
+	body.material_override = PsxMaterials.textured(PsxTextures.vent(), Vector2(3, 2))
+	for c in 4:  # corner posts holding the hood up, leaving the opening between
+		_box(holder, Vector3(0.06, 0.2, 0.06), Vector3(0.4 * (1 if c % 2 else -1), 1.05, 0.4 * (1 if c < 2 else -1)), Color("5e6468"))
+	_box(holder, Vector3(1.05, 0.08, 1.05), Vector3(0, 1.19, 0), Color("6e7478"))  # hood
+	var steam := Steam.new(4, hash([seg["id"], at, lane]))
+	holder.add_child(steam)
+	steam.position = Vector3(0, 1.1, 0)
+	return holder
+
+
+## Rooftop wall cover (no walls up here): a big air-conditioning unit across x0..x1, on a base
+## frame, with condenser grilles down the sides and fans on top. You stand behind it like a wall.
+func _build_roof_wall(parent: Node3D, seg: Dictionary, at: float, x0: float, x1: float, _look: String) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at)
+	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
+	x0 = maxf(x0, -edge + 0.3)  # stays on the roof, inside the lip
+	x1 = minf(x1, edge - 0.3)
+	var w := x1 - x0
+	var cx := (x0 + x1) / 2.0
+	var dark := Color("3a3a36")
+	_box(holder, Vector3(w, 0.14, 1.25), Vector3(cx, 0.07, 0), dark)  # base frame
+	var body := _box(holder, Vector3(w - 0.08, 1.5, 1.15), Vector3(cx, 0.14 + 0.75, 0), Color.WHITE)
+	body.material_override = PsxMaterials.textured(PsxTextures.hvac(), Vector2(3, 2))
+	_box(holder, Vector3(w, 0.06, 1.2), Vector3(cx, 1.67, 0), Color("7e7e74"))  # top panel
+	var fans := maxi(1, roundi(w / 1.3))
+	for i in fans:
+		var fx := x0 + w * (i + 0.5) / fans
+		var fan := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.45
+		cyl.bottom_radius = 0.45
+		cyl.height = 0.2
+		cyl.radial_segments = 10
+		fan.mesh = cyl
+		fan.material_override = PsxMaterials.flat(Color("2e2e2a"))
+		holder.add_child(fan)
+		fan.position = Vector3(fx, 1.8, 0)
+		for r in 2:  # the grille over the fan
+			var bar := _box(holder, Vector3(0.86, 0.03, 0.05), Vector3(fx, 1.91, 0), Color("8a8a80"))
+			bar.rotation.y = r * PI / 2.0
+	# Refrigerant pipes from the unit down into the roof.
+	for dz in [-0.2, 0.0]:
+		_box(holder, Vector3(0.07, 0.9, 0.07), Vector3(x0 + 0.2, 0.6, 0.62 + dz * 0.3), Color("a86a3a"))
+	return holder
+
+
+## The city around an open-sky area: neighbouring buildings' roofs close by on both sides (some
+## higher, most lower, with a water tank or air-con unit), and taller towers further out for depth.
+func _build_city(parent: Node3D, seg: Dictionary) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(seg["id"])
+	var length: float = seg["length"]
+	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
+	var facade := PsxMaterials.textured(PsxTextures.building_night(), Vector2(3, 2))
+	var roofing := PsxMaterials.textured(PsxTextures.gravel(), Vector2(6, 4))
+	# Keep neighbours clear of the stairwell coming up and of any side exit leading off this roof.
+	var exit_sides := {}
+	for e in _graph.all_next(seg["id"]):
+		if _turns(e):
+			exit_sides[-1 if RouteGraph.side_of(e) == "left" else 1] = true
+	# The rest of the mission (the building, the other routes) runs along the centre line (world
+	# x = 0). Only build city on the side of this roof facing away from it, so nothing ends up
+	# inside another area.
+	var mid_frame: Transform3D = seg["node"].transform * _frame_at(seg, length / 2.0)
+	for side in [-1, 1]:
+		var outward := (mid_frame * Vector3(side * 20.0, 0, 0)).x - mid_frame.origin.x
+		if signf(outward) != signf(mid_frame.origin.x) and absf(mid_frame.origin.x) > 1.0:
+			continue
+		if absf(mid_frame.origin.x) <= 1.0:
+			continue  # right over the centre line: no room either side
+		var z: float = seg["ramp_len"] + 2.0
+		var until := length - tuning.decision_lead - tuning.fork_cue_length if exit_sides.has(side) else length
+		while z < until:
+			var blen := rng.randf_range(12.0, 24.0)
+			var inner := edge + rng.randf_range(3.0, 6.0)
+			var bw := rng.randf_range(8.0, 14.0)
+			var top := rng.randf_range(-3.5, 1.2)
+			var mid := z + blen / 2.0
+			var at := clampf(mid, 0.0, length)
+			var x: float = side * (inner + bw / 2.0)
+			_item_box(parent, seg, at, Vector3(x, top - 20.0, mid - at), Vector3(bw, 40.0, blen), Color.WHITE).material_override = facade
+			_item_box(parent, seg, at, Vector3(x, top + 0.02, mid - at), Vector3(bw, 0.04, blen), Color.WHITE).material_override = roofing
+			if rng.randf() < 0.5:
+				_item_box(parent, seg, at, Vector3(x, top + 1.2, mid - at), Vector3(1.8, 2.4, 1.8), Color("5a4a3a"))  # water tank
+			else:
+				_item_box(parent, seg, at, Vector3(x + rng.randf_range(-2, 2), top + 0.6, mid - at), Vector3(2.2, 1.2, 1.4), Color("8a9094"))  # air-con
+			z += blen + rng.randf_range(2.0, 5.0)
+		# Towers further out, for scale.
+		var tz := rng.randf_range(0.0, 12.0)
+		while tz < length:
+			var fw := rng.randf_range(8.0, 16.0)
+			var tall := rng.randf_range(6.0, 34.0)
+			var tx: float = side * rng.randf_range(32.0, 70.0)
+			var t_at := clampf(tz, 0.0, length)
+			_item_box(parent, seg, t_at, Vector3(tx, tall / 2.0 - 25.0, tz - t_at), Vector3(fw, tall + 50.0, fw), Color.WHITE).material_override = facade
+			tz += rng.randf_range(14.0, 26.0)
+
+
 ## A makeshift blockade across one lane: a door on its side, with a chair tipped over behind it.
 ## Still exactly a jump obstacle; just a different look (main floor).
 func _build_blockade(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
@@ -959,7 +1474,7 @@ func _build_start_room(seg: Dictionary) -> void:
 	hinge.transform = _frame_at(seg, 0.0) * Transform3D(Basis.IDENTITY, Vector3(dx - dw / 2.0, 0, front))
 	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
 	panel.material_override = PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
-	_door = hinge
+	_doors.append({"node": hinge, "at": 0.0, "owner": seg["node"], "seg": seg})
 	# Furniture, clear of the player's lane.
 	_item_box(room, seg, -8.0, Vector3(_player.lane_x(0), 0.38, 0), Vector3(1.4, 0.76, 0.8), Color.WHITE).material_override = \
 			PsxMaterials.textured(PsxTextures.desk(), Vector2(3, 2))
@@ -972,16 +1487,75 @@ func _build_start_room(seg: Dictionary) -> void:
 			PsxMaterials.textured(PsxTextures.notice_board(), Vector2(3, 2))
 
 
+## Halfway through the area (not a checkpoint): a wall right across, side wall to side wall and up
+## to the ceiling, with a double door over the middle lanes that you burst through. Office doors on
+## the main floor, barred gates in the tunnel. The outer lanes are funnelled in just before it.
+func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
+	var theme := _theme(seg["id"])
+	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
+	var top: float = CEILING_Y if theme.get("ceiling", false) else maxf(theme["height"], 3.0)
+	var ow := MARKER_LANES * tuning.lane_width - 0.1  # the doorway
+	var dh := 2.5
+	var wall := PsxMaterials.textured(_stair_wall_texture(theme), Vector2(3, 2))
+	for s in [-1, 1]:
+		var w := edge - ow / 2.0 - 0.08
+		_item_box(parent, seg, at, Vector3(s * (ow / 2.0 + 0.08 + w / 2.0), top / 2.0, 0), Vector3(w, top, 0.3), Color.WHITE).material_override = wall
+		_item_box(parent, seg, at, Vector3(s * (ow / 2.0 + 0.04), dh / 2.0, 0), Vector3(0.08, dh, 0.34), Color("3a3e42"))
+	_item_box(parent, seg, at, Vector3(0, (dh + top) / 2.0, 0), Vector3(ow + 0.16, top - dh, 0.3), Color.WHITE).material_override = wall
+	_item_box(parent, seg, at, Vector3(0, dh + 0.04, 0), Vector3(ow + 0.16, 0.08, 0.34), Color("3a3e42"))
+	var barred := String(theme.get("marker_door", "office")) == "bars"
+	var leaf_w := ow / 2.0
+	var door_mat := PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
+	var bar := Color("2c3034")
+	for s in [-1, 1]:
+		# Hinged at the doorway's side, the leaf reaching in to meet the other one in the middle.
+		var hinge := Node3D.new()
+		parent.add_child(hinge)
+		hinge.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(s * ow / 2.0, 0, 0))
+		var mid: float = -s * leaf_w / 2.0
+		if barred:
+			# A prison gate: a frame of flat rails with round-ish bars between.
+			for y in [0.12, dh / 2.0, dh - 0.12]:
+				_box(hinge, Vector3(leaf_w - 0.04, 0.1, 0.06), Vector3(mid, y, 0), bar)
+			for e in [0.05, leaf_w - 0.05]:
+				_box(hinge, Vector3(0.08, dh - 0.04, 0.06), Vector3(-s * e, dh / 2.0, 0), bar)
+			var bars := 5
+			for i in bars:
+				var bx: float = -s * (leaf_w * (i + 1) / (bars + 1))
+				_box(hinge, Vector3(0.04, dh - 0.1, 0.04), Vector3(bx, dh / 2.0, 0), Color("4a4f54"))
+		else:
+			var panel := _box(hinge, Vector3(leaf_w - 0.03, dh - 0.02, 0.07), Vector3(mid, dh / 2.0, 0), Color.WHITE)
+			panel.material_override = door_mat
+			if s > 0:
+				panel.scale.x = -1.0  # the right leaf is the left one mirrored: handle in the middle
+			_box(hinge, Vector3(0.05, 0.3, 0.1), Vector3(-s * (leaf_w - 0.15), 1.05, 0), Color("b8b08a"))  # push bar
+		if not seg.get("no_doors", false):
+			# Each leaf swings away from you round its own hinge: the left one way, the right the other.
+			_doors.append({"node": hinge, "at": seg["start"] + at, "owner": seg["node"], "seg": seg, "swing": -s})
+	_markers.append({"at": seg["start"] + at, "seg": seg})
+
+
+## The outer lanes can't get through a halfway marker's doorway: just before one, anyone out
+## there is steered in to the nearest lane that can.
+func _funnel_to_markers() -> void:
+	if _player.in_cover:
+		return
+	var d := _player.distance_run()
+	var mid: int = (tuning.lane_count - 1) / 2
+	var reach := (MARKER_LANES - 1) / 2
+	for m in _markers:
+		if m["seg"].get("promoted", false) and d >= m["at"] - MARKER_FUNNEL and d <= m["at"] + 0.3:
+			_player.lane = clampi(_player.lane, mid - reach, mid + reach)
+
+
 ## Out of the room: the door flies open off its hinge and the camera jolts.
-func _bash_door() -> void:
-	var door := _door
-	_door = null
+func _bash_door(door: Node3D, swing: float = 1.0) -> void:
 	RunLog.record_event("door_bash", {})
 	_shake = 1.0
 	# Swings away from the player, out into the lobby, as if shouldered open.
 	var tween := door.create_tween()
-	tween.tween_property(door, "rotation:y", door.rotation.y + 1.9, 0.16).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(door, "rotation:z", door.rotation.z + 0.1, 0.16)
+	tween.tween_property(door, "rotation:y", door.rotation.y + 1.9 * swing, 0.16).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(door, "rotation:z", door.rotation.z + 0.1 * swing, 0.16)
 
 
 ## Where there is no way straight on: a wall across the middle lanes. Only the outer lanes (ladders) get out.
@@ -1018,6 +1592,8 @@ func _build_locked_stub(seg: Dictionary, edge: Dictionary, slam: bool) -> Node3D
 	var xf := _frame_after(seg, edge)
 	stub["legs"] = _plan_legs(stub, xf)  # planned at full length, so it bends where the real one would
 	stub["length"] = minf(stub["length"], tuning.locked_stub_length)
+	stub["start"] = seg["end"]
+	stub["no_doors"] = true  # you can't go this way, so its stairwell doors never open
 	var node := Node3D.new()
 	node.name = "Locked_" + String(edge["to"])
 	_world.add_child(node)
@@ -1027,18 +1603,21 @@ func _build_locked_stub(seg: Dictionary, edge: Dictionary, slam: bool) -> Node3D
 	var clear := _overlap_clear()
 	_build_surfaces(node, stub, stub["length"], clear if side == "right" else 0.0, clear if side == "left" else 0.0)
 
-	var road_w := tuning.lane_count * tuning.lane_width
-	var h := maxf(_theme(stub["id"])["height"], 3.0)
+	# The shutter covers the way in: the whole road, or just the one-lane stairwell door.
+	var stairs := _is_stairs(stub)
+	var width := tuning.lane_width + 0.4 if stairs else tuning.lane_count * tuning.lane_width + 2.2
+	var cx := _player.lane_x(_stair_lane(stub)) if stairs else 0.0
+	var h := 2.6 if stairs else maxf(_theme(stub["id"])["height"], 3.0)
 	var door := Node3D.new()
 	door.name = "LockdownDoor"
 	node.add_child(door)
-	var f := _frame_at(stub, 1.5)
-	door.transform = f
-	var panel := _box(door, Vector3(road_w + 2.2, h, 0.3), Vector3(0, h / 2.0, 0), Color.WHITE)
+	var f := _frame_at(stub, 0.05 if stairs else 1.5)
+	door.transform = f * Transform3D(Basis.IDENTITY, Vector3(cx, 0, 0))
+	var panel := _box(door, Vector3(width, h, 0.3), Vector3(0, h / 2.0, 0), Color.WHITE)
 	panel.material_override = PsxMaterials.textured(PsxTextures.wall("corrugated", Color("5a5f66")), Vector2(3, 2))
-	var band := _box(door, Vector3(road_w + 2.25, 0.5, 0.34), Vector3(0, 0.25, 0), Color.WHITE)
+	var band := _box(door, Vector3(width + 0.05, 0.5, 0.34), Vector3(0, 0.25, 0), Color.WHITE)
 	band.material_override = PsxMaterials.textured(PsxTextures.hazard(), Vector2(6, 2))
-	door.add_child(_sign_label("LOCKDOWN", DEAD_END_COLOR, road_w * 0.8, Vector3(0, h * 0.6, 0.2)))
+	door.add_child(_sign_label("LOCKDOWN", DEAD_END_COLOR, width * 0.8, Vector3(0, h * 0.6, 0.2)))
 	door.set_meta("closed_y", door.position.y)
 	door.set_meta("open_y", door.position.y + h + 0.3)
 	if slam:
@@ -1083,17 +1662,10 @@ func _build_fork_cue() -> void:
 	var opts := _graph.available_next(id, GameState.alert_level)
 	var choice := RouteGraph.is_choice(opts)
 
-	# Lanes. With only the straight road open, the road is just road again.
-	for lane in tuning.lane_count:
-		var tex := _ground(id)
-		if choice:
-			var edge := RouteGraph.pick_edge(lane, tuning.lane_count, opts)
-			if not edge.is_empty():
-				var side := RouteGraph.side_of(edge)
-				tex = PsxTextures.fork_lane(Hud.side_dir(side), Hud.side_color(side))
-		for piece in _pieces(seg, cue_start, length):
-			_strip(cue, seg, piece.x, piece.y, _player.lane_x(lane), tuning.lane_width, 0.0, tex, 1.0,
-					_ground_tile(id) if tex == _ground(id) else 4.0)
+	# The floor up to the split is plain floor (user decision: no lane paint or arrows; the sign
+	# overhead and the prompt say where each lane goes).
+	for piece in _pieces(seg, cue_start, length):
+		_strip(cue, seg, piece.x, piece.y, 0.0, road_w, 0.0, _ground(id), float(tuning.lane_count), _ground_tile(id))
 	if not choice:
 		return
 
@@ -1109,7 +1681,7 @@ func _build_fork_cue() -> void:
 		var x1 := _player.lane_x(group["to"]) + tuning.lane_width / 2.0
 		var edge: Dictionary = group["edge"]
 		var color := DEAD_END_COLOR if edge.is_empty() else Hud.side_color(RouteGraph.side_of(edge))
-		var text := "DEAD END" if edge.is_empty() else String(edge.get("label", edge["to"]))
+		var text := "DEAD END" if edge.is_empty() else _graph.edge_label(id, edge)
 		_item_box(cue, seg, at, Vector3((x0 + x1) / 2.0, post_h - 0.6, 0), Vector3(x1 - x0 - 0.15, 0.8, 0.12), color.darkened(0.55))
 		var label := _sign_label(text, color, x1 - x0 - 0.2, Vector3.ZERO)
 		cue.add_child(label)
@@ -1154,12 +1726,14 @@ func _ground(id: StringName) -> Texture2D:
 			return PsxTextures.asphalt()
 		"office_floor":
 			return PsxTextures.office_floor()
+		"gravel":
+			return PsxTextures.gravel()
 	return PsxTextures.concrete()
 
 
-## How long one floor tile is along the road (office tiles are square, one lane wide).
+## How long one floor tile is along the road (office tiles and roofing are square, one lane wide).
 func _ground_tile(id: StringName) -> float:
-	return tuning.lane_width if _theme(id)["ground"] == "office_floor" else 4.0
+	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "gravel"] else 4.0
 
 
 func _wall_texture(theme: Dictionary) -> Texture2D:
@@ -1219,6 +1793,12 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.desk()
 		"door":
 			return PsxTextures.door()
+		"steel_door":
+			return PsxTextures.steel_door()
+		"roof_hut":
+			return PsxTextures.wall("blocks", Color("7c7c72"))
+		"tunnel_wall":
+			return PsxTextures.wall("tile", Color("4d5c52"))
 	push_warning("Unknown obstacle texture '%s'" % name)
 	return PsxTextures.concrete()
 
@@ -1279,6 +1859,10 @@ func _despawn_behind() -> void:
 	var d := _player.distance_run()
 	while _segments.size() > 1 and _segments[0]["end"] < d - 15.0:
 		_segments.pop_front()["node"].queue_free()
+	for r in _retired:
+		if d > r["gone_at"] and is_instance_valid(r["node"]):
+			r["node"].queue_free()
+	_retired = _retired.filter(func(r: Dictionary) -> bool: return is_instance_valid(r["node"]) and d <= r["gone_at"])
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["at"] > d - 10.0)
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool:
 		return is_instance_valid(c["node"]) and c["node"].at > d - 10.0)
@@ -1509,8 +2093,8 @@ func _on_run_ended(reason: StringName) -> void:
 func _on_swipe(dir: Vector2i) -> void:
 	if not _started:
 		start_run()
-	elif GameState.run_active and _player.distance_run() > 0.3:  # no swipes until through the door
-		_player.handle_swipe(dir)
+	elif GameState.run_active and _player.distance_run() > 0.3 and not in_stairwell():
+		_player.handle_swipe(dir)  # (no swipes until through the start door, or in a stairwell)
 
 
 func _on_tap(pos: Vector2) -> void:
@@ -1566,7 +2150,7 @@ func _update_camera(delta: float) -> void:
 	var into: float = d - seg["start"]
 	var f: Transform3D = seg["node"].global_transform * _frame_at(seg, into)
 	var x := _player.track_x
-	var near_wall := false
+	var near_wall := in_stairwell()  # a narrow stairwell: the camera goes right behind you
 	for o in _obstacles:
 		if o["kind"] == "wall" and o["at"] > d - 7.0 and o["at"] < d + 1.5:
 			near_wall = true
@@ -1574,6 +2158,24 @@ func _update_camera(delta: float) -> void:
 	_camera_follow = move_toward(_camera_follow, 1.0 if near_wall else 0.6, delta * 3.0)
 	var eye_local := Vector3(x * _camera_follow, 3.4, 5.5)
 	var look_local := Vector3(x * 0.8, 1.0, -10.0)
+	# In a stairwell: hard cut to its security camera, high in the far corner, looking back down
+	# the flight at the player. Hard cut back to the normal camera when you're out.
+	if in_stairwell():
+		var ramp: float = seg["ramp_len"]
+		var cam_at := ramp - 0.7
+		var lane_x := _player.lane_x(_stair_lane(seg))
+		var cf: Transform3D = seg["node"].global_transform * _frame_at(seg, cam_at)
+		var cam_pos := cf * Vector3(lane_x + 0.45, 2.1, 0)
+		_camera.global_transform = Transform3D(Basis.IDENTITY, cam_pos).looking_at(
+				_player.global_position + Vector3(0, 1.0, 0), Vector3.UP)
+		_cam_base = _camera.global_transform
+		_was_cctv = true
+		return
+	var snap := _was_cctv
+	_was_cctv = false
+	# Just out of a stairwell, the play camera behind you is still inside it: leave it out for now.
+	var just_out: bool = _is_stairs(seg) and into > seg["ramp_len"] - 0.4 and into < seg["ramp_len"] + 6.5
+	_camera.cull_mask = 0xFFFFF & ~STAIRWELL_LAYER if just_out else 0xFFFFF
 	if _intro_left > 0.0 and not _started:
 		# Opening pan: from in front of the player (looking back at them) round the side to the
 		# play camera behind them, where it ends exactly.
@@ -1590,7 +2192,7 @@ func _update_camera(delta: float) -> void:
 	var look := f * look_local
 	var target := Transform3D(Basis.IDENTITY, eye).looking_at(look, Vector3.UP)
 	# The smoothed camera, kept apart from the shake so the smoothing can't swallow it.
-	_cam_base = _cam_base.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))
+	_cam_base = target if snap else _cam_base.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))
 	_camera.global_transform = _cam_base
 	if _shake > 0.0:
 		# Impact: a punch forward, then a hard shake with a little roll, settling over ~0.45 s.

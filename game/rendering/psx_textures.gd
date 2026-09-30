@@ -47,23 +47,6 @@ static func stairs() -> Texture2D:
 	return _finish("stairs", img)
 
 
-## A road lane painted in its route colour, with an arrow pointing to where it goes.
-## dir: -1 left, 0 straight on, 1 right.
-static func fork_lane(dir: int, color: Color) -> Texture2D:
-	var key := "fork_%d_%s" % [dir, color.to_html()]
-	if _cache.has(key):
-		return _cache[key]
-	var img := _start(key, ROAD.lerp(color, 0.3), 0.035)
-	var paint := color.lightened(0.15)
-	for y in SIZE:
-		for x in SIZE:
-			if _arrow(dir, x, y):
-				img.set_pixel(x, y, paint)
-			elif x < 2 and y < 16:  # keep the dashed lane line
-				img.set_pixel(x, y, Color("b8b49a"))
-	return _finish(key, img)
-
-
 ## Walls, one tile per 2 m x 2 m. pattern: "blocks", "brick", "corrugated" or "tile".
 static func wall(pattern: String, color: Color) -> Texture2D:
 	var key := "wall_%s_%s" % [pattern, color.to_html()]
@@ -165,6 +148,119 @@ static func office_ceiling() -> Texture2D:
 	return _finish("office_ceiling", img)
 
 
+## Gravel roofing: dark grey with light and dark pebbles, and a faint membrane seam down the
+## left edge (lanes meet there, so the lanes still read).
+static func gravel() -> Texture2D:
+	if _cache.has("gravel"):
+		return _cache["gravel"]
+	var img := _start("gravel", Color("4c4c48"), 0.05)
+	var rng := _rng("gravel_pebbles")
+	for i in 120:
+		var x := rng.randi_range(0, SIZE - 1)
+		var y := rng.randi_range(0, SIZE - 1)
+		img.set_pixel(x, y, Color("6e6c66") if i % 3 else Color("2c2c2a"))
+	for y in SIZE:
+		img.set_pixel(0, y, Color("3a3a37"))
+	return _finish("gravel", img)
+
+
+## Rooftop ventilation shaft: galvanised sheet with louvre slats.
+static func vent() -> Texture2D:
+	if _cache.has("vent"):
+		return _cache["vent"]
+	var img := _start("vent", Color("8c9296"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3:
+				img.set_pixel(x, y, Color("5e6468"))
+			elif y % 5 == 0:
+				img.set_pixel(x, y, Color("3c4044"))  # louvre shadow
+			elif y % 5 == 1:
+				img.set_pixel(x, y, Color("b0b6ba"))  # louvre edge
+	return _finish("vent", img)
+
+
+## Rooftop air-conditioning unit side: beige-grey panels with a dense condenser grille.
+static func hvac() -> Texture2D:
+	if _cache.has("hvac"):
+		return _cache["hvac"]
+	var img := _start("hvac", Color("9a9a8e"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if x < 2 or x > SIZE - 3 or y < 2 or y > SIZE - 3 or x == 16:
+				img.set_pixel(x, y, Color("6e6e64"))  # frame and panel split
+			elif y > 5 and y < SIZE - 5 and y % 2 == 0:
+				img.set_pixel(x, y, Color("4a4a44"))  # grille slats
+	return _finish("hvac", img)
+
+
+## A building at night: dark facade with a grid of windows, some lit.
+static func building_night() -> Texture2D:
+	if _cache.has("building_night"):
+		return _cache["building_night"]
+	var img := _start("building_night", Color("1a1d24"), 0.02)
+	var rng := _rng("building_windows")
+	for wy in range(2, SIZE, 6):
+		for wx in range(2, SIZE, 5):
+			var lit := rng.randf() < 0.35
+			var c := Color("d8b870").darkened(rng.randf_range(0.0, 0.4)) if lit else Color("2a3040")
+			for y in range(wy, wy + 3):
+				for x in range(wx, wx + 3):
+					img.set_pixel(x, y, c)
+	return _finish("building_night", img)
+
+
+## Night sky for a dome (u around, v top to bottom): near-black overhead, a faint orange city
+## glow at the horizon, and stars in the upper part.
+static func night_sky() -> Texture2D:
+	if _cache.has("night_sky"):
+		return _cache["night_sky"]
+	# High enough resolution that one star pixel is a point on the big dome, not a square metre.
+	var w := 1024
+	var h := 512
+	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
+	var rng := _rng("night_sky_stars")
+	for y in h:
+		var t := float(y) / (h - 1)  # 0 top, 1 bottom
+		var c := Color("04060c").lerp(Color("141a2c"), smoothstep(0.1, 0.5, t))
+		c = c.lerp(Color("3a2c34"), smoothstep(0.42, 0.52, t) * (1.0 - smoothstep(0.52, 0.62, t)))
+		# Below the horizon it's the dark city, never sky, whatever the camera's height.
+		c = c.lerp(Color("07080c"), smoothstep(0.55, 0.62, t))
+		for x in w:
+			img.set_pixel(x, y, c)
+	for i in 900:
+		var sy := rng.randi_range(0, int(h * 0.44))
+		img.set_pixel(rng.randi_range(0, w - 1), sy, Color("e8ecff").darkened(rng.randf_range(0.2, 0.75)))
+	var tex := ImageTexture.create_from_image(img)
+	_cache["night_sky"] = tex
+	return tex
+
+
+## A city skyline strip for a distant ring: building silhouettes with lit windows, and clear sky
+## (alpha 0) above them.
+static func skyline() -> Texture2D:
+	if _cache.has("skyline"):
+		return _cache["skyline"]
+	var w := 128
+	var h := 32
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var rng := _rng("skyline_blocks")
+	var x := 0
+	while x < w:
+		var bw := rng.randi_range(4, 11)
+		var top := rng.randi_range(4, 22)
+		var base := Color("080a10").lightened(rng.randf_range(0.0, 0.05))
+		for bx in range(x, mini(x + bw, w)):
+			for y in range(top, h):
+				var window := (bx - x) % 3 == 1 and (y - top) % 3 == 1 and rng.randf() < 0.3
+				img.set_pixel(bx, y, Color("d0b060") if window else base)
+		x += bw
+	var tex := ImageTexture.create_from_image(img)
+	_cache["skyline"] = tex
+	return tex
+
+
 ## Office window onto a dark room: a frame, a cross bar and a pale reflection streak.
 static func office_window() -> Texture2D:
 	if _cache.has("office_window"):
@@ -198,6 +294,27 @@ static func notice_board() -> Texture2D:
 				img.set_pixel(x, y, paper if (y - py) % 3 != 1 or x == px else paper.darkened(0.25))
 		img.set_pixel(px + 3, py, Color("c83a2a"))  # pin
 	return _finish("notice_board", img)
+
+
+## Steel access door (roofs, tunnels): grey plate with rivets, a small wired window and a
+## yellow and black kick plate.
+static func steel_door() -> Texture2D:
+	if _cache.has("steel_door"):
+		return _cache["steel_door"]
+	var img := _start("steel_door", Color("6a7076"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if x < 2 or x > SIZE - 3 or y < 2:
+				img.set_pixel(x, y, Color("40454a"))
+			elif y > SIZE - 6:
+				img.set_pixel(x, y, Color("c9a227") if ((x + y) / 3) % 2 == 0 else Color("1c1c1a"))
+			elif x > 11 and x < 20 and y > 5 and y < 12:
+				img.set_pixel(x, y, Color("2c3840"))
+			elif (x == 4 or x == SIZE - 5) and y % 6 == 3:
+				img.set_pixel(x, y, Color("a8b0b8"))  # rivets
+			elif x > 24 and x < 28 and y == 16:
+				img.set_pixel(x, y, Color("c8ccd0"))  # handle
+	return _finish("steel_door", img)
 
 
 ## Office door: pale grey-green panel with a frame, a little window and a handle.
@@ -328,15 +445,3 @@ static func _courses(img: Image, row_h: int, block_w: int, line: Color) -> void:
 		for x in SIZE:
 			if y % row_h == 0 or (x + offset) % block_w == 0:
 				img.set_pixel(x, y, line)
-
-
-## A chunky arrow in a 32x32 tile. Small y is further down the road (away from the camera).
-static func _arrow(dir: int, x: int, y: int) -> bool:
-	if dir == 0:  # ^ straight on: a shaft and a head
-		var shaft := absi(x - 16) <= 2 and y >= 13 and y <= 27
-		var head := y >= 4 and y < 13 and absi(x - 16) <= y - 4
-		return shaft or head
-	# < or >: a chevron
-	var fx := x if dir < 0 else SIZE - 1 - x
-	var d := absi(y - 16)
-	return d <= 9 and fx - 8 >= d and fx - 8 <= d + 4

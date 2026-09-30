@@ -18,10 +18,10 @@ expect() {  # scenario, expected substring
 }
 expect naive       "reason=killed"
 expect ground      "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > MAIN FLOOR EXIT > HELIPAD"
-expect tunnel_quiet "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SERVICE TUNNEL > HELIPAD"
-expect tunnel_loud "reason=extracted alert=2 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > MAIN FLOOR EXIT > HELIPAD"
+expect tunnel_quiet "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SERVICE TUNNEL > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7"
+expect tunnel_loud "reason=extracted alert=2 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=3"
 expect tunnel_alarm "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SERVICE TUNNEL > HELIPAD | covers=0 hits=0 missed=0 alarms=1"
-expect roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > BUILDING MAIN FLOOR > MAIN FLOOR EXIT > HELIPAD"
+expect roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > BUILDING MAIN FLOOR > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7"
 expect roof_loud   "reason=extracted alert=2 route=MAIN FLOOR LOBBY > ROOFTOPS > HELIPAD"
 expect miss_ladder "reason=captured alert=2 route=MAIN FLOOR LOBBY > ROOFTOPS |"
 expect late_switch "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > MAIN FLOOR EXIT > HELIPAD"
