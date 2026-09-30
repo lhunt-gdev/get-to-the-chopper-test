@@ -87,6 +87,8 @@ func _physics_process(_delta: float) -> void:
 	var lane_count: int = _player.tuning.lane_count
 
 	_shoot()
+	if d < 0.3:
+		return  # still in the start room: no steering until we're through the door
 	if _player.in_cover:
 		_took_cover = true
 		_cover_frames += 1

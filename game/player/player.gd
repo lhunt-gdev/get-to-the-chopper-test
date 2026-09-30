@@ -40,6 +40,13 @@ func _ready() -> void:
 	var skin := PsxMaterials.flat(Color("5b6b3a"))
 	_skin = skin
 	_body.material_override = skin
+	# A head with a face on the front and a backpack on the back, so front and back read (the
+	# opening camera pan goes round the player). Children of the body, so they duck and stumble with it.
+	_part(_body, Vector3(0.34, 0.34, 0.34), Vector3(0, 0.98, 0), Color("4a5a30"))           # head / balaclava
+	_part(_body, Vector3(0.24, 0.12, 0.03), Vector3(0, 1.0, -0.17), Color("d4a482"))        # face
+	_part(_body, Vector3(0.2, 0.04, 0.035), Vector3(0, 1.02, -0.18), Color("1c1c1a"))        # eyes
+	_part(_body, Vector3(0.44, 0.52, 0.2), Vector3(0, 0.2, 0.28), Color("3a4426"))          # backpack
+	_part(_body, Vector3(0.62, 0.08, 0.42), Vector3(0, -0.2, 0.0), Color("2a2e22"))         # belt
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Shadow"
 	_shadow.mesh = PsxMaterials.shadow_mesh(Vector2(tuning.player_shadow_size, tuning.player_shadow_size * 0.8))
@@ -160,6 +167,16 @@ func surrender() -> void:
 	for arm in _arms:
 		arm.visible = true
 	_update_visuals()
+
+
+func _part(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
+	var m := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	m.mesh = mesh
+	m.material_override = PsxMaterials.flat(color)
+	m.position = pos
+	parent.add_child(m)
 
 
 ## Entering a side branch renumbers the lanes under you (you stay where you are in the world).

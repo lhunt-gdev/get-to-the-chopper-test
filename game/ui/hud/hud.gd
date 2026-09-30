@@ -207,6 +207,11 @@ func show_title() -> void:
 	_title.text = "GET TO THE CHOPPER!\n\nSWIPE < > TO DODGE\nSWIPE UP TO JUMP\nSWIPE DOWN TO SLIDE\nHOLD FIRE TO SHOOT\n\nOUTER LANES TAKE SIDE EXITS\nRUN INTO COVER TO HIDE\n\nTAP TO START"
 
 
+## During the opening pan: just the mission name.
+func show_mission_title(title: String) -> void:
+	_title.text = title
+
+
 func hide_title() -> void:
 	_title.text = ""
 

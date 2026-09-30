@@ -117,6 +117,14 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Every route must still reach the end of the mission (route validation).
 - **The roof detour is the slow route (user decision):** coming back down into BUILDING MAIN FLOOR adds ~190 m (a clean run takes ~48 s, not ~38 s). Rather than shorten it, the mission gets more chopper time. Each mission now carries its own timeline (`"chopper"` in `route.json`: lands 15 s, lifts off 58 s, gone 68 s here), with `Tuning` as the default.
 
+### PROPOSED — Mission intro: office room, camera pan, door bash (user direction, 2026-09-30)
+- The mission starts in a small office room (desk, filing cabinet, window, notice board) with a closed door ahead into the MAIN FLOOR LOBBY.
+- **Intro pan (GoldenEye N64 inspiration):** the camera starts in front of the character and sweeps round to behind them, ending exactly on the play camera. The mission name shows during the pan; TAP TO START appears when it ends. A tap during the pan skips it.
+- **Tap to start:** the character breaks into a run and bashes the door open (it swings off its hinges; the camera jolts), straight into the lobby. No swipes until you're through the door.
+- The player model gets a head with a face and a backpack, so front and back read during the pan.
+- Retry skips the pan (fast loop) but still starts in the room and bashes the door.
+- Numbers in `Tuning` (Intro).
+
 ### OPEN — Missions / story stages (Point 10)
 - The full game has story stages that act as missions. Each reuses the main / up / down structure with its own layout, obstacle looks, trooper sets and chopper time. The test level is one mission.
 

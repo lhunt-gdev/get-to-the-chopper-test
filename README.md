@@ -25,7 +25,7 @@ Controls: swipe left/right to change lane, up to jump, down to slide; hold FIRE 
 
 | Works | Not built yet |
 |---|---|
-| Auto-run, 5 lanes, swipe dodge/jump/slide | Enemies beyond the Rifle Trooper (Rusher, Heavy, Sniper, Security) |
+| Mission intro: start in an office room, GoldenEye-style camera pan round the player, tap to start, bash through the door; auto-run, 5 lanes, swipe dodge/jump/slide | Enemies beyond the Rifle Trooper (Rusher, Heavy, Sniper, Security) |
 | Authored branching route from `route.json` | Real damage model and weapons (placeholders: 3 hits, unlimited-ammo rifle) |
 | Junction prompt + brief slowdown (never a pause); the road physically splits (turns, stairs, end-of-level ladders) and straight on stays open until the split; lockdown doors on alert-closed branches; authored bends; routes head back to the centre; lanes painted per exit, sign over the fork | Ambient lighting pass |
 | Alert level: 2 tripwires on the main route (up to Alert 3), each followed by an alarm box that lowers it; TUNNEL (off BUILDING MAIN FLOOR) sealed above Alert 1; troopers tiered by alert on every route | Other alert triggers (e.g. the Security Trooper) |

@@ -66,6 +66,13 @@ enum TargetingMode {
 ## How long a stage's message stays under the clock (LIFTING OFF stays until the end).
 @export var chopper_message_time: float = 3.0
 
+@export_group("Intro")
+## Length of the start room, and how far behind its door the player starts (metres).
+@export var start_room_length: float = 14.0
+@export var start_offset: float = 6.0
+## How long the opening camera pan takes, front of the player round to behind.
+@export var intro_pan_time: float = 3.5
+
 @export_group("Capture")
 ## Missing the exit at a no-way-on end stops the player this far from the end.
 @export var capture_stop_distance: float = 2.0

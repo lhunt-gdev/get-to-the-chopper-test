@@ -1,5 +1,6 @@
 {
   "mission": "prototype_slice",
+  "title": "MISSION 1\nTEST MISSION",
   "authored_for_lanes": 5,
   "chopper": {"lands_at": 15, "lifts_at": 58, "gone_at": 68},
   "start": "main_floor_lobby",

@@ -74,6 +74,14 @@ var _shot_tracer: MeshInstance3D
 var _clock: ExtractionClock
 ## How far the camera follows the player across the road (0.6 normally, 1.0 beside a wall).
 var _camera_follow := 0.6
+## The opening camera pan: seconds left (0 once it's over or skipped).
+var _intro_left := 0.0
+## The start room's door, until the player bashes through it.
+var _door: Node3D = null
+## Camera jolt after the door bash (1 at impact, decays to 0).
+var _shake := 0.0
+## Where the camera would be without any shake (the smoothed follow position).
+var _cam_base := Transform3D.IDENTITY
 ## Obstacles can't trip you again until this game time (seconds into the run), after a stumble.
 var _stumble_grace_until := -1.0
 
@@ -116,18 +124,25 @@ func _ready() -> void:
 	GameState.alert_changed.connect(_on_alert_changed.unbind(1))
 
 	_promote(_make_segment(_graph.start_id, 0.0, {}, Transform3D.IDENTITY))
+	# The mission starts in an office room behind a closed door into the first area.
+	_build_start_room(_segments[0])
+	_player.distance = -tuning.start_offset
 	_place_player()
-	_update_camera(1.0)
 	if _skip_title:
+		_update_camera(1.0)
 		start_run()
 	else:
-		_hud.show_title()
+		# GoldenEye-style opening: pan from the front of the player round to behind them.
+		_intro_left = tuning.intro_pan_time
+		_hud.show_mission_title(String(_graph.mission().get("title", "")))
+		_update_camera(1.0)
 
 
 func start_run() -> void:
 	if _started:
 		return
 	_started = true
+	_intro_left = 0.0  # a tap during the pan skips it
 	_hud.hide_title()
 	GameState.start_run(START_ALERT)
 	_runner.begin(_graph, false)
@@ -135,7 +150,13 @@ func start_run() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _intro_left > 0.0:
+		_intro_left -= delta
+		if _intro_left <= 0.0 and not _started:
+			_hud.show_title()  # the pan has ended behind the player: TAP TO START
 	if GameState.run_active:
+		if _door != null and _player.distance_run() >= -0.9:
+			_bash_door()
 		_runner.update(_player.distance_run(), _player.lane)
 		_check_obstacles()
 		_update_combat(delta)
@@ -903,6 +924,66 @@ func _build_blockade(parent: Node3D, seg: Dictionary, at: float, x: float, lane:
 	return holder
 
 
+## The office room the mission starts in, behind the first segment (negative distances), with a
+## closed door into it: side and back walls, floor, ceiling, a desk, a chair, a filing cabinet,
+## and the odd window / notice board. The door is bashed open at the start of the run.
+func _build_start_room(seg: Dictionary) -> void:
+	var room := Node3D.new()
+	room.name = "StartRoom"
+	seg["node"].add_child(room)
+	var L := tuning.start_room_length
+	var road_w := tuning.lane_count * tuning.lane_width
+	var half := road_w / 2.0 + 1.0
+	var theme: Dictionary = THEMES["office"]
+	var wall_tex := _wall_texture(theme)
+	_strip(room, seg, -L, 0.0, 0.0, half * 2.0, 0.0, PsxTextures.office_floor(), float(tuning.lane_count), tuning.lane_width)
+	var roof := _strip(room, seg, -L, 0.0, 0.0, half * 2.0, CEILING_Y, PsxTextures.office_ceiling(), road_w / 2.0, 2.0)
+	roof.rotate_object_local(Vector3.FORWARD, PI)
+	for side in [-1, 1]:
+		_wall(room, seg, -L, 0.0, side * half, side, CEILING_Y, wall_tex)
+	var office := PsxMaterials.textured(wall_tex, Vector2(3, 2))
+	_item_box(room, seg, -L, Vector3(0, CEILING_Y / 2.0, 0.15), Vector3(half * 2.0, CEILING_Y, 0.3), Color.WHITE).material_override = office
+	# The front wall, with a doorway in the player's lane.
+	var dx := _player.lane_x(tuning.lane_count / 2)
+	var dw := 1.2
+	var dh := 2.3
+	var front := -0.15
+	var left_w := dx - dw / 2.0 + half
+	var right_w := half - (dx + dw / 2.0)
+	_item_box(room, seg, 0.0, Vector3(-half + left_w / 2.0, CEILING_Y / 2.0, front), Vector3(left_w, CEILING_Y, 0.3), Color.WHITE).material_override = office
+	_item_box(room, seg, 0.0, Vector3(half - right_w / 2.0, CEILING_Y / 2.0, front), Vector3(right_w, CEILING_Y, 0.3), Color.WHITE).material_override = office
+	_item_box(room, seg, 0.0, Vector3(dx, (dh + CEILING_Y) / 2.0, front), Vector3(dw, CEILING_Y - dh, 0.3), Color.WHITE).material_override = office
+	# The door hangs on a hinge at the left of the doorway.
+	var hinge := Node3D.new()
+	room.add_child(hinge)
+	hinge.transform = _frame_at(seg, 0.0) * Transform3D(Basis.IDENTITY, Vector3(dx - dw / 2.0, 0, front))
+	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
+	panel.material_override = PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
+	_door = hinge
+	# Furniture, clear of the player's lane.
+	_item_box(room, seg, -8.0, Vector3(_player.lane_x(0), 0.38, 0), Vector3(1.4, 0.76, 0.8), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.desk(), Vector2(3, 2))
+	_item_box(room, seg, -8.9, Vector3(_player.lane_x(0) + 0.2, 0.25, 0), Vector3(0.45, 0.5, 0.45), Color("3e4c5c"))  # chair
+	_item_box(room, seg, -10.5, Vector3(_player.lane_x(tuning.lane_count - 1), 0.65, 0), Vector3(0.9, 1.3, 0.7), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.cabinet(), Vector2(3, 2))
+	_item_box(room, seg, -6.0, Vector3(-(half - 0.03), 1.65, 0), Vector3(0.05, 0.9, 1.6), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.office_window(), Vector2(3, 2))
+	_item_box(room, seg, -9.0, Vector3(half - 0.03, 1.5, 0), Vector3(0.05, 0.75, 1.1), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.notice_board(), Vector2(3, 2))
+
+
+## Out of the room: the door flies open off its hinge and the camera jolts.
+func _bash_door() -> void:
+	var door := _door
+	_door = null
+	RunLog.record_event("door_bash", {})
+	_shake = 1.0
+	# Swings away from the player, out into the lobby, as if shouldered open.
+	var tween := door.create_tween()
+	tween.tween_property(door, "rotation:y", door.rotation.y + 1.9, 0.16).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(door, "rotation:z", door.rotation.z + 0.1, 0.16)
+
+
 ## Where there is no way straight on: a wall across the middle lanes. Only the outer lanes (ladders) get out.
 func _build_dead_end(parent: Node3D, seg: Dictionary) -> void:
 	var length: float = seg["length"]
@@ -1428,7 +1509,7 @@ func _on_run_ended(reason: StringName) -> void:
 func _on_swipe(dir: Vector2i) -> void:
 	if not _started:
 		start_run()
-	elif GameState.run_active:
+	elif GameState.run_active and _player.distance_run() > 0.3:  # no swipes until through the door
 		_player.handle_swipe(dir)
 
 
@@ -1491,7 +1572,33 @@ func _update_camera(delta: float) -> void:
 			near_wall = true
 			break
 	_camera_follow = move_toward(_camera_follow, 1.0 if near_wall else 0.6, delta * 3.0)
-	var eye := f * Vector3(x * _camera_follow, 3.4, 5.5)
-	var look := f * Vector3(x * 0.8, 1.0, -10.0)
+	var eye_local := Vector3(x * _camera_follow, 3.4, 5.5)
+	var look_local := Vector3(x * 0.8, 1.0, -10.0)
+	if _intro_left > 0.0 and not _started:
+		# Opening pan: from in front of the player (looking back at them) round the side to the
+		# play camera behind them, where it ends exactly.
+		var e := smoothstep(0.0, 1.0, 1.0 - _intro_left / tuning.intro_pan_time)
+		var angle := PI * e
+		var r := lerpf(3.0, 5.5, e * e)
+		eye_local = Vector3(x + sin(angle) * r * 0.75, lerpf(1.5, 3.4, e), -cos(angle) * r)
+		# Keep the player framed for most of the pan; only turn to look ahead at the very end.
+		look_local = Vector3(x, 1.3, 0.0).lerp(look_local, smoothstep(0.75, 1.0, e))
+		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
+		_cam_base = _camera.global_transform
+		return
+	var eye := f * eye_local
+	var look := f * look_local
 	var target := Transform3D(Basis.IDENTITY, eye).looking_at(look, Vector3.UP)
-	_camera.global_transform = _camera.global_transform.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))
+	# The smoothed camera, kept apart from the shake so the smoothing can't swallow it.
+	_cam_base = _cam_base.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))
+	_camera.global_transform = _cam_base
+	if _shake > 0.0:
+		# Impact: a punch forward, then a hard shake with a little roll, settling over ~0.45 s.
+		_shake = maxf(0.0, _shake - delta / 0.45)
+		var s := _shake * _shake
+		var b := _cam_base.basis
+		var punch := -b.z * 0.35 * s
+		var jitter := (b.x * randf_range(-1, 1) + b.y * randf_range(-1, 1)) * 0.22 * s
+		_camera.global_transform = Transform3D(
+				b.rotated(b.z, randf_range(-0.06, 0.06) * s).rotated(b.x, randf_range(-0.04, 0.04) * s),
+				_cam_base.origin + punch + jitter)
