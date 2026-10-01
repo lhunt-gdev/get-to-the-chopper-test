@@ -118,6 +118,12 @@ var _markers: Array[Dictionary] = []
 var _blockers: Array[Dictionary] = []
 ## Mood lighting: the lamps, the area's ambient and moonlight (see Ambience).
 var _ambience: Ambience
+## All the sound (see AudioDirector).
+var _audio: AudioDirector
+## Footsteps: metres run since the last one; whether you were in the air last frame.
+var _stride_left := 0.0
+var _was_airborne := false
+var _last_alert := START_ALERT
 ## Snow drifting round the camera on the night rooftops.
 var _snow: CPUParticles3D
 ## Red aviation lights on the city's towers, all blinking together.
@@ -155,6 +161,11 @@ func _ready() -> void:
 	_ambience.name = "Ambience"
 	_ambience.tuning = tuning
 	add_child(_ambience)
+	_audio = AudioDirector.new()
+	_audio.name = "Audio"
+	_audio.tuning = tuning
+	add_child(_audio)
+	_audio.set_world(_world)
 	_build_snow()
 	# A faint cool fill from just behind you, so you (and what's right ahead) read in the dark.
 	var fill := Node3D.new()
@@ -205,6 +216,7 @@ func start_run() -> void:
 	_started = true
 	_intro_left = 0.0  # a tap during the pan skips it
 	_hud.hide_title()
+	_audio.play("codec", -4.0, 0.0, "UI")
 	_hud.set_letterbox(false, tuning.letterbox_time)
 	GameState.start_run(START_ALERT)
 	_runner.begin(_graph, false)
@@ -221,7 +233,10 @@ func _physics_process(delta: float) -> void:
 			if not door.get("done", false) and _player.distance_run() >= door["at"] - 0.9 and door["seg"].get("promoted", false):
 				door["done"] = true
 				_bash_door(door["node"], door.get("swing", 1.0))
+				if door.has("sound"):
+					_audio.play(door["sound"], 0.0, 0.05)
 		_funnel_to_markers()
+		_update_footsteps(delta)
 		_runner.update(_player.distance_run(), _player.lane)
 		_check_obstacles()
 		_update_combat(delta)
@@ -342,6 +357,8 @@ func _update_environment(delta: float) -> void:
 	# In a stairwell the view is the stairwell's security camera.
 	var seg_here := _segment_at(_player.distance_run())
 	_hud.set_cctv(in_stairwell(), "CAM %02d" % (absi(hash(seg_here["id"])) % 40 + 1), _clock.elapsed)
+	_audio.set_cctv(in_stairwell())
+	_audio.set_area(String(_graph.node_data(seg_here["id"]).get("theme", "office")) if _player.distance_run() >= 0.0 else "office")
 	_sky.global_position = _camera.global_position
 	# Mood lighting: the area's own ambient and moonlight, and the lamps nearest where you look.
 	_ambience.set_area(theme.get("ambient", DEFAULT_AMBIENT), theme.get("moon", Color.BLACK), MOON_DIR)
@@ -361,10 +378,13 @@ func _on_chopper_stage(stage: ExtractionClock.Stage) -> void:
 	RunLog.record_event("chopper", {"stage": ExtractionClock.MESSAGES[stage]})
 	match stage:
 		ExtractionClock.Stage.INBOUND:
+			_audio.play("squelch", -4.0, 0.0, "UI")
 			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("f0e8c8"), tuning.chopper_message_time, false)
 		ExtractionClock.Stage.LANDED:
+			_audio.play("squelch", -4.0, 0.0, "UI")
 			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("9fd36b"), tuning.chopper_message_time, false)
 		ExtractionClock.Stage.LIFTING_OFF:
+			_warn_lift_off()
 			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("ff4b3a"), 0.0, true)
 			for c in get_tree().get_nodes_in_group("chopper"):
 				c.create_tween().tween_property(c, "position:y", c.position.y + 2.5,
@@ -639,6 +659,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		node.add_child(t)
 		t.transform = _frame_at(seg, float(e["at"])) * Transform3D(Basis(Vector3.UP, PI), Vector3(t.x, 0, 0))
 		t.knocked_down.connect(func() -> void: RunLog.record_event("trooper_down", {"node": id}))
+		_connect_trooper_sounds(t)
 		_combatants.append({"node": t, "owner": node, "seg": seg})
 	for a: Dictionary in _graph.node_data(id).get("alarms", []):
 		var box := AlarmBox.new()
@@ -649,6 +670,10 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		box.x = ax
 		box.transform = _frame_at(seg, float(a["at"])) * Transform3D(Basis(Vector3.UP, -s * PI / 2.0), Vector3(ax, 1.8, 0))
 		box.destroyed.connect(_on_alarm_destroyed.bind(id))
+		box.destroyed.connect(func() -> void: _audio.play_at("alarm_break", box.global_position + Vector3.UP * 1.8))
+		box.beeped.connect(func(live: bool) -> void:
+			if live and GameState.run_active:  # beeps while you can shoot it
+				_audio.play_at("beep", box.global_position + Vector3.UP * 1.8, -6.0, 0.0, 25.0))
 		# It sits on a metal control box standing on the floor, never floating (user).
 		var stand := _item_box(node, seg, float(a["at"]), Vector3(ax, 0.675, 0), Vector3(0.55, 1.35, 0.72), Color.WHITE)
 		stand.material_override = PsxMaterials.textured(PsxTextures.cabinet(), Vector2(3, 2))
@@ -755,6 +780,7 @@ func _on_node_entered(id: StringName) -> void:
 	if area != _last_area:  # MGS-style location caption
 		_last_area = area
 		_hud.show_area(area)
+		_audio.type_ticks(area.length(), 0.04)
 	var seg: Dictionary = _segments.back()
 	if seg["id"] != _runner.current or not _turns(seg["edge"]):
 		return
@@ -762,7 +788,64 @@ func _on_node_entered(id: StringName) -> void:
 	_player.shift_lanes(lanes.y - lanes.x)
 
 
+## LIFTING OFF: warning beeps every couple of seconds until it's gone (or you're on board).
+func _warn_lift_off() -> void:
+	if not GameState.run_active or _clock.stage != ExtractionClock.Stage.LIFTING_OFF:
+		return
+	_audio.play("warn", -6.0, 0.0, "UI")
+	get_tree().create_timer(1.8).timeout.connect(_warn_lift_off)
+
+
+## Footsteps on whatever's underfoot (and a landing after a jump), while you're running.
+func _update_footsteps(delta: float) -> void:
+	var airborne := _player.is_airborne()
+	if _was_airborne and not airborne:
+		_audio.play("land", -6.0, 0.08)
+		_stride_left = tuning.stride
+	_was_airborne = airborne
+	if airborne or _player.in_cover or _player.halted or _player.is_sliding():
+		return
+	_stride_left -= tuning.run_speed * delta
+	if _stride_left > 0.0:
+		return
+	_stride_left = tuning.stride
+	var d := _player.distance_run()
+	var surface := "office"
+	if d >= 0.0:
+		var seg := _segment_at(d)
+		var into: float = d - seg["start"]
+		if _is_stairs(seg) and into < seg["ramp_len"]:
+			surface = "stairs"
+		else:
+			surface = {"office_floor": "office", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
+	_audio.play("step_%s_%d" % [surface, randi() % SoundBank.STEP_VARIANTS], -10.0, 0.06)
+
+
+## A trooper's sounds: the "!" when he starts aiming, his shots, being hit, and going down.
+func _connect_trooper_sounds(t: RifleTrooper) -> void:
+	var head := func() -> Vector3: return t.global_position + Vector3.UP * 1.5
+	t.aimed.connect(func() -> void: _audio.play_at("spotted", head.call(), -3.0))
+	t.fired.connect(func(_hit: bool) -> void: _audio.play_at("gun_trooper", head.call(), -2.0, 0.06))
+	t.wounded.connect(func() -> void: _audio.play_at("hit", head.call(), 0.0, 0.08))
+	t.knocked_down.connect(func() -> void:
+		_audio.play_at("grunt_%d" % (randi() % 3), head.call(), -2.0, 0.05)
+		get_tree().create_timer(0.3).timeout.connect(func() -> void:
+			if is_instance_valid(t):
+				_audio.play_at("fall", t.global_position, -2.0, 0.05)))
+
+
 func _on_alert_changed() -> void:
+	# Alert up: a sting (and the klaxon at full alert); down: a falling blip. The music follows.
+	var level := GameState.alert_level
+	if GameState.run_active:
+		if level > _last_alert:
+			_audio.play("alert_up", -2.0)
+			if level >= 3:
+				_audio.play("klaxon", -6.0)
+		elif level < _last_alert:
+			_audio.play("alert_down", -2.0, 0.0, "UI")
+	_last_alert = level
+	_audio.set_alert(level)
 	_build_branches()
 	_build_fork_cue()
 
@@ -1123,7 +1206,8 @@ func _build_door(parent: Node3D, seg: Dictionary, into: float, x: float, top: fl
 	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
 	panel.material_override = PsxMaterials.textured(_obstacle_texture(theme.get("stair_door", "door")), Vector2(3, 2))
 	if not seg.get("no_doors", false):  # a locked-down branch's doors never open
-		var door := {"node": hinge, "at": seg["start"] + into, "owner": seg["node"], "seg": seg}
+		var door := {"node": hinge, "at": seg["start"] + into, "owner": seg["node"], "seg": seg,
+				"sound": "door_steel" if theme.get("stair_door", "door") == "steel_door" else "door_wood"}
 		_doors.append(door)
 		# Shut, the stairwell is sealed: no shots in or out until you burst the door.
 		_blockers.append({"at": door["at"], "x0": -INF, "x1": INF, "seg": seg, "owner": seg["node"],
@@ -1397,6 +1481,7 @@ func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Ar
 		var s := Sparks.new(4, hash(Vector2(at, spot.x)))
 		parent.add_child(s)
 		s.transform = frame * Transform3D(Basis.IDENTITY, spot)
+		_audio.attach_loop(s, "crackle", -10.0, 10.0, 2.0)
 	return first
 
 
@@ -1462,6 +1547,7 @@ func _build_roof_vent(parent: Node3D, seg: Dictionary, at: float, x: float, lane
 	var steam := Steam.new(4, hash([seg["id"], at, lane]))
 	holder.add_child(steam)
 	steam.position = Vector3(0, 1.1, 0)
+	_audio.attach_loop(steam, "steam", -12.0, 10.0, 2.0)
 	return holder
 
 
@@ -1616,7 +1702,7 @@ func _build_start_room(seg: Dictionary) -> void:
 	hinge.transform = _frame_at(seg, 0.0) * Transform3D(Basis.IDENTITY, Vector3(dx - dw / 2.0, 0, front))
 	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
 	panel.material_override = PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
-	_doors.append({"node": hinge, "at": 0.0, "owner": seg["node"], "seg": seg})
+	_doors.append({"node": hinge, "at": 0.0, "owner": seg["node"], "seg": seg, "sound": "door_wood"})
 	# Furniture, clear of the player's lane.
 	_item_box(room, seg, -8.0, Vector3(_player.lane_x(0), 0.38, 0), Vector3(1.4, 0.76, 0.8), Color.WHITE).material_override = \
 			PsxMaterials.textured(PsxTextures.desk(), Vector2(3, 2))
@@ -1794,6 +1880,8 @@ func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
 		if not seg.get("no_doors", false):
 			# Each leaf swings away from you round its own hinge: the left one way, the right the other.
 			var door := {"node": hinge, "at": seg["start"] + at, "owner": seg["node"], "seg": seg, "swing": -s}
+			if s < 0:  # one crash for the pair
+				door["sound"] = "door_bars" if barred else "door_wood"
 			_doors.append(door)
 			if s < 0:  # the doorway is solid until the doors are burst open (they go together)
 				_blockers.append({"at": door["at"], "x0": -ow / 2.0, "x1": ow / 2.0, "seg": seg, "owner": seg["node"],
@@ -2131,6 +2219,7 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 	parent.add_child(chopper)
 	chopper.transform = xf
 	chopper.add_to_group("chopper")
+	_audio.attach_loop(chopper, "rotor", 0.0, 90.0, 12.0)  # heard as you get near
 	# Built late (with the helipad), so catch up if it's already lifting off.
 	if _clock and _clock.stage == ExtractionClock.Stage.LIFTING_OFF:
 		var t := (_clock.elapsed - _clock.lifts_at) / (_clock.gone_at - _clock.lifts_at)
@@ -2211,6 +2300,7 @@ func _check_obstacles() -> void:
 			var stop_at: float = o["at"] - o["depth"] / 2.0 - tuning.cover_stop_gap
 			if not _player.in_cover and d >= stop_at and d < o["at"] and absf(o["x"] - _player.lane_x(_player.lane)) < 0.1:
 				_player.enter_cover(stop_at, o["crouch"])
+				_audio.play("cover", -2.0, 0.05)  # MGS's wall press
 				RunLog.record_event("cover", {"node": _runner.current})
 			continue
 		if o["done"] or absf(o["at"] - d) > o["depth"] / 2.0 + 0.2:
@@ -2231,6 +2321,7 @@ func _check_obstacles() -> void:
 					if other["group"] == o["group"]:
 						other["done"] = true
 				o["mesh"].visible = false
+				_audio.play("zap", -4.0, 0.05)
 				RunLog.record_event("tripwire", {"node": _runner.current})
 				GameState.raise_alert()
 				continue
@@ -2249,8 +2340,10 @@ func _stumble(o: Dictionary) -> void:
 	RunLog.record_event("stumble", {"kind": o["kind"], "node": _runner.current})
 	_player.stumble()
 	var here := _player.global_position + Vector3(0, 1.2, 0)
+	_audio.play("stumble", -2.0, 0.06)
 	if o["pass"] == "slide" and _skin(_runner.current, "pipe", "pipe") == "wires":
 		# Zapped by the live wires: a burst of sparks on the player.
+		_audio.play("zap", -2.0, 0.05)
 		var s := Sparks.new(6, Time.get_ticks_msec())
 		_world.add_child(s)
 		s.global_position = here
@@ -2318,6 +2411,7 @@ func _damage_player(why: String) -> void:
 	if not _player.take_hit():
 		return
 	RunLog.record_event("player_hit", {"by": why, "node": _runner.current, "left": _player.hits_left})
+	_audio.play("player_hit", 0.0, 0.05)
 	_hud.show_hit()
 	_hud.show_hp(_player.hits_left, tuning.player_hits)
 	if _player.hits_left <= 0:
@@ -2361,6 +2455,7 @@ func set_fire_held(held: bool) -> void:
 
 
 func _shoot() -> void:
+	_audio.play("gun", -3.0, 0.05)
 	var from := _player.global_transform * Vector3(0.25, 1.2, -0.4)
 	var target := fire_target()
 	var to := from + (-_player.global_transform.basis.z) * 20.0
@@ -2432,13 +2527,21 @@ func _on_run_ended(reason: StringName) -> void:
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())
+	_audio.stop_music()
+	_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")
 
 
 func _on_swipe(dir: Vector2i) -> void:
 	if not _started:
 		start_run()
 	elif GameState.run_active and _player.distance_run() > 0.3 and not in_stairwell():
+		var was_airborne := _player.is_airborne()
+		var was_sliding := _player.is_sliding()
 		_player.handle_swipe(dir)  # (no swipes until through the start door, or in a stairwell)
+		if dir == Vector2i.UP and not was_airborne and _player.is_airborne():
+			_audio.play("jump", -4.0, 0.08)
+		elif dir == Vector2i.DOWN and not was_sliding and _player.is_sliding():
+			_audio.play("slide", -4.0, 0.08)
 
 
 func _on_tap(pos: Vector2) -> void:

@@ -6,6 +6,8 @@ extends Node3D
 
 ## Shot in its window. The level lowers alert (so this stays free of autoloads, for unit tests).
 signal destroyed
+## Its beacon blinked on (it beeps while it can be shot).
+signal beeped(in_window: bool)
 
 const LIT := Color("ff3a2a")
 const DARK := Color("3a1a16")
@@ -20,6 +22,7 @@ var _light: MeshInstance3D
 ## A small beacon on top that blinks the whole time the box is live, so you spot it instantly.
 var _beacon: MeshInstance3D
 var _blink: float = 0.0
+var _was_on := false
 
 
 func _init() -> void:
@@ -67,6 +70,9 @@ func update(delta: float, tuning: Tuning, player_d: float) -> void:
 	# The beacon always blinks; it goes fast, with the face light, while the box can be shot.
 	var period := 0.3 if in_window else 0.7
 	var beacon_on := fmod(_blink, period) < period * 0.55
+	if beacon_on and not _was_on:
+		beeped.emit(in_window)
+	_was_on = beacon_on
 	_beacon.material_override = PsxMaterials.glow(Color("ff6a4a")) if beacon_on else PsxMaterials.flat(DARK)
 	var on := in_window and beacon_on
 	_light.material_override = PsxMaterials.glow(LIT) if on else PsxMaterials.flat(DARK)

@@ -7,6 +7,12 @@ extends Node3D
 ## Placeholder art: boxes. The level places him and calls update() every physics frame.
 
 signal knocked_down
+## He's started aiming at you (the "!").
+signal aimed
+## He's fired: hit or not.
+signal fired(hit: bool)
+## He's been shot (not necessarily down).
+signal wounded
 
 enum State { IDLE, AIMING, COOLDOWN, DOWN }
 enum Shot { NONE, MISSED, HIT }
@@ -124,6 +130,7 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 		State.IDLE:
 			state = State.AIMING
 			aimed_x = player_x
+			aimed.emit()
 			_timer = aim_time(tuning, alert)
 			_warn.visible = true
 			_dot.visible = true
@@ -135,6 +142,7 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 				state = State.COOLDOWN
 				_timer = tuning.trooper_refire
 				var hit := shot_hits(player_x, aimed_x, in_cover, tuning.lane_width)
+				fired.emit(hit)
 				var target: Vector3 = player_world + Vector3(0, 1.1, 0) if hit else route_point.call(player_d, aimed_x, 1.0)
 				_flash_tracer(global_transform * Vector3(0.2, 1.3, -0.8), target)
 				return Shot.HIT if hit else Shot.MISSED
@@ -149,6 +157,7 @@ func hit() -> void:
 	if not is_alive():
 		return
 	health -= 1
+	wounded.emit()
 	_body.scale = Vector3(1.15, 0.9, 1.15)
 	create_tween().tween_property(_body, "scale", Vector3.ONE, 0.12)
 	# A mist of blood bursting from the front of his chest, up and out to the sides (you're toward

@@ -23,6 +23,7 @@ func _run() -> void:
 	_test_mission_layout()
 	_test_trooper_tiers()
 	_test_swipe_direction()
+	_test_sounds()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -33,6 +34,19 @@ func _check(cond: bool, msg: String) -> void:
 	if not cond:
 		_failures += 1
 		printerr("FAIL: " + msg)
+
+
+func _test_sounds() -> void:
+	var bad: Array[String] = []
+	var unlooped: Array[String] = []
+	for name in SoundBank.all_names():
+		var s := SoundBank.get_stream(name)
+		if s == null or s.data.size() < 64:
+			bad.append(name)
+		elif name in SoundBank.LOOPS and s.loop_mode != AudioStreamWAV.LOOP_FORWARD:
+			unlooped.append(name)
+	_check(bad.is_empty(), "every sound builds (bad: %s)" % [bad])
+	_check(unlooped.is_empty(), "ambience, music and other loops loop (not: %s)" % [unlooped])
 
 
 func _test_route_json_is_valid() -> void:

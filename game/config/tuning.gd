@@ -162,3 +162,12 @@ enum TargetingMode {
 @export var flicker_every: int = 5
 ## Seconds the letterbox bars take to slide away when the run starts.
 @export var letterbox_time: float = 0.5
+
+@export_group("Audio")
+## Loudness of each part of the mix, in dB (0 = as built).
+@export var sfx_volume_db: float = 0.0
+@export var ambience_volume_db: float = -8.0
+@export var music_volume_db: float = -6.0
+@export var ui_volume_db: float = -4.0
+## Metres run between footsteps.
+@export var stride: float = 3.0

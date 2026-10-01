@@ -102,6 +102,22 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
 - Just for looks: no change to gameplay.
 
+### PROPOSED — Sound (user direction, 2026-10-01)
+- "Work on the sounds. Try to get that PS1-era sound, inspiration from MGS on PS1 and GoldenEye on N64." Until now the game had no sound at all.
+- **The era's sound:** low sample rates (22 kHz effects, 11–16 kHz ambience and music) and some bit-crush grit. Short, punchy, dry gunshots (GoldenEye). Echo built into the sounds (the PS1's reverb). Quiet humming ambience with the odd detail (MGS). Synth music that only comes in when the alert rises.
+- **Generated in code, like the textures:** no audio files. Everything is synthesised once (oscillators, filtered noise, echo, bit-crush) and cached. The work is spread across frames during the opening pan, so nothing stutters.
+- **Web limits (iPhone build, no threads):** Godot plays sounds as plain samples there, with no live bus effects and no streaming synthesis. So every effect (echo, filtering) is built into the sound itself.
+- **What you hear:**
+  - **Ambience per area:** office air-con and fluorescent buzz; tunnel rumble with drips; rooftop and helipad wind with distant city; a TV hum in the CCTV view.
+  - **You:** footsteps per surface (office lino, tunnel concrete, roof gravel, metal stairs); a jump whoosh, slide scrape and landing; MGS's wall-press thump when you take cover; a stumble; getting hit.
+  - **Weapons:** your rifle (a GoldenEye-style crack with a low thump) and the troopers' shots.
+  - **Troopers:** the MGS "!" sting when one starts aiming at you; a bullet hit; a grunt and a body fall when he goes down.
+  - **The world:** door bashes (office door, steel door, barred gate); tripwire zap; alarm-box beeps while it can be shot, and its crunch when destroyed; live wires crackling; steam hissing; the chopper's rotor thump, heard as you get near.
+  - **Alert:** a sting and a klaxon when alert rises, a falling codec-style blip when it drops.
+  - **Music:** none at alert 1 (just ambience), a low pulsing tension loop at alert 2, and driving alert music at alert 3. It crossfades as the alert changes.
+  - **UI and story:** a codec "pi-pi" on tap to start; a typing tick under the area caption; a radio squelch with each chopper message; warning beeps at LIFTING OFF; an extraction jingle; and a game-over sting.
+- Positional where it helps (troopers, the chopper, wires, steam, alarm boxes); everything else plays flat. Volumes are in `Tuning` (Audio).
+
 ### PROPOSED — Chopper countdown (Point 9 / extraction pressure; user direction)
 - **Clock (user decision):** an old-style analog timer dial, top centre. The hand sweeps round as the chopper's window runs out, and the last stretch of the dial is red. This replaces the handover's "no big HUD timer" working direction (which was never locked). It stays small.
 - **Messages (user decision):** centred just under the clock, short and readable: CHOPPER INBOUND → LANDED → LIFTING OFF. Each shows for a few seconds when its stage starts; LIFTING OFF stays up and blinks.
