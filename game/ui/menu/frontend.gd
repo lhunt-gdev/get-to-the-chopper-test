@@ -4,8 +4,6 @@ extends CanvasLayer
 ## swaying opening camera), SETTINGS, CONTROLS, the pause menu, and the end screens. It keeps
 ## working while the game is paused. The level listens to its signals.
 
-## ENTER GAME on the title screen: the first tap, so audio can start (browsers block it until then).
-signal title_done
 signal start_requested
 signal resume_requested
 signal retry_requested
@@ -13,7 +11,7 @@ signal menu_requested
 ## Any button pressed (the level plays a blip for it).
 signal clicked
 
-enum Screen { NONE, TITLE, MAIN, SETTINGS, CONTROLS, PAUSE, END }
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END }
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
@@ -53,10 +51,6 @@ func is_open() -> bool:
 	return _screen != Screen.NONE
 
 
-func show_title() -> void:
-	_show(Screen.TITLE)
-
-
 func show_main() -> void:
 	_show(Screen.MAIN)
 
@@ -86,11 +80,7 @@ func _show(s: Screen) -> void:
 		c.queue_free()
 	_dim.visible = s != Screen.NONE
 	_dim.color = Color(0.0, 0.02, 0.03, 0.35 if s == Screen.MAIN else 0.7)
-	if s == Screen.TITLE:
-		_dim.color.a = 0.0  # the camouflage does the darkening (and still blocks input)
 	match s:
-		Screen.TITLE:
-			_build_title()
 		Screen.MAIN:
 			_build_main()
 		Screen.SETTINGS:
@@ -104,15 +94,6 @@ func _show(s: Screen) -> void:
 
 
 # --- Screens --------------------------------------------------------------------------
-
-## The title screen: near-black camouflage, the title, ENTER GAME. Your tap on it is the first
-## input, which lets the browser start the sound.
-func _build_title() -> void:
-	_root.add_child(CamoBackdrop.new())
-	_place_wide(UiKit.label("GET TO THE", 16, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), 168)
-	_place_wide(UiKit.label("CHOPPER!", 24, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 192)
-	var start := _button("ENTER GAME", 320, func() -> void: title_done.emit())
-	start.grab_focus()
 
 func _build_main() -> void:
 	_back_to = Screen.MAIN
@@ -405,39 +386,3 @@ class ReportPanel extends Control:
 			draw_string(f, Vector2(x, y), ("▶ " if last else "  ") + route[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
 					accent if last else UiKit.PAPER)
 			y += 13
-
-
-## The title screen's backdrop: #080808 (65% opaque) with a random woodland-camouflage pattern in very dark
-## olive, brown and green, dithered (4x4 Bayer) in 2x2-pixel blocks like the PS1. New each load.
-class CamoBackdrop extends TextureRect:
-	## Slightly see-through, so the game shows faintly behind it (user).
-	const OPACITY := 0.65
-	const TONES: Array[Color] = [Color("080808"), Color("10130d"), Color("15120d"), Color("181d14")]
-	const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-
-	func _ready() -> void:
-		mouse_filter = Control.MOUSE_FILTER_STOP
-		position = Vector2.ZERO
-		size = get_viewport_rect().size  # the whole screen (the menu root has no size of its own)
-		stretch_mode = TextureRect.STRETCH_SCALE
-		expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		self_modulate.a = OPACITY
-		texture = ImageTexture.create_from_image(camo(135, 240, randi()))
-
-	## The pattern, w x h pixels. Pure (seeded), so it's testable.
-	static func camo(w: int, h: int, seed_value: int) -> Image:
-		var blobs := FastNoiseLite.new()
-		blobs.seed = seed_value
-		blobs.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-		blobs.frequency = 0.022
-		blobs.fractal_octaves = 2
-		var img := Image.create(w, h, false, Image.FORMAT_RGB8)
-		var levels := TONES.size()
-		for y in h:
-			for x in w:
-				var n := clampf(blobs.get_noise_2d(x, y * 0.8) * 0.5 + 0.5, 0.0, 1.0)  # a little wider than tall
-				var b: float = BAYER[(y % 4) * 4 + (x % 4)] / 16.0 - 0.5
-				var i := clampi(int(n * levels + b * 0.45), 0, levels - 1)  # dithered only near the edges
-				img.set_pixel(x, y, TONES[i])
-		return img
