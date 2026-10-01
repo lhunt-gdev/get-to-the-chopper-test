@@ -256,13 +256,19 @@ class TriggerButton extends Control:
 		var blade := PackedVector2Array()
 		for p in BLADE:
 			blade.append(at.call(PIVOT + (p - PIVOT).rotated(ang)))
-		var red := UiKit.RED.lerp(Color(1.0, 0.55, 0.4), _kick * 0.6)
-		draw_colored_polygon(blade, red.darkened(0.2) if held else red)
+		# In the UI's colours (like a codec panel): a teal blade, red while held (like a pressed
+		# button); each shot flashes the edges pale.
+		var flash := Color(0.85, 1.0, 0.95)
+		var blade_col := (UiKit.RED if held else UiKit.TEAL).lerp(flash, _kick * 0.5)
+		draw_colored_polygon(blade, blade_col)
 		var edge := blade.duplicate()
 		edge.append(blade[0])
 		draw_polyline(edge, UiKit.INK, 1.0)
-		# The guard: a ring of quads between its outer and inner edges, then dark edges round both.
-		var ink := UiKit.PAPER.lerp(Color(1.0, 0.92, 0.7), _kick)
+		# The guard: a dark codec-panel ring (quads between its outer and inner edges) with a bright
+		# teal edge and a soft glow, like the menus' panels.
+		var fill := UiKit.PANEL_SOLID.lerp(UiKit.TEAL_DIM, 0.25 + 0.4 * _kick)
+		# A darker edge (user): deep teal, deep red while held, still flashing pale on a shot.
+		var line := (UiKit.RED.darkened(0.35) if held else UiKit.TEAL_DIM).lerp(flash, _kick)
 		var outer := PackedVector2Array()
 		var inner := PackedVector2Array()
 		for i in GUARD_OUT.size():
@@ -271,11 +277,12 @@ class TriggerButton extends Control:
 		var n := outer.size()
 		for i in n:
 			var j := (i + 1) % n
-			draw_colored_polygon(PackedVector2Array([outer[i], outer[j], inner[j], inner[i]]), ink)
+			draw_colored_polygon(PackedVector2Array([outer[i], outer[j], inner[j], inner[i]]), fill)
 		outer.append(outer[0])
 		inner.append(inner[0])
-		draw_polyline(outer, UiKit.INK, 1.0)
-		draw_polyline(inner, UiKit.INK, 1.0)
+		draw_polyline(outer, UiKit.INK, 3.5)  # a dark rim round the outside
+		draw_polyline(outer, line, 1.5)
+		draw_polyline(inner, line, 1.0)
 
 
 ## Top right: pause.
