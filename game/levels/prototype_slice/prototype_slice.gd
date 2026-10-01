@@ -124,6 +124,15 @@ var _blockers: Array[Dictionary] = []
 var _ambience: Ambience
 ## All the sound (see AudioDirector).
 var _audio: AudioDirector
+## The menus (main menu, settings, pause, end screens).
+var _frontend: Frontend
+## The main menu is up (the camera sways slowly in front of you; no input reaches the game).
+var _menu_open := false
+var _menu_t := 0.0
+## SCREEN SHAKE setting.
+var _shake_on := true
+## The swipe distance before the SWIPE setting scales it.
+var _swipe_base := 0.0
 ## Footsteps: metres run since the last one; whether you were in the air last frame.
 var _stride_left := 0.0
 var _was_airborne := false
@@ -160,6 +169,20 @@ func _ready() -> void:
 	_input.fire_pressed.connect(_on_fire)
 	_input.fire_released.connect(set_fire_held.bind(false))
 	_hud.setup(tuning)
+	_frontend = Frontend.new()
+	_frontend.name = "Frontend"
+	add_child(_frontend)
+	_frontend.mission_title = String(RouteGraph.from_json_file(ROUTE_PATH).mission().get("title", "MISSION 1"))
+	_frontend.start_requested.connect(_begin_intro)
+	_frontend.resume_requested.connect(_resume)
+	_frontend.retry_requested.connect(func() -> void:
+		get_tree().paused = false
+		_retry())
+	_frontend.menu_requested.connect(func() -> void:
+		get_tree().paused = false
+		_skip_title = false
+		get_tree().reload_current_scene())
+	_hud.pause_pressed.connect(_pause)
 	_build_sky()
 	_ambience = Ambience.new()
 	_ambience.name = "Ambience"
@@ -207,19 +230,80 @@ func _ready() -> void:
 		_update_camera(1.0)
 		start_run()
 	else:
-		# GoldenEye-style opening: pan from the front of the player round to behind them.
-		_intro_left = tuning.intro_pan_time
-		_hud.show_mission_title(String(_graph.mission().get("title", "")))
+		# The main menu, over the camera swaying slowly in front of you, with the theme playing.
+		_menu_open = true
+		_frontend.show_main()
+		_hud.set_playing(false)
 		_hud.set_letterbox(true)
+		_audio.play_menu_music()
 		_update_camera(1.0)
+	_frontend.clicked.connect(func() -> void: _audio.play("tick", -2.0, 0.0, "UI"))
+	Settings.changed.connect(_apply_settings)
+	_apply_settings()
+
+
+## START MISSION: the menu goes, and the opening pan plays round to behind you with the mission
+## title; when it ends, the run starts (the door bash). A tap during the pan skips it.
+func _begin_intro() -> void:
+	_menu_open = false
+	_frontend.hide_all()
+	_intro_left = tuning.intro_pan_time
+	_hud.show_mission_title(String(_graph.mission().get("title", "")))
+
+
+func _pause() -> void:
+	if not GameState.run_active or get_tree().paused:
+		return
+	set_fire_held(false)
+	get_tree().paused = true
+	_frontend.show_pause()
+
+
+func _resume() -> void:
+	_frontend.hide_all()
+	get_tree().paused = false
+
+
+## The player's settings (see the Settings autoload), applied now and whenever they change.
+func _apply_settings() -> void:
+	match String(Settings.get_value("aim")):
+		"auto":
+			tuning.targeting_mode = Tuning.TargetingMode.AUTO_PRIORITY
+		"tap":
+			tuning.targeting_mode = Tuning.TargetingMode.TAP_TO_TARGET
+		_:
+			tuning.targeting_mode = Tuning.TargetingMode.HYBRID
+	tuning.fire_on_left = String(Settings.get_value("fire_side")) == "left"
+	if _swipe_base <= 0.0:
+		_swipe_base = tuning.swipe_min_fraction
+	tuning.swipe_min_fraction = _swipe_base * {"low": 1.4, "medium": 1.0, "high": 0.7}.get(String(Settings.get_value("swipe")), 1.0)
+	_ambience.brightness_scale = float(Settings.get_value("brightness")) / 100.0
+	_shake_on = bool(Settings.get_value("screen_shake"))
+	_hud.set_retro_filter(bool(Settings.get_value("retro_filter")))
+	_hud.redraw_fire()
+
+
+## How far through the mission you are, 0 to 1: the distance run, against the distance run plus
+## the shortest way on from here to the chopper.
+func _progress() -> float:
+	var d := maxf(0.0, _player.distance_run())
+	if _segments.is_empty():
+		return 0.0
+	var seg := _segment_at(d)
+	var left := maxf(0.0, float(seg["end"]) - d) + _graph.shortest_after(seg["id"])
+	return d / maxf(d + left, 1.0)
 
 
 func start_run() -> void:
 	if _started:
 		return
 	_started = true
+	_menu_open = false
+	_frontend.hide_all()
 	_intro_left = 0.0  # a tap during the pan skips it
 	_hud.hide_title()
+	_hud.set_playing(true)
+	_audio.stop_menu_music(1.5)
 	_audio.play("codec", -4.0, 0.0, "UI")
 	_hud.set_letterbox(false, tuning.letterbox_time)
 	GameState.start_run(START_ALERT)
@@ -231,7 +315,7 @@ func _physics_process(delta: float) -> void:
 	if _intro_left > 0.0:
 		_intro_left -= delta
 		if _intro_left <= 0.0 and not _started:
-			_hud.show_title()  # the pan has ended behind the player: TAP TO START
+			start_run()  # the pan has ended behind the player: go
 	if GameState.run_active:
 		for door in _doors:
 			if not door.get("done", false) and _player.distance_run() >= door["at"] - 0.9 and door["seg"].get("promoted", false):
@@ -249,6 +333,7 @@ func _physics_process(delta: float) -> void:
 	_update_camera(delta)
 	_update_environment(delta)
 	_hud.show_clock(_clock.fraction(), _clock.lift_fraction())
+	_hud.show_progress(_progress())
 
 
 ## The night sky and the far city skyline, centred on the camera so they always stay far away.
@@ -2047,7 +2132,7 @@ func _funnel_to_markers() -> void:
 ## Out of the room: the door flies open off its hinge and the camera jolts.
 func _bash_door(door: Node3D, swing: float = 1.0) -> void:
 	RunLog.record_event("door_bash", {})
-	_shake = 1.0
+	_shake = 1.0 if _shake_on else 0.0  # SCREEN SHAKE setting
 	# Swings away from the player, out into the lobby, as if shouldered open.
 	var tween := door.create_tween()
 	tween.tween_property(door, "rotation:y", door.rotation.y + 1.9 * swing, 0.16).set_ease(Tween.EASE_OUT)
@@ -2622,6 +2707,7 @@ func _shoot() -> void:
 	if _behind_wall():
 		return  # no shooting from behind a wall: not even into it
 	_audio.play("gun", -3.0, 0.05)
+	_hud.fire_kick()
 	var from := _player.global_transform * Vector3(0.25, 1.2, -0.4)
 	var target := fire_target()
 	var to := from + (-_player.global_transform.basis.z) * 20.0
@@ -2698,12 +2784,20 @@ func _on_run_ended(reason: StringName) -> void:
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())
+	# The end screen, a moment later (so you see what happened): the result, the debrief and the
+	# route taken (the LOCKED post-run route record).
+	var count := func(kind: String) -> int: return RunLog.events.filter(func(e: Dictionary) -> bool: return e["kind"] == kind).size()
+	var stats := {"time": _clock.elapsed, "hits": count.call("player_hit"), "downed": count.call("trooper_down") + count.call("dog_down"),
+			"alert": GameState.alert_level, "route": RunLog.route_summary().split(" > ")}
+	get_tree().create_timer(1.1).timeout.connect(func() -> void: _frontend.show_end(reason, stats))
 	_audio.fade_loops(2.5)
 	_audio.stop_music()
 	_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")
 
 
 func _on_swipe(dir: Vector2i) -> void:
+	if _menu_open or _frontend.is_open():
+		return  # the menus have their own buttons
 	if not _started:
 		start_run()
 	elif GameState.run_active and _player.distance_run() > 0.3 and not in_stairwell():
@@ -2717,10 +2811,12 @@ func _on_swipe(dir: Vector2i) -> void:
 
 
 func _on_tap(pos: Vector2) -> void:
+	if _menu_open or _frontend.is_open():
+		return
 	if not _started:
-		start_run()
+		start_run()  # a tap during the opening pan skips it
 	elif not GameState.run_active:
-		_retry()
+		return  # the end screen has its own buttons
 	elif tuning.targeting_mode != Tuning.TargetingMode.AUTO_PRIORITY:
 		_tapped = _enemy_near_screen(pos)
 
@@ -2744,10 +2840,12 @@ func _enemy_near_screen(pos: Vector2) -> Node3D:
 
 
 func _on_fire() -> void:
+	if _menu_open or _frontend.is_open():
+		return
 	if not _started:
 		start_run()
 	elif not GameState.run_active:
-		_retry()
+		return
 	else:
 		set_fire_held(true)
 
@@ -2802,6 +2900,15 @@ func _update_camera(delta: float) -> void:
 	# Just out of a stairwell, the play camera behind you is still inside it: leave it out for now.
 	var just_out: bool = _is_stairs(seg) and into > seg["ramp_len"] - 0.4 and into < seg["ramp_len"] + 6.5
 	_camera.cull_mask = 0xFFFFF & ~STAIRWELL_LAYER if just_out else 0xFFFFF
+	if _menu_open:
+		# Behind the main menu: in front of you, swaying slowly from side to side.
+		_menu_t += delta
+		var sway := 0.7 * sin(_menu_t * 0.22)
+		eye_local = Vector3(x + sin(sway) * 3.3, 1.55, -cos(sway) * 3.3)
+		look_local = Vector3(x, 1.25, 0.0)
+		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
+		_cam_base = _camera.global_transform
+		return
 	if _intro_left > 0.0 and not _started:
 		# Opening pan: from in front of the player (looking back at them) round the side to the
 		# play camera behind them, where it ends exactly.

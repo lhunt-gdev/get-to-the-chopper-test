@@ -352,3 +352,20 @@ func validate() -> PackedStringArray:
 		if needs_straight and not sides_seen.has("straight"):
 			problems.append("node '%s' has side exits but no straight road" % id)
 	return problems
+
+
+## The shortest distance on from the end of this node to the end of the mission (0 at the end),
+## whatever the alert. For the HUD's progress rail.
+func shortest_after(id: StringName) -> float:
+	return _shortest_after(id, {})
+
+
+func _shortest_after(id: StringName, seen: Dictionary) -> float:
+	if end_type(id) != "" or seen.has(id):
+		return 0.0
+	seen[id] = true
+	var best := INF
+	for e in all_next(id):
+		var to := StringName(e["to"])
+		best = minf(best, length_of(to) + _shortest_after(to, seen.duplicate()))
+	return 0.0 if best == INF else best

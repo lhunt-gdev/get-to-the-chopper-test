@@ -13,7 +13,7 @@ const MUSIC_RATE := 16000
 ## Footstep surfaces, each with a few variations ("step_<surface>_<n>").
 const SURFACES := ["office", "tunnel", "gravel", "stairs", "concrete"]
 const STEP_VARIANTS := 3
-const LOOPS := ["amb_office", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle", "rotor",
+const LOOPS := ["music_menu", "amb_office", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle", "rotor",
 		"music_tension", "music_alert"]
 
 static var _cache: Dictionary = {}
@@ -33,7 +33,7 @@ static func get_stream(name: String) -> AudioStreamWAV:
 
 ## Every sound's name, roughly in the order they're first needed.
 static func all_names() -> Array[String]:
-	var names: Array[String] = ["codec", "tick", "amb_office", "door_wood", "gun", "spotted", "hit", "fall",
+	var names: Array[String] = ["music_menu", "codec", "tick", "amb_office", "door_wood", "gun", "spotted", "hit", "fall",
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
@@ -55,6 +55,8 @@ static func steps(name: String) -> Array[Callable]:
 			return _tension_steps()
 		"music_alert":
 			return _alert_music_steps()
+		"music_menu":
+			return _menu_music_steps()
 	return [func() -> void: _cache[name] = _make(name)]
 
 
@@ -477,6 +479,115 @@ static func _ambience_steps(name: String) -> Array[Callable]:
 
 
 # --- Music (built in steps) -----------------------------------------------------------
+
+## A note name ("A4", "G#5", "Bb3") as a frequency.
+static func note(n: String) -> float:
+	var names := {"C": -9, "D": -7, "E": -5, "F": -4, "G": -2, "A": 0, "B": 2}
+	var semis: int = names[n[0]]
+	var i := 1
+	if n[i] == "#":
+		semis += 1
+		i += 1
+	elif n[i] == "b":
+		semis -= 1
+		i += 1
+	var octave := int(n.substr(i))
+	return 440.0 * pow(2.0, (semis + (octave - 4) * 12) / 12.0)
+
+
+## The menu and opening-pan theme: an original spy piece in the spirit of GoldenEye N64's menu
+## music (not its melody). 100 bpm, 8 bars in A minor: Am, Fmaj7, Dm6, E (two bars each). A plucked
+## bass ostinato, brushed drums, a slow string pad, a twangy spy-guitar lead with echo, and brass
+## stabs on the turnaround.
+static func _menu_music_steps() -> Array[Callable]:
+	var box := {}
+	var beat := 0.6
+	var total := beat * 32.0
+	var out: Array[Callable] = []
+	var chords := [["A", ["A3", "C4", "E4"]], ["F", ["F3", "A3", "E4"]], ["D", ["D3", "F3", "B3"]], ["E", ["E3", "G#3", "D4"]]]
+	var bass_roots := [note("A1"), note("F1"), note("D2"), note("E2")]
+	out.append(func() -> void:
+		box.bass = Synth.create(total, MUSIC_RATE, 41)
+		var minor := [0, -1, 0, 7, 12, -1, 10, 7]
+		var major := [0, -1, 0, 7, 12, -1, 4, 7]
+		for bar in 8:
+			var root: float = bass_roots[bar / 2]
+			var pat: Array = major if bar >= 6 else minor
+			for e in 8:
+				if pat[e] < 0:
+					continue
+				var f: float = root * pow(2.0, pat[e] / 12.0)
+				var t := (bar * 8 + e) * beat / 2.0
+				box.bass.tone(t, beat * 0.45, f * 1.01, f, 0.55, Synth.Wave.TRIANGLE, 0.003, 4.0)
+				box.bass.tone(t, beat * 0.3, f, f, 0.18, Synth.Wave.SAW, 0.003, 6.0))
+	out.append(func() -> void:
+		box.bass.lowpass(700.0))
+	out.append(func() -> void:
+		box.drums = Synth.create(total, MUSIC_RATE, 42)
+		for b in 32:
+			var t := b * beat
+			box.drums.noise(t, 0.05, 0.16, 0.0, 6000.0, 0.002, 6.0)                 # brushed hat
+			box.drums.noise(t + beat * 0.62, 0.04, 0.1, 0.0, 6500.0, 0.002, 7.0)    # the swung off-beat
+			if b % 4 in [1, 3]:
+				box.drums.noise(t, 0.06, 0.3, 4000.0, 1500.0, 0.001, 8.0)           # rim
+				box.drums.tone(t, 0.04, 900.0, 700.0, 0.12, Synth.Wave.TRIANGLE, 0.001, 8.0)
+			if b % 4 == 0 or b % 8 == 6:
+				box.drums.tone(t, 0.16, 110.0, 48.0, 0.5, Synth.Wave.SINE, 0.002, 6.0)  # soft kick
+		)
+	out.append(func() -> void: box.pad = Synth.create(total, MUSIC_RATE, 43))
+	for ci in chords.size():
+		for tone_name in chords[ci][1]:
+			out.append(func() -> void:
+				var f := note(tone_name)
+				box.pad.tone(ci * beat * 8.0, beat * 8.0, f, f, 0.07, Synth.Wave.SAW, 0.6, 0.6))
+	out.append(func() -> void:
+		box.pad.lowpass(1100.0))
+	out.append(func() -> void:
+		box.lead = Synth.create(total, MUSIC_RATE, 44)
+		var line := [
+			[1.0, 1.0, "E5"], [2.0, 0.5, "D5"], [2.5, 0.5, "E5"], [3.0, 1.0, "G5"],
+			[4.0, 1.5, "F5"], [5.5, 0.5, "E5"], [6.0, 0.5, "D#5"], [6.5, 1.5, "E5"],
+			[9.0, 0.5, "C5"], [9.5, 0.5, "A4"], [10.0, 1.0, "C5"], [11.0, 1.0, "E5"],
+			[12.0, 1.5, "D5"], [13.5, 0.5, "C5"], [14.0, 2.0, "A4"],
+			[17.0, 0.5, "F5"], [17.5, 0.5, "E5"], [18.0, 1.0, "D5"], [19.0, 1.0, "B4"],
+			[20.0, 1.5, "D5"], [21.5, 0.5, "F5"], [22.0, 2.0, "A5"],
+			[24.0, 1.0, "G#5"], [25.0, 0.5, "F5"], [25.5, 0.5, "E5"], [26.0, 1.0, "D5"], [27.0, 1.0, "B4"],
+			[28.0, 2.0, "G#4"], [30.0, 0.5, "B4"], [30.5, 0.5, "D5"], [31.0, 1.0, "E5"],
+		]
+		for n in line:
+			var f := note(n[2])
+			var t: float = n[0] * beat
+			var d: float = n[1] * beat
+			# A twang: it slides up into the note, then rings and fades.
+			box.lead.tone(t, 0.035, f * 0.94, f, 0.22, Synth.Wave.PULSE, 0.002, 0.0)
+			box.lead.tone(t + 0.035, d * 0.95, f, f * 0.997, 0.22, Synth.Wave.PULSE, 0.003, 2.2)
+			box.lead.tone(t, d * 0.9, f * 2.0, f * 2.0, 0.05, Synth.Wave.SINE, 0.003, 3.0)
+		box.lead.lowpass(2600.0))
+	out.append(func() -> void:
+		box.lead.echo(beat * 0.75, 0.38, 0.4))
+	out.append(func() -> void:
+		box.brass = Synth.create(total, MUSIC_RATE, 45)
+		for bar in [6, 7]:
+			var t: float = bar * beat * 4.0
+			for n in ["E4", "G#4", "B4", "D5"]:
+				var f := note(n)
+				box.brass.tone(t, 0.32, f * 0.99, f, 0.09, Synth.Wave.SAW, 0.01, 4.0)
+				box.brass.tone(t + beat * 2.5, 0.2, f * 0.99, f, 0.07, Synth.Wave.SAW, 0.01, 5.0)
+			box.brass.tone(t, 0.5, 70.0, 52.0, 0.5, Synth.Wave.SINE, 0.002, 4.0)  # timpani
+		box.brass.lowpass(2400.0))
+	out.append(func() -> void:
+		box.bass.mix_in(box.drums, 0.0, 1.0))
+	out.append(func() -> void:
+		box.bass.mix_in(box.pad, 0.0, 1.0))
+	out.append(func() -> void:
+		box.bass.mix_in(box.lead, 0.0, 1.0)
+		box.bass.mix_in(box.brass, 0.0, 1.0))
+	out.append(func() -> void:
+		box.bass.crush(10, 1)
+		box.bass.normalize(0.6)
+		_cache["music_menu"] = box.bass.to_stream(true))
+	return out
+
 
 ## CAUTION (alert 2): a low pulsing bass, a held dark pad and a ticking clock. 110 bpm, 4 bars.
 static func _tension_steps() -> Array[Callable]:

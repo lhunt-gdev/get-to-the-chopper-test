@@ -135,9 +135,30 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Look and sound:** a low-poly PS1 shepherd (tan with a black saddle) that gallops. Barks, a growl, a bite snap, a yelp.
 - **Test level (proposed):** one in the MAIN FLOOR LOBBY, and one on the ROOFTOPS at alert 2 and up.
 
-### OPEN — Shooting through walls (user report, 2026-10-01)
+### RESOLVED — Shooting through walls (user report, 2026-10-01)
 - The playtest after the real line-of-sight rays still showed shots going through walls. The user said to come back to it later. Next step: find the exact situation (which wall, what kind of shot).
 - Likely cause: leaning out from behind a wall, which looks like shooting through it. Leaning is now removed (see Line of sight). Check again in the next playtest.
+- **Playtest (2026-10-01, user):** "it's good now". The walls hold, and the chopper sound at the end is fixed too.
+
+### PROPOSED — UI, menus and intro music (user direction, 2026-10-01)
+- **Look:** a sleek espionage style that mixes three games. MGS1: codec-style dark panels with thin teal outlines and scanlines. GoldenEye N64: dossier-style menus with red danger accents and a gun-barrel reticle. GTA (PS1 / PS2): bold, slanted, chunky HUD blocks. All UI text is in a pixel font made in code (5x7), drawn at whole-pixel sizes so it stays crisp.
+- **Main menu**, over the slowly orbiting opening camera, with the intro music: START MISSION, SETTINGS, CONTROLS. START plays the mission title, then the run (the door bash) begins. Retry from an end screen skips the menu, as before.
+- **Pause** (button top right): RESUME, SETTINGS, CONTROLS, QUIT TO MENU.
+- **Settings** (modelled on mobile action games), saved on the device:
+  - Audio: SOUND on / off; MASTER, MUSIC, EFFECTS and AMBIENCE volume.
+  - Display: BRIGHTNESS; SCREEN SHAKE on / off; RETRO FILTER (the colour grade and dither) on / off.
+  - Controls: AIM (AUTO, AUTO + TAP, TAP ONLY: the existing targeting modes); FIRE BUTTON side (RIGHT / LEFT: the OPEN FIRE-position item); SWIPE SENSITIVITY (LOW / MEDIUM / HIGH).
+  - RESET TO DEFAULTS.
+- **Controls screen:** the swipes and FIRE, plus how cover and the dog work.
+- **HUD:**
+  - A LIFE bar (segmented, one segment per hit) with a styled alert box under it: SNEAKING / CAUTION / ALERT, coloured by level.
+  - A codec-style message box under the clock, for chopper messages.
+  - A vertical progress bar down the left side, with a right-pointing arrow marking how far through the mission you are (start at the bottom, the chopper at the top).
+  - **The trigger FIRE button (user direction):** a close-up of a gun's trigger, after the user's reference silhouette: a thick cream trigger-guard loop with a heavier flat top, and the red hooked trigger blade under it. No disc or label (user: remove the circle and the FIRE text). Held, the blade pulls back; every shot jolts it and flashes it. (A first try, a whole pistol in a ring, wasn't what the user had in mind.)
+  - **Settings rows (playtest, user):** buttons smaller and tighter, with more space between rows; RESET and BACK side by side.
+  - A pause button. The clock and area caption stay.
+- **End screens:** MISSION COMPLETE (success), KILLED IN ACTION, CAPTURED, MISSION FAILED (the chopper left; no way through). Each shows the route taken (the LOCKED post-run route record) and a few stats (time, hits taken, enemies down), with RETRY and MAIN MENU.
+- **Intro music (user direction):** an original spy theme in the spirit of GoldenEye's menu music (moody minor key, a twangy spy-guitar lead with echo, a plucked bass ostinato, brushed drums, strings), not a copy of its melody. It plays over the menu and the opening pan, and fades as the run begins. Generated in code like the rest of the sound.
 
 ### PROPOSED — Chopper countdown (Point 9 / extraction pressure; user direction)
 - **Clock (user decision):** an old-style analog timer dial, top centre. The hand sweeps round as the chopper's window runs out, and the last stretch of the dial is red. This replaces the handover's "no big HUD timer" working direction (which was never locked). It stays small.

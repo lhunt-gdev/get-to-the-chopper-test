@@ -23,6 +23,8 @@ var _time := 0.0
 ## 0 = calm, 1 = full ALERT (red pulse). Eases toward the alert level.
 var _alert := 0.0
 var _caution := 0.0
+## BRIGHTNESS setting (1 = normal), on top of Tuning.brightness.
+var brightness_scale := 1.0
 
 
 ## A lamp at `node` (it moves with it). range: how far its pool reaches. flicker 0..1: how often it
@@ -63,7 +65,7 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 	_alert = move_toward(_alert, 1.0 if alert_level >= 3 else 0.0, delta * 1.5)
 	_caution = move_toward(_caution, 1.0 if alert_level == 2 else 0.0, delta * 1.5)
 	var pulse := 0.5 + 0.5 * sin(_time * tuning.alert_pulse_speed)
-	var b := tuning.brightness
+	var b := tuning.brightness * brightness_scale
 	var amb := _amb.lerp(_amb * Color(1.3, 0.65, 0.6), _alert * (0.3 + 0.4 * pulse)) * b
 	RenderingServer.global_shader_parameter_set("amb_color", Vector4(amb.r, amb.g, amb.b, 1))
 	RenderingServer.global_shader_parameter_set("moon_color", Vector4(_moon.r * b, _moon.g * b, _moon.b * b, 1))

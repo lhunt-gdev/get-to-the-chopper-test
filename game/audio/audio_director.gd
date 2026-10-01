@@ -27,6 +27,8 @@ var _music_on := ""
 var _world: Node3D
 ## Loops stuck to things in the world (wires, steam, the chopper), so they can be faded at the end.
 var _loops: Array[AudioStreamPlayer3D] = []
+var _menu_music: AudioStreamPlayer
+var _menu_wanted := false
 
 
 func _ready() -> void:
@@ -46,6 +48,11 @@ func _ready() -> void:
 		mp.volume_db = -80.0
 		add_child(mp)
 		_music[m] = mp
+	_menu_music = AudioStreamPlayer.new()
+	_menu_music.volume_db = -80.0
+	add_child(_menu_music)
+	Settings.changed.connect(_apply_settings)
+	_apply_settings()
 	for name in SoundBank.all_names():
 		prewarm(name)
 
@@ -61,12 +68,34 @@ func set_world(world: Node3D) -> void:
 func _mix(part: String) -> float:
 	match part:
 		"Ambience":
-			return tuning.ambience_volume_db
+			return tuning.ambience_volume_db + Settings.volume_db(Settings.get_value("ambience_volume"))
 		"Music":
-			return tuning.music_volume_db
+			return tuning.music_volume_db + Settings.volume_db(Settings.get_value("music_volume"))
 		"UI":
-			return tuning.ui_volume_db
-	return tuning.sfx_volume_db
+			return tuning.ui_volume_db + Settings.volume_db(Settings.get_value("effects_volume"))
+	return tuning.sfx_volume_db + Settings.volume_db(Settings.get_value("effects_volume"))
+
+
+## SOUND on / off and MASTER volume go on the Master bus; the others are applied per sound.
+func _apply_settings() -> void:
+	AudioServer.set_bus_mute(0, not bool(Settings.get_value("sound_on")))
+	AudioServer.set_bus_volume_db(0, Settings.volume_db(Settings.get_value("master_volume")))
+	for p in _loops:
+		if is_instance_valid(p):
+			p.volume_db = p.get_meta("base_db", 0.0) + _mix("Sfx")
+
+
+## The menu / opening-pan theme: plays (fading in) as soon as it's built.
+func play_menu_music() -> void:
+	_menu_wanted = true
+
+
+func stop_menu_music(seconds: float = 1.5) -> void:
+	_menu_wanted = false
+	if _menu_music.playing:
+		var t := _menu_music.create_tween()
+		t.tween_property(_menu_music, "volume_db", -60.0, seconds)
+		t.tween_callback(_menu_music.stop)
 
 
 ## Queue a sound to be built in the background (if it isn't already).
@@ -86,6 +115,13 @@ func _process(delta: float) -> void:
 		_queued_names.clear()
 	_fade_music(delta)
 	_fade_ambience(delta)
+	if _menu_wanted:
+		if not _menu_music.playing and SoundBank.has("music_menu"):
+			_menu_music.stream = SoundBank.get_stream("music_menu")
+			_menu_music.volume_db = -30.0
+			_menu_music.play()
+		if _menu_music.playing:
+			_menu_music.volume_db = move_toward(_menu_music.volume_db, _mix("Music"), delta * 20.0)
 
 
 ## A one-shot, heard the same wherever you are. pitch_jitter: random +/- pitch, so repeats vary.
@@ -124,6 +160,7 @@ func play_at(name: String, pos: Vector3, volume_db: float = 0.0, pitch_jitter: f
 func attach_loop(node: Node3D, name: String, volume_db: float = 0.0, max_distance: float = 15.0, unit_size: float = 3.0) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()
 	p.stream = SoundBank.get_stream(name)
+	p.set_meta("base_db", volume_db)
 	p.volume_db = volume_db + _mix("Sfx")
 	p.unit_size = unit_size
 	p.max_distance = max_distance

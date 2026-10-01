@@ -20,7 +20,8 @@ var _touches: Dictionary = {}
 static func fire_button(screen: Vector2, t: Tuning) -> Vector3:
 	var r := screen.x * t.fire_button_fraction
 	var margin := screen.x * 0.04
-	return Vector3(screen.x - r - margin, screen.y - r - margin, r)
+	var x := r + margin if t.fire_on_left else screen.x - r - margin
+	return Vector3(x, screen.y - r - margin, r)
 
 
 static func on_fire_button(p: Vector2, screen: Vector2, t: Tuning) -> bool:

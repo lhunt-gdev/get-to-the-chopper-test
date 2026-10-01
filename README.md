@@ -25,7 +25,7 @@ Controls: swipe left/right to change lane, up to jump, down to slide; hold FIRE 
 
 | Works | Not built yet |
 |---|---|
-| Mission intro: start in an office room, GoldenEye-style camera pan round the player, tap to start, bash through the door; auto-run, 5 lanes, swipe dodge/jump/slide | Enemies beyond the Rifle Trooper and Rusher (Heavy, Sniper, Security) |
+| Main menu (START MISSION, SETTINGS, CONTROLS) over the swaying camera with an original spy theme; settings saved on the device (sound, volumes, brightness, screen shake, retro filter, aim mode, FIRE side, swipe sensitivity); pause menu; end screens with a debrief and the route taken. Espionage-style UI (MGS codec panels, GoldenEye dossier menus, GTA chunky slanted blocks) in a pixel font made in code: LIFE bar, SNEAKING / CAUTION / ALERT box, codec message box, progress rail with an arrow, pistol-trigger FIRE button that pulls and kicks. Mission intro: start in an office room, GoldenEye-style camera pan round the player, then bash through the door; auto-run, 5 lanes, swipe dodge/jump/slide | Enemies beyond the Rifle Trooper and Rusher (Heavy, Sniper, Security) |
 | Authored branching route from `route.json` | Real damage model and weapons (placeholders: 3 hits, unlimited-ammo rifle) |
 | Junction prompt + brief slowdown (never a pause); stairs are narrow one-lane stairwells with a door you burst through at each end, seen through a CCTV security camera; a halfway marker wall across the main floor and the service tunnel with a double door in the middle to burst through (office doors / barred gates; the outer lanes funnel in; 20 m clear after them); the road physically splits (turns, stairs, end-of-level ladders) and straight on stays open until the split; lockdown doors on alert-closed branches; authored bends; routes head back to the centre; sign over the fork (UP / DOWN for stairs) | Recorded or composed audio (the sound is all generated placeholders) |
 | Alert level: 2 tripwires on the main route (up to Alert 3), each followed by an alarm box that lowers it; TUNNEL (off BUILDING MAIN FLOOR) sealed above Alert 1; troopers tiered by alert on every route | Other alert triggers (e.g. the Security Trooper) |
@@ -46,9 +46,9 @@ game/
   enemies/      one folder per enemy (rifle_trooper/, rusher_dog/, ...)
   route/        RouteGraph (data) + RouteRunner (walks it, commits choices)
   systems/      alert/, targeting/, extraction/
+  ui/           hud/ (in-run HUD), menu/ (main menu, settings, pause, end screens), kit/ (the look and pixel font), route_map/
   audio/        sound synthesis (synth.gd), every sound (sound_bank.gd), playback and music (audio_director.gd)
   rendering/    shared PS1 materials, mood lighting (ambience.gd)
-  ui/           hud/, route_map/
   levels/       one folder per mission: scene + route.json
 assets/         shaders/psx, textures, models, audio, fonts
 docs/           design/ (handover, decision log), dev/
