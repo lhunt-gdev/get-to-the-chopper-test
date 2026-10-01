@@ -144,6 +144,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Look:** a sleek espionage style that mixes three games. MGS1: codec-style dark panels with thin teal outlines and scanlines. GoldenEye N64: dossier-style menus with red danger accents and a gun-barrel reticle. GTA (PS1 / PS2): bold, slanted, chunky HUD blocks. All UI text is in a pixel font made in code (5x7), drawn at whole-pixel sizes so it stays crisp.
 - **Main menu**, over the slowly orbiting opening camera, with the intro music: START MISSION, SETTINGS, CONTROLS. START plays the mission title, then the run (the door bash) begins. Retry from an end screen skips the menu, as before.
 - **No title screen (user decision, 2026-10-01):** browsers block sound until the first tap, so the menu music is silent until you touch the screen. A title screen with a button to unlock it was tried and removed: "it's not necessary", since a tap anywhere unmutes the audio. The game opens straight on the main menu.
+- **Build number on the main menu (user, 2026-10-01):** under the title area, e.g. "BUILD 10B7186 - 01 OCT 19:43": the commit the live site was built from, and when (UTC). It shows at a glance whether the phone has the latest version or a cached old one. The CI writes it (`game/build_info.json`, not committed); a local run shows "BUILD DEV".
 - **Pause** (button top right): RESUME, SETTINGS, CONTROLS, QUIT TO MENU.
 - **Settings** (modelled on mobile action games), saved on the device:
   - Audio: SOUND on / off; MASTER, MUSIC, EFFECTS and AMBIENCE volume.

@@ -16,3 +16,5 @@ Thumbs.db
 *.tmp
 .vscode/
 .idea/
+# Written by CI at export time (the build number on the main menu)
+game/build_info.json

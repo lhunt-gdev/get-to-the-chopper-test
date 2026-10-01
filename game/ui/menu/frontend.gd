@@ -106,9 +106,22 @@ func _build_main() -> void:
 	var first := _button("START MISSION", 290, func() -> void: start_requested.emit())
 	_button("SETTINGS", 318, func() -> void: _open(Screen.SETTINGS))
 	_button("CONTROLS", 346, func() -> void: _open(Screen.CONTROLS))
-	_place_wide(UiKit.label("PROOF OF CONCEPT BUILD", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 452)
+	_place_wide(UiKit.label("PROOF OF CONCEPT BUILD", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
+	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
 	first.grab_focus()
 
+
+## Which build this is: the commit the live site was built from and when (UTC), written by the
+## CI into game/build_info.json, so you can tell a fresh version from a cached old one. "DEV"
+## when run from the editor.
+static func build_label() -> String:
+	var path := "res://game/build_info.json"
+	if not FileAccess.file_exists(path):
+		return "BUILD DEV"
+	var info = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not info is Dictionary:
+		return "BUILD DEV"
+	return ("BUILD %s - %s" % [info.get("commit", "?"), info.get("built", "")]).strip_edges().to_upper()
 
 func _build_pause() -> void:
 	_back_to = Screen.PAUSE
