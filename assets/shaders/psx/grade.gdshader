@@ -6,8 +6,8 @@ shader_type canvas_item;
 uniform sampler2D screen : hint_screen_texture, filter_nearest;
 uniform vec3 shadow_tint = vec3(0.015, 0.045, 0.065);
 uniform float saturation = 0.82;
-uniform float contrast = 0.3;
-uniform float vignette = 0.5;
+uniform float contrast = 0.15;
+uniform float vignette = 0.38;
 // 0..1 (already pulsing): how red / amber the screen edges are.
 uniform float alert = 0.0;
 uniform float caution = 0.0;

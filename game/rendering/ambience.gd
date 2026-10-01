@@ -63,9 +63,10 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 	_alert = move_toward(_alert, 1.0 if alert_level >= 3 else 0.0, delta * 1.5)
 	_caution = move_toward(_caution, 1.0 if alert_level == 2 else 0.0, delta * 1.5)
 	var pulse := 0.5 + 0.5 * sin(_time * tuning.alert_pulse_speed)
-	var amb := _amb.lerp(_amb * Color(1.3, 0.65, 0.6), _alert * (0.3 + 0.4 * pulse))
+	var b := tuning.brightness
+	var amb := _amb.lerp(_amb * Color(1.3, 0.65, 0.6), _alert * (0.3 + 0.4 * pulse)) * b
 	RenderingServer.global_shader_parameter_set("amb_color", Vector4(amb.r, amb.g, amb.b, 1))
-	RenderingServer.global_shader_parameter_set("moon_color", Vector4(_moon.r, _moon.g, _moon.b, 1))
+	RenderingServer.global_shader_parameter_set("moon_color", Vector4(_moon.r * b, _moon.g * b, _moon.b * b, 1))
 	RenderingServer.global_shader_parameter_set("moon_dir", Vector4(_moon_dir.x, _moon_dir.y, _moon_dir.z, 0))
 
 	_lamps = _lamps.filter(func(l: Dictionary) -> bool: return is_instance_valid(l["node"]))
@@ -94,7 +95,7 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 				c = c.lerp(ALERT_RED * 1.3, _alert * (0.25 + 0.3 * pulse))
 			# Far lamps fade out (instead of popping) where the list cuts off, hidden in the fog.
 			var fade := clampf((tuning.lamp_fade_far - float(l["dist"])) / 10.0, 0.0, 1.0)
-			var e: float = l["lit"] * fade
+			var e: float = l["lit"] * fade * b
 			var p: Vector3 = l["pos"]
 			pos = Vector4(p.x, p.y, p.z, l["range"])
 			col = Vector4(c.r * e, c.g * e, c.b * e, 1)

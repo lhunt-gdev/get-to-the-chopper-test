@@ -147,6 +147,9 @@ enum TargetingMode {
 @export var alarm_window_far: float = 20.0
 
 @export_group("Ambience")
+## Overall brightness: scales every area's ambient light, moonlight and lamps (1 = as authored).
+## Playtest (user): 1.0 was a little hard to see things.
+@export_range(0.5, 2.0, 0.05) var brightness: float = 1.5
 ## Lamps further than this from where the camera looks fade out (hidden in the fog).
 @export var lamp_fade_far: float = 34.0
 ## How fast the lamps and screen edges pulse red at ALERT.

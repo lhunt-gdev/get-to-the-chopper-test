@@ -55,6 +55,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - Lamps are authored per area theme: office ceiling strips, caged tunnel bulbs, rooftop floodlights, and blinking aviation beacons on the skyline.
   - A full-screen grade and dither pass sits under the HUD. The stairwell CCTV view replaces it while you're in a stairwell.
 - **Playtest (2026-09-30, user, iPhone):** speed is fine; the tunnel isn't too dark for now; the ALERT 3 red is fine, not too much. Keep the current values.
+- **Playtest (2026-10-01, user):** "the default brightness needs to be a bit brighter, it's a little hard to see things". Added an overall `Tuning.brightness`, which scales every area's ambient light, moonlight and lamps, set to 1.5. The grade's contrast curve is eased (0.3 to 0.15) so the dark areas aren't crushed, and the vignette is lighter (0.5 to 0.38). Frames come out about 55 to 70% brighter on average; the mood (lamp pools, cold shadows) is kept.
 - **Texture pass (user direction, 2026-09-30):** "work on the textures more and give them a bit more of an MGS quality". The generated textures go from flat 32 px tiles to 64 px tiles with the detail MGS1's textures are known for:
   - bevelled panel edges (light top-left, dark bottom-right) and recessed seams;
   - blotchy grime rather than even noise, dirt building up at the bottom of walls, and rust and water streaks running down from seams;
