@@ -166,7 +166,7 @@ enum TargetingMode {
 @export_group("Audio")
 ## Loudness of each part of the mix, in dB (0 = as built).
 @export var sfx_volume_db: float = 0.0
-@export var ambience_volume_db: float = -8.0
+@export var ambience_volume_db: float = -16.0  # playtest (user): -8 was far too loud
 @export var music_volume_db: float = -6.0
 @export var ui_volume_db: float = -4.0
 ## Metres run between footsteps.
