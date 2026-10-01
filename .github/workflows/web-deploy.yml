@@ -52,7 +52,10 @@ jobs:
         run: GODOT=~/godot/godot bash tests/run_all.sh
 
       - name: Stamp the build number (shown on the main menu)
-        run: echo "{\"commit\": \"${GITHUB_SHA::7}\", \"built\": \"$(date -u '+%d %b %H:%M')\"}" > game/build_info.json && cat game/build_info.json
+        run: |
+          stamp="$(date -u '+%d %b %H:%M')"
+          printf '{"commit": "%s", "built": "%s"}\n' "${GITHUB_SHA::7}" "$stamp" > game/build_info.json
+          cat game/build_info.json
 
       - name: Export web build
         run: |
