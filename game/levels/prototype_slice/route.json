@@ -25,6 +25,7 @@
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 2, "at": 44},
+        {"kind": "rusher_dog", "lane": 3, "at": 58},
         {"kind": "rifle_trooper", "lane": 0, "at": 86, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 4, "at": 80, "min_alert": 3}
       ],
@@ -89,6 +90,7 @@
       "enemies": [
         {"kind": "rifle_trooper", "lane": 3, "at": 48, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 1, "at": 64},
+        {"kind": "rusher_dog", "lane": 2, "at": 80, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 4, "at": 90, "min_alert": 3}
       ],
       "alarms": [

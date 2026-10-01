@@ -192,6 +192,13 @@ func _test_trooper_rules() -> void:
 	_check(Sightlines.cover_wall(18.6, 2.8, walls) != null, "in cover just behind a wall, that's the wall you lean round")
 	_check(Sightlines.cover_wall(18.6, -2.8, walls) == null, "a wall in other lanes isn't yours")
 	_check(Sightlines.cover_wall(10.0, 2.8, walls) == null, "not in cover behind a wall 10 m away")
+	# The Rusher: dodge out of its lane and it misses; cover doesn't help.
+	_check(RusherDog.bites(0.0, 0.0, false, w), "the dog gets you in the lane it's coming down")
+	_check(not RusherDog.bites(1.4, 0.0, false, w), "dodge a lane over and it runs past")
+	_check(RusherDog.bites(1.4, 0.0, true, w), "in cover it gets round to you anyway")
+	var tt := Tuning.new()
+	_check(RusherDog.windup_time(tt, 1) > RusherDog.windup_time(tt, 3), "at higher alert the dog barks for less time before charging")
+	_check(RusherDog.trigger_distance(tt, 3) > RusherDog.trigger_distance(tt, 1), "at higher alert it notices you further off")
 	var t := Tuning.new()
 	_check(RifleTrooper.aim_time(t, 1) > RifleTrooper.aim_time(t, 2) and RifleTrooper.aim_time(t, 2) > RifleTrooper.aim_time(t, 3),
 			"higher alert, less time to dodge")

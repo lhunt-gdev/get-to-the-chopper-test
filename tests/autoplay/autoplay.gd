@@ -26,6 +26,10 @@ extends Node
 ##   ground_alarms - main route, runs through both wires, shoots both alarm boxes: back to Alert 1
 ##   stumble_once - main route, but runs straight into the first barrier: a stumble (1 HP, a
 ##                  little time), not the end of the run
+##   dog_bite     - main route, but never shoots the lobby's guard dog and holds its lane when
+##                  it charges: bitten (a hit and a stumble), and still gets out
+##   dog_dodge    - main route, never shoots the dog, and swipes out of its lane when it barks:
+##                  it runs past
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -97,6 +101,15 @@ func _physics_process(_delta: float) -> void:
 			_player.handle_swipe(Vector2i.RIGHT if _player.lane < lane_count / 2 else Vector2i.LEFT)
 		return
 
+	# The guard dog: dog_dodge swipes out of the lane it's coming down; dog_bite holds its lane.
+	var dog := _charging_dog(d)
+	if dog != null and scenario == "dog_bite":
+		_cooldown = 5
+	if dog != null and scenario == "dog_dodge" and absf(dog.locked_x - _player.lane_x(_player.lane)) < 0.1 and _cooldown <= 0:
+		var to := _player.lane - 1 if _player.lane > 0 and not _blocked_ahead(obstacles, _player.lane - 1, d) else _player.lane + 1
+		_player.handle_swipe(Vector2i.LEFT if to < _player.lane else Vector2i.RIGHT)
+		_cooldown = 30
+
 	# Last-minute change of mind: back to the middle just before the first split.
 	if scenario == "late_switch" and _level._runner.current == &"main_floor_lobby":
 		var runner: RouteRunner = _level._runner
@@ -155,6 +168,8 @@ func _shoot() -> void:
 	var want := target != null
 	if target is AlarmBox and not _may_shoot_alarm():
 		want = false
+	if target is RusherDog and scenario in ["dog_bite", "dog_dodge"]:
+		want = false  # leave the dog to bite or be dodged
 	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
 		want = false  # prove the cover works: only shoot once we're behind it...
 	if scenario == "cover" and _player.in_cover and _cover_frames < 90:
@@ -168,6 +183,15 @@ func _trooper_ahead(d: float) -> bool:
 		if n is RifleTrooper and n.is_targetable(GameState.alert_level) and n.at > d and n.at - d < _player.tuning.trooper_aim_range + 2.0:
 			return true
 	return false
+
+
+## A dog ahead that has barked or is charging at us, or null.
+func _charging_dog(d: float) -> RusherDog:
+	for c in _level._combatants:
+		var n = c["node"]
+		if n is RusherDog and n.state in [RusherDog.State.WINDUP, RusherDog.State.CHARGE] and n.at > d:
+			return n
+	return null
 
 
 func _blocked_ahead(obstacles: Array, lane: int, d: float) -> bool:
@@ -196,8 +220,9 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d time=%.1f" % [scenario, reason,
-			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"), _level._clock.elapsed])
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d time=%.1f" % [scenario, reason,
+			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
+			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _level._clock.elapsed])
 	get_tree().quit()
 
 

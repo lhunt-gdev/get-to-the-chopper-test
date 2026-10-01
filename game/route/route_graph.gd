@@ -41,6 +41,8 @@ const WIRE_LANES := [3, 4]
 const STAIR_EXIT_CLEAR := 20.0
 ## Nothing (obstacle or trooper) this close before a halfway marker's double door, or this far
 ## after it: you burst through blind, so you need time to see what's ahead (like a stairwell's exit).
+## Enemy kinds a level can place.
+const ENEMY_KINDS := ["rifle_trooper", "rusher_dog"]
 const MARKER_CLEAR_BEFORE := 6.0
 const MARKER_CLEAR_AFTER := 20.0
 ## Areas with no walls to mount tripwire emitters on (user rule: no tripwires on the rooftops).
@@ -297,7 +299,7 @@ func validate() -> PackedStringArray:
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
 		for e in n.get("enemies", []):
-			if String(e.get("kind", "")) != "rifle_trooper":
+			if not String(e.get("kind", "")) in ENEMY_KINDS:
 				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
 			if float(e.get("at", -1)) < 0.0 or float(e.get("at", -1)) > length:
 				problems.append("node '%s': enemy at %s m is outside the segment" % [id, e.get("at")])

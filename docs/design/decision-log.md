@@ -120,6 +120,23 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - **UI and story:** a codec "pi-pi" on tap to start; a typing tick under the area caption; a radio squelch with each chopper message; warning beeps at LIFTING OFF; an extraction jingle; and a game-over sting.
 - Positional where it helps (troopers, the chopper, wires, steam, alarm boxes); everything else plays flat. Volumes are in `Tuning` (Audio).
 
+### PROPOSED — Rusher: the German Shepherd (LOCKED roster; behaviour by user decision, 2026-10-01)
+- **Placed** in `route.json` like a trooper (`"kind": "rusher_dog"`, a lane and `at`, optional `min_alert` / `max_alert`). It stands guard in its lane, facing you.
+- **The charge:** when you come within `rusher_trigger_distance` it barks (a red "!" over it, a crouch: the telegraph), then sprints straight down the route at you.
+  - **Locks onto your lane (user decision):** the lane you were in when it barked. Swipe out of that lane in time and it runs past you.
+  - **No jumping over it (user decision):** it leaps up at you. Dodge or shoot, as the LOCKED rule says.
+  - It bounds over low obstacles (boxes, barriers) and runs round walls.
+- **Contact (user decision):** if it reaches you in your lane, it bites: one hit and a stumble (slowed for a moment, like running into an obstacle). Then it runs on past and is gone.
+- **Cover doesn't help (LOCKED):** in cover in its lane, it gets round to you and bites.
+- **Shooting it:** one shot drops it (a yelp, a blood pool). Auto-targeting (agreed rule): a barking or charging dog comes before a trooper who is aiming (priority 60 vs 50), and after a Security trooper reaching for an alarm (100).
+- **Alert (proposed):** higher alert means it notices you further off and barks for less time before charging (`Tuning`, Rusher).
+- **Route rules:** the same as troopers (none hidden right behind a wall, none too close to doors or stairwell exits).
+- **Look and sound:** a low-poly PS1 shepherd (tan with a black saddle) that gallops. Barks, a growl, a bite snap, a yelp.
+- **Test level (proposed):** one in the MAIN FLOOR LOBBY, and one on the ROOFTOPS at alert 2 and up.
+
+### OPEN — Shooting through walls (user report, 2026-10-01)
+- The playtest after the real line-of-sight rays still showed shots going through walls. The user said to come back to it later. Next step: find the exact situation (which wall, what kind of shot).
+
 ### PROPOSED — Chopper countdown (Point 9 / extraction pressure; user direction)
 - **Clock (user decision):** an old-style analog timer dial, top centre. The hand sweeps round as the chopper's window runs out, and the last stretch of the dial is red. This replaces the handover's "no big HUD timer" working direction (which was never locked). It stays small.
 - **Messages (user decision):** centred just under the clock, short and readable: CHOPPER INBOUND → LANDED → LIFTING OFF. Each shows for a few seconds when its stage starts; LIFTING OFF stays up and blinks.
@@ -206,6 +223,8 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - Cover: tall metal cabinets and desks, only a few wooden crates. Walls are office partitions.
   - Pipes: only the odd small pipe (`"look": "pipe"`).
   - **Wire span rule (user rule):** low-hanging live wires only ever span 3 or 4 neighbouring lanes, never all 5. Enforced by route validation.
+  - **Wire height (playtest, user, 2026-10-01):** they hung far too low, near the floor. They now hang at about head height (lowest point 1.85 m, rising to about 2.1 m at the edges of their lanes). You still slide under them: the gameplay is unchanged.
+  - **Torn-out ceiling (user direction, 2026-10-01):** under every set of live wires, a few fallen ceiling tiles lie on the floor (flat debris, no gameplay) and the ceiling above has dark gaps where they came out: the wiring has torn through the ceiling.
 - **Details (user, 2026-09-30):** now and then an office door, a window or a notice board on the side walls. Loose paper scattered on the floor around the low filing cabinets, as if they were tipped over or shoved aside in a hurry.
 - **The main route is all office for now (user decision):** the player starts inside the building. COMPOUND EXIT becomes MAIN FLOOR LOBBY and AIRFIELD GATE becomes MAIN FLOOR EXIT, both office-themed; no road sections on the main route. The helipad stays outside. Stairs up to the ROOFTOPS and down to the TUNNEL now start inside the building (consistent with the stacked tiers). The compound and gate themes are kept for later levels.
 - **ROOFTOPS (user spec, 2026-09-30):**

@@ -37,7 +37,7 @@ static func all_names() -> Array[String]:
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
-			"rotor", "warn", "jingle", "gameover"]
+			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite"]
 	for i in 3:
 		names.append("grunt_%d" % i)
 	for surface in SURFACES:
@@ -289,6 +289,37 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.echo(0.2, 0.4, 0.35)
 			syn.crush(8, 2)
 			syn.normalize(0.75)
+		"bark":
+			# The guard dog: two hard barks (a rough voice through dog-sized formants).
+			syn = Synth.create(0.6, SFX_RATE, seed_value)
+			for t in [0.0, 0.22]:
+				syn.tone(t, 0.13, 520.0, 300.0, 0.7, Synth.Wave.SAW, 0.004, 3.0)
+				syn.noise(t, 0.1, 0.5, 4000.0, 600.0, 0.002, 5.0)
+			var body := Synth.create(syn.length(), SFX_RATE)
+			body.s = syn.s.duplicate()
+			syn.resonate(950.0, 4.0)
+			body.resonate(1700.0, 5.0)
+			syn.mix_in(body, 0.0, 0.6)
+			syn.echo(0.09, 0.25, 0.25)
+			syn.crush(8, 2)
+			syn.normalize(0.85)
+		"yelp":
+			# Shot: a high, falling yelp.
+			syn = Synth.create(0.45, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.28, 1100.0, 520.0, 0.7, Synth.Wave.SAW, 0.003, 2.5)
+			syn.tone(0.18, 0.2, 800.0, 380.0, 0.4, Synth.Wave.SAW, 0.003, 3.0)
+			syn.resonate(1400.0, 4.0)
+			syn.crush(8, 2)
+			syn.normalize(0.75)
+		"bite":
+			# Its jaws snapping shut on you, and the weight of it.
+			syn = Synth.create(0.35, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.05, 0.9, 0.0, 1500.0, 0.0005, 9.0)
+			syn.tone(0.0, 0.07, 320.0, 140.0, 0.6, Synth.Wave.SQUARE, 0.001, 6.0)
+			syn.tone(0.03, 0.2, 90.0, 45.0, 0.8, Synth.Wave.SINE, 0.002, 5.0)
+			syn.noise(0.05, 0.2, 0.4, 900.0, 0.0, 0.002, 6.0)
+			syn.crush(8, 2)
+			syn.normalize(0.85)
 		"steam":
 			# A vent hissing (loop).
 			syn = Synth.create(2.2, SFX_RATE, seed_value)

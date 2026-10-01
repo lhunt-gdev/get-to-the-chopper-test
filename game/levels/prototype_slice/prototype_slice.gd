@@ -20,6 +20,8 @@ const CEILING_Y := 4.6
 const MARKER_LANES := 3
 ## Height of a stairwell's ceiling above the stairs.
 const STAIR_HEADROOM := 2.9
+## Lowest point of the live wires' drape: about head height, so you duck (slide) under them.
+const WIRE_LOW := 1.85
 ## How far before a halfway marker the outer lanes are steered into its doorway.
 const MARKER_FUNNEL := 8.0
 ## Over the last this-many metres of the extraction area you're steered into the centre lane, so you
@@ -653,6 +655,18 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 
 	# Troopers stand in a lane and face you. Alarm boxes are on a wall, facing the road.
 	for e: Dictionary in _graph.node_data(id).get("enemies", []):
+		if e.get("kind", "") == "rusher_dog":
+			# The Rusher: a guard dog standing in its lane, facing you, until it charges.
+			var dog := RusherDog.new(tuning)
+			dog.at = start + float(e["at"])
+			dog.x = _player.lane_x(_remap_lane(int(e.get("lane", 2)), authored_lanes))
+			dog.min_alert = int(e.get("min_alert", 1))
+			dog.max_alert = int(e.get("max_alert", 3))
+			node.add_child(dog)
+			dog.transform = _frame_at(seg, float(e["at"])) * Transform3D(Basis(Vector3.UP, PI), Vector3(dog.x, 0, 0))
+			_connect_dog_sounds(dog)
+			_combatants.append({"node": dog, "owner": node, "seg": seg})
+			continue
 		if e.get("kind", "") != "rifle_trooper":
 			push_warning("Unknown enemy kind '%s' in %s" % [e.get("kind"), id])
 			continue
@@ -773,7 +787,7 @@ func _retire(node: Node3D, gone_at: float) -> void:
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
 	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	for c in _combatants:
-		if c["owner"] == node and c["node"] is RifleTrooper:
+		if c["owner"] == node and (c["node"] is RifleTrooper or c["node"] is RusherDog):
 			c["node"].visible = false  # nobody left standing on a road you didn't take
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	_retired.append({"node": node, "gone_at": gone_at})
@@ -824,6 +838,16 @@ func _update_footsteps(delta: float) -> void:
 		else:
 			surface = {"office_floor": "office", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
 	_audio.play("step_%s_%d" % [surface, randi() % SoundBank.STEP_VARIANTS], -10.0, 0.06)
+
+
+## The dog's sounds: barking as it's about to charge, the bite, and a yelp when it's shot.
+func _connect_dog_sounds(dog: RusherDog) -> void:
+	dog.barked.connect(func() -> void: _audio.play_at("bark", dog.global_position + Vector3.UP * 0.8, 0.0, 0.06))
+	dog.bit.connect(func() -> void: _audio.play("bite", 0.0, 0.05))
+	dog.yelped.connect(func() -> void:
+		RunLog.record_event("dog_down", {"node": _runner.current})
+		_audio.play_at("yelp", dog.global_position + Vector3.UP * 0.6, 0.0, 0.06)
+		_audio.play_at("hit", dog.global_position + Vector3.UP * 0.6, -2.0, 0.08))
 
 
 ## A trooper's sounds: the "!" when he starts aiming, his shots, being hit, and going down.
@@ -1504,6 +1528,7 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 ## it, and sparks where they're broken.
 func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Array) -> Node3D:
 	var frame := _frame_at(seg, at)
+	y = WIRE_LOW  # they hang at head height (playtest: at pipe height they looked far too low)
 	var top := y + 0.2   # height at the edge of the blocked lanes
 	var low := y - 0.08  # lowest point, mid-run (still too low to run under)
 	var reach := 1.3     # how far past a mid-road end the ceiling hook is
@@ -1542,6 +1567,7 @@ func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Ar
 			var hook := a0 if ex < mid else a1
 			_box(parent, Vector3(0.18, 0.12, 0.3), Vector3.ZERO, Color("5a5f66")).transform = \
 					frame * Transform3D(Basis.IDENTITY, Vector3(hook, CEILING_Y - 0.06, 0))  # ceiling hook
+	_torn_ceiling(parent, seg, at, e0, e1)
 	# A cut wire dangling from the ceiling with a lazy bend in it, sparking at its end.
 	var cut_x := lerpf(e0, e1, 0.3)
 	var tip := Vector3(cut_x + 0.18, top - 0.1, 0.25)
@@ -1558,6 +1584,38 @@ func _build_wires(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Ar
 		s.transform = frame * Transform3D(Basis.IDENTITY, spot)
 		_audio.attach_loop(s, "crackle", -10.0, 10.0, 2.0)
 	return first
+
+
+## Where the wires have torn through the ceiling: dark gaps where tiles are missing above them,
+## and the fallen tiles lying on the floor below (flat debris, nothing to jump or slide).
+func _torn_ceiling(parent: Node3D, seg: Dictionary, at: float, e0: float, e1: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([seg["id"], at])
+	var tile_mat := PsxMaterials.textured(PsxTextures.office_ceiling(), Vector2(1.5, 1.0))  # one tile a face
+	var void_col := Color("0b0c0c")
+	var holes := clampi(int((e1 - e0) / 1.4), 2, 4)
+	for i in holes:
+		# A missing tile: the dark void above, with the odd joist or duct showing through.
+		var hx := lerpf(e0 + 0.5, e1 - 0.5, (i + 0.5) / holes) + rng.randf_range(-0.2, 0.2)
+		var hz := rng.randf_range(-0.6, 0.6)
+		_item_box(parent, seg, at + hz, Vector3(hx, CEILING_Y - 0.015, 0), Vector3(0.92, 0.02, 0.92), void_col)
+		if rng.randf() < 0.6:
+			_item_box(parent, seg, at + hz, Vector3(hx + rng.randf_range(-0.25, 0.25), CEILING_Y - 0.05, 0), Vector3(0.06, 0.06, 0.9), Color("2c2e2e"))
+		# Its tile, down on the floor below: flat, or broken in two, or propped on another.
+		var fx := hx + rng.randf_range(-0.35, 0.35)
+		var fz := hz + rng.randf_range(-0.8, 0.8)
+		var tile := _item_box(parent, seg, at + fz, Vector3(fx, 0.02, 0), Vector3(0.9, 0.03, 0.9), Color.WHITE)
+		tile.material_override = tile_mat
+		tile.rotate_object_local(Vector3.UP, rng.randf_range(-0.6, 0.6))
+		if rng.randf() < 0.5:
+			var half := _item_box(parent, seg, at + fz + 0.3, Vector3(fx + 0.4, 0.08, 0), Vector3(0.5, 0.03, 0.85), Color.WHITE)
+			half.material_override = tile_mat
+			half.rotate_object_local(Vector3.UP, rng.randf_range(-1.0, 1.0))
+			half.rotate_object_local(Vector3.FORWARD, 0.18)  # resting on the other tile
+	# Crumbs of tile scattered round.
+	for i in 6:
+		_item_box(parent, seg, at + rng.randf_range(-1.2, 1.2), Vector3(rng.randf_range(e0, e1), 0.015, 0),
+				Vector3(rng.randf_range(0.06, 0.16), 0.02, rng.randf_range(0.06, 0.14)), Color("8a8e8a"))
 
 
 ## The wires' drape: a parabola over the blocked lanes (lowest mid-run, `top` at their edges);
@@ -2449,12 +2507,17 @@ func _update_combat(delta: float) -> void:
 		if not c["seg"].get("promoted", false):
 			# On a branch ahead: not acting yet, but shown (and committed once seen) by the same
 			# alert rules, so you never see a trooper that isn't there, or lose one you've seen.
-			if n is RifleTrooper:
+			if n is RifleTrooper or n is RusherDog:
 				n.note_seen(tuning, alert, d)
 				n.visible = n.is_active(alert)
 			continue
 		if n is AlarmBox:
 			n.update(delta, tuning, d)
+			continue
+		if n is RusherDog:
+			_update_dog(delta, n, d, alert)
+			if not GameState.run_active:
+				return
 			continue
 		var t: RifleTrooper = n
 		# He only aims at you if he can see you (rays against the walls), and only bothers in range.
@@ -2480,6 +2543,26 @@ func _update_combat(delta: float) -> void:
 	if _fire_held and _fire_cooldown <= 0.0 and not _player.halted:
 		_fire_cooldown = tuning.fire_interval
 		_shoot()
+
+
+## The Rusher: it charges down the route at you, round walls and over low obstacles. If it gets
+## you, it's a hit and a stumble (cover doesn't help); dodge out of its lane and it runs past.
+func _update_dog(delta: float, dog: RusherDog, d: float, alert: int) -> void:
+	var lows: Array = []
+	if dog.state in [RusherDog.State.CHARGE, RusherDog.State.PASSED]:
+		for o in _obstacles:
+			if o["kind"] in ["barrier", "box"] and absf(o["at"] - dog.at) < 2.0:
+				lows.append({"at": o["at"], "x": o["x"]})
+	var contact := dog.update(delta, tuning, alert, d, _player.track_x, _player.in_cover, _live_blockers(), lows, _route_point)
+	if contact == RusherDog.Contact.BIT:
+		RunLog.record_event("dog_bite", {"node": _runner.current})
+		_player.in_cover = false  # it drags you out of cover
+		_damage_player("dog")
+		if GameState.run_active:
+			RunLog.record_event("stumble", {"kind": "dog", "node": _runner.current})
+			_player.stumble()
+	elif contact == RusherDog.Contact.MISSED:
+		RunLog.record_event("dog_dodged", {"node": _runner.current})
 
 
 ## An alarm box hit lowers alert by one level; that can lift a lockdown door.
@@ -2515,13 +2598,22 @@ func fire_target() -> Node3D:
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
 		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert) \
-				and _sees(gun, n.global_position + Vector3.UP * (1.2 if n is RifleTrooper else 0.0)):
+				and _sees(gun, n.global_position + Vector3.UP * _aim_height(n)):
 			candidates.append(n)
 	var origin := _player.global_position + Vector3(0, 1.2, 0)
 	var forward := -_player.global_transform.basis.z
 	if _tapped != null and (not is_instance_valid(_tapped) or not _tapped.call("is_targetable", alert)):
 		_tapped = null
 	return Targeting.pick(candidates, origin, forward, tuning, _tapped)
+
+
+## Where on a target you aim: a trooper's chest, a dog's body, an alarm box's face.
+func _aim_height(n: Node3D) -> float:
+	if n is RifleTrooper:
+		return 1.15
+	if n is RusherDog:
+		return 0.55
+	return 0.0
 
 
 ## The blockers on the path you're on (a branch ahead isn't in play until you're on it).
@@ -2541,7 +2633,7 @@ func _shoot() -> void:
 	var target := fire_target()
 	var to := from + (-_player.global_transform.basis.z) * 20.0
 	if target != null:
-		to = target.global_position + Vector3(0, 1.1 if target is RifleTrooper else 0.0, 0)
+		to = target.global_position + Vector3.UP * _aim_height(target)
 		target.call("hit")
 	else:
 		# Nothing to hit: the shot stops at the first wall in the way, not through it.
@@ -2645,7 +2737,7 @@ func _enemy_near_screen(pos: Vector2) -> Node3D:
 	var best_d := tuning.tap_target_radius_px
 	for c in _combatants:
 		var n = c["node"]
-		if not (n is RifleTrooper) or not n.is_targetable(GameState.alert_level):
+		if not (n is RifleTrooper or n is RusherDog) or not n.is_targetable(GameState.alert_level):
 			continue
 		var p: Vector3 = n.global_position + Vector3(0, 1.0, 0)
 		if _camera.is_position_behind(p):

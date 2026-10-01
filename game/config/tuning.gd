@@ -171,3 +171,14 @@ enum TargetingMode {
 @export var ui_volume_db: float = -4.0
 ## Metres run between footsteps.
 @export var stride: float = 3.0
+
+@export_group("Rusher")
+## How close you get (m) before the dog barks, at alert 1; it's this much further at each level up.
+@export var rusher_trigger_distance: float = 22.0
+@export var rusher_trigger_per_alert: float = 3.0
+## Seconds it barks before it charges (your warning to dodge), by alert level.
+@export var rusher_windup_alert1: float = 0.6
+@export var rusher_windup_alert2: float = 0.45
+@export var rusher_windup_alert3: float = 0.35
+## How fast it sprints at you (m/s; you're running at it too).
+@export var rusher_speed: float = 10.0
