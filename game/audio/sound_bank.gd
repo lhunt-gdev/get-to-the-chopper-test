@@ -495,97 +495,129 @@ static func note(n: String) -> float:
 	return 440.0 * pow(2.0, (semis + (octave - 4) * 12) / 12.0)
 
 
-## The menu and opening-pan theme: an original spy piece in the spirit of GoldenEye N64's menu
-## music (not its melody). 100 bpm, 8 bars in A minor: Am, Fmaj7, Dm6, E (two bars each). A plucked
-## bass ostinato, brushed drums, a slow string pad, a twangy spy-guitar lead with echo, and brass
-## stabs on the turnaround.
+## The menu and opening-pan theme: an original military-espionage thriller cue (after "too nice"
+## and then "too Halloween"): straight time, 120 bpm, 16 bars in E minor that build in four
+## stages of 4 bars, then drop back to the ticking to start again:
+##  1. a ticking clock (tick-tock eighths) over a soft low-strings pulse and a kick on the one;
+##  2. the pulse goes to sixteenths, the kick doubles, a rimshot lands on 4;
+##  3. a military snare cadence, the clock ticks in sixteenths, low brass hits each bar;
+##  4. everything: the pulse doubled an octave up, syncopated brass power-chord stabs, timpani,
+##     and a riser and snare roll over the last bar.
+## Roots, a bar each: E E C D, ending E E C B into the loop.
 static func _menu_music_steps() -> Array[Callable]:
 	var box := {}
-	var beat := 0.6
-	var total := beat * 32.0
+	var beat := 0.5
+	var bar := beat * 4.0
+	var bars := 16
+	var total := bar * bars
+	var six := beat / 4.0
+	var semi := func(f: float, n: int) -> float: return f * pow(2.0, n / 12.0)
+	var roots := ["E2", "E2", "C2", "D2", "E2", "E2", "C2", "D2", "E2", "E2", "C2", "D2", "E2", "E2", "C2", "B1"]
 	var out: Array[Callable] = []
-	var chords := [["A", ["A3", "C4", "E4"]], ["F", ["F3", "A3", "E4"]], ["D", ["D3", "F3", "B3"]], ["E", ["E3", "G#3", "D4"]]]
-	var bass_roots := [note("A1"), note("F1"), note("D2"), note("E2")]
 	out.append(func() -> void:
-		box.bass = Synth.create(total, MUSIC_RATE, 41)
-		var minor := [0, -1, 0, 7, 12, -1, 10, 7]
-		var major := [0, -1, 0, 7, 12, -1, 4, 7]
-		for bar in 8:
-			var root: float = bass_roots[bar / 2]
-			var pat: Array = major if bar >= 6 else minor
-			for e in 8:
-				if pat[e] < 0:
+		box.mix = Synth.create(total, MUSIC_RATE, 81)
+		box.clock = Synth.create(total, MUSIC_RATE, 82)
+		box.pulse = Synth.create(total, MUSIC_RATE, 83)
+		box.drums = Synth.create(total, MUSIC_RATE, 84)
+		box.brass = Synth.create(total, MUSIC_RATE, 85))
+	# The clock: tick-tock eighths, sixteenths from stage 3, louder each stage.
+	for b in bars:
+		out.append(func() -> void:
+			var stage := b / 4
+			var per := 16 if stage >= 2 else 8
+			var amp := 0.1 + 0.035 * stage
+			for i in per:
+				var t: float = b * bar + i * bar / per
+				var tick := i % 2 == 0
+				box.clock.tone(t, 0.014, 3400.0 if tick else 2500.0, 3000.0 if tick else 2200.0, amp * (1.0 if tick else 0.7), Synth.Wave.SQUARE, 0.0005, 7.0)
+				box.clock.noise(t, 0.01, amp * 0.5, 0.0, 5000.0, 0.0005, 6.0)
+			)
+	out.append(func() -> void: box.clock.lowpass(6000.0))
+	# The low-strings pulse: a pedal on the root that kicks up to the octave and leans on the
+	# half step and minor third (the spy-thriller ostinato). Eighths, then sixteenths.
+	var shape := [0, 0, 12, 0, 1, 0, 12, 0, 0, 0, 12, 0, 3, 0, 2, 0]
+	for b in bars:
+		out.append(func() -> void:
+			var stage := b / 4
+			var root := note(roots[b])
+			var amp: float = [0.16, 0.22, 0.26, 0.3][stage]
+			for i in 16:
+				if stage == 0 and i % 2 == 1:
 					continue
-				var f: float = root * pow(2.0, pat[e] / 12.0)
-				var t := (bar * 8 + e) * beat / 2.0
-				box.bass.tone(t, beat * 0.45, f * 1.01, f, 0.55, Synth.Wave.TRIANGLE, 0.003, 4.0)
-				box.bass.tone(t, beat * 0.3, f, f, 0.18, Synth.Wave.SAW, 0.003, 6.0))
+				var f: float = semi.call(root, shape[i])
+				var t: float = b * bar + i * six
+				var accent := 1.3 if i % 4 == 0 else 1.0
+				box.pulse.tone(t, six * 0.9, f, f, amp * accent, Synth.Wave.SAW, 0.003, 4.0)
+				box.pulse.tone(t, six * 0.9, f * 1.006, f * 1.006, amp * 0.6 * accent, Synth.Wave.SAW, 0.003, 4.0)
+				if stage == 3:  # doubled an octave up
+					box.pulse.tone(t, six * 0.8, f * 2.0, f * 2.0, amp * 0.45, Synth.Wave.SAW, 0.003, 4.5)
+			)
+	out.append(func() -> void: box.pulse.lowpass(1400.0))
+	out.append(func() -> void: box.pulse.drive(1.5))
+	# Drums: the kick builds, a rimshot from stage 2, a military snare cadence from stage 3, timpani in stage 4.
+	var cadence := [0, 3, 4, 6, 8, 10, 11, 12, 14, 15]
+	for b in bars:
+		out.append(func() -> void:
+			var stage := b / 4
+			var t0: float = b * bar
+			var kicks: Array = [[0.0], [0.0, 2.0], [0.0, 1.5, 2.0], [0.0, 1.5, 2.0, 3.5]][stage]
+			for k in kicks:
+				box.drums.tone(t0 + k * beat, 0.18, 120.0, 45.0, 0.7, Synth.Wave.SINE, 0.002, 6.0)
+			if stage == 1:
+				box.drums.noise(t0 + 3.0 * beat, 0.05, 0.3, 9000.0, 2500.0, 0.001, 10.0)
+				box.drums.tone(t0 + 3.0 * beat, 0.03, 900.0, 800.0, 0.15, Synth.Wave.SQUARE, 0.001, 8.0)
+			if stage >= 2:
+				var roll := b == bars - 1
+				for i in 16:
+					if roll and i >= 8:
+						break
+					if not cadence.has(i):
+						continue
+					var accent := 1.0 if i == 4 or i == 12 else 0.45
+					box.drums.noise(t0 + i * six, 0.12, 0.34 * accent, 7500.0, 1800.0, 0.001, 8.0)
+					box.drums.tone(t0 + i * six, 0.06, 220.0, 170.0, 0.18 * accent, Synth.Wave.TRIANGLE, 0.001, 6.0)
+				if roll:  # a crescendo roll over the last two beats
+					for s in 24:
+						box.drums.noise(t0 + 2.0 * beat + s * beat / 12.0, 0.05, 0.08 + 0.014 * s, 7500.0, 1800.0, 0.001, 9.0)
+			if stage == 3:
+				for k in [0.0, 2.5]:
+					var f := note(roots[b]) * 2.0
+					box.drums.tone(t0 + k * beat, 0.6, f * 1.05, f, 0.5, Synth.Wave.SINE, 0.002, 4.0)
+					box.drums.noise(t0 + k * beat, 0.08, 0.15, 900.0, 0.0, 0.001, 8.0)
+			)
+	out.append(func() -> void: box.drums.lowpass(9000.0))
+	# Brass: power chords (root, fifth, octave), one low hit a bar in stage 3, syncopated stabs in stage 4.
+	for b in range(8, bars):
+		out.append(func() -> void:
+			var stage := b / 4
+			var root := note(roots[b]) * 2.0
+			var hits: Array = [[0.0, 1.2]] if stage == 2 else [[0.0, 0.35], [1.5, 0.25], [2.5, 0.35], [3.5, 0.2]]
+			if b == bars - 1:
+				hits = [[0.0, 0.35], [1.5, 0.25]]
+			for h in hits:
+				var t: float = b * bar + h[0] * beat
+				var d: float = h[1]
+				for f in [root, root * 1.4983, root * 2.0]:
+					box.brass.tone(t, d, f * 0.98, f, 0.2, Synth.Wave.SAW, 0.02, 2.0)
+					box.brass.tone(t, d, f * 1.005, f * 1.005, 0.14, Synth.Wave.SAW, 0.02, 2.0)
+			)
+	# The riser over the last bar: a climbing saw and swelling hiss, into the drop.
 	out.append(func() -> void:
-		box.bass.lowpass(700.0))
-	out.append(func() -> void:
-		box.drums = Synth.create(total, MUSIC_RATE, 42)
-		for b in 32:
-			var t := b * beat
-			box.drums.noise(t, 0.05, 0.16, 0.0, 6000.0, 0.002, 6.0)                 # brushed hat
-			box.drums.noise(t + beat * 0.62, 0.04, 0.1, 0.0, 6500.0, 0.002, 7.0)    # the swung off-beat
-			if b % 4 in [1, 3]:
-				box.drums.noise(t, 0.06, 0.3, 4000.0, 1500.0, 0.001, 8.0)           # rim
-				box.drums.tone(t, 0.04, 900.0, 700.0, 0.12, Synth.Wave.TRIANGLE, 0.001, 8.0)
-			if b % 4 == 0 or b % 8 == 6:
-				box.drums.tone(t, 0.16, 110.0, 48.0, 0.5, Synth.Wave.SINE, 0.002, 6.0)  # soft kick
-		)
-	out.append(func() -> void: box.pad = Synth.create(total, MUSIC_RATE, 43))
-	for ci in chords.size():
-		for tone_name in chords[ci][1]:
-			out.append(func() -> void:
-				var f := note(tone_name)
-				box.pad.tone(ci * beat * 8.0, beat * 8.0, f, f, 0.07, Synth.Wave.SAW, 0.6, 0.6))
-	out.append(func() -> void:
-		box.pad.lowpass(1100.0))
-	out.append(func() -> void:
-		box.lead = Synth.create(total, MUSIC_RATE, 44)
-		var line := [
-			[1.0, 1.0, "E5"], [2.0, 0.5, "D5"], [2.5, 0.5, "E5"], [3.0, 1.0, "G5"],
-			[4.0, 1.5, "F5"], [5.5, 0.5, "E5"], [6.0, 0.5, "D#5"], [6.5, 1.5, "E5"],
-			[9.0, 0.5, "C5"], [9.5, 0.5, "A4"], [10.0, 1.0, "C5"], [11.0, 1.0, "E5"],
-			[12.0, 1.5, "D5"], [13.5, 0.5, "C5"], [14.0, 2.0, "A4"],
-			[17.0, 0.5, "F5"], [17.5, 0.5, "E5"], [18.0, 1.0, "D5"], [19.0, 1.0, "B4"],
-			[20.0, 1.5, "D5"], [21.5, 0.5, "F5"], [22.0, 2.0, "A5"],
-			[24.0, 1.0, "G#5"], [25.0, 0.5, "F5"], [25.5, 0.5, "E5"], [26.0, 1.0, "D5"], [27.0, 1.0, "B4"],
-			[28.0, 2.0, "G#4"], [30.0, 0.5, "B4"], [30.5, 0.5, "D5"], [31.0, 1.0, "E5"],
-		]
-		for n in line:
-			var f := note(n[2])
-			var t: float = n[0] * beat
-			var d: float = n[1] * beat
-			# A twang: it slides up into the note, then rings and fades.
-			box.lead.tone(t, 0.035, f * 0.94, f, 0.22, Synth.Wave.PULSE, 0.002, 0.0)
-			box.lead.tone(t + 0.035, d * 0.95, f, f * 0.997, 0.22, Synth.Wave.PULSE, 0.003, 2.2)
-			box.lead.tone(t, d * 0.9, f * 2.0, f * 2.0, 0.05, Synth.Wave.SINE, 0.003, 3.0)
-		box.lead.lowpass(2600.0))
-	out.append(func() -> void:
-		box.lead.echo(beat * 0.75, 0.38, 0.4))
-	out.append(func() -> void:
-		box.brass = Synth.create(total, MUSIC_RATE, 45)
-		for bar in [6, 7]:
-			var t: float = bar * beat * 4.0
-			for n in ["E4", "G#4", "B4", "D5"]:
-				var f := note(n)
-				box.brass.tone(t, 0.32, f * 0.99, f, 0.09, Synth.Wave.SAW, 0.01, 4.0)
-				box.brass.tone(t + beat * 2.5, 0.2, f * 0.99, f, 0.07, Synth.Wave.SAW, 0.01, 5.0)
-			box.brass.tone(t, 0.5, 70.0, 52.0, 0.5, Synth.Wave.SINE, 0.002, 4.0)  # timpani
-		box.brass.lowpass(2400.0))
-	out.append(func() -> void:
-		box.bass.mix_in(box.drums, 0.0, 1.0))
-	out.append(func() -> void:
-		box.bass.mix_in(box.pad, 0.0, 1.0))
-	out.append(func() -> void:
-		box.bass.mix_in(box.lead, 0.0, 1.0)
-		box.bass.mix_in(box.brass, 0.0, 1.0))
-	out.append(func() -> void:
-		box.bass.crush(10, 1)
-		box.bass.normalize(0.6)
-		_cache["music_menu"] = box.bass.to_stream(true))
+		var t := (bars - 1) * bar
+		box.brass.tone(t, bar, note("B2"), note("B4"), 0.18, Synth.Wave.SAW, bar * 0.9, 0.0)
+		for s in 16:
+			box.brass.noise(t + s * six, six, 0.02 + 0.012 * s, 2000.0 + 400.0 * s, 1000.0, 0.002, 0.0))
+	out.append(func() -> void: box.brass.lowpass(1700.0))
+	out.append(func() -> void: box.brass.drive(1.8))
+	for part in ["clock", "pulse", "drums", "brass"]:
+		out.append(func() -> void: box.mix.mix_in(box[part], 0.0, 1.0))
+	# The mixdown, in small steps: a small hard room, a touch of saturation and PS1 crush.
+	out.append(func() -> void: box.mix.echo(0.09, 0.2, 0.15))
+	out.append(func() -> void: box.mix.normalize(0.9))
+	out.append(func() -> void: box.mix.drive(1.3))
+	out.append(func() -> void: box.mix.crush(10, 1))
+	out.append(func() -> void: box.mix.normalize(0.6))
+	out.append(func() -> void: _cache["music_menu"] = box.mix.to_stream(true))
 	return out
 
 

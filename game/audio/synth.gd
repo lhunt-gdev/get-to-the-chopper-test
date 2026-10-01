@@ -186,6 +186,15 @@ func crush(bits: int, hold: int = 1) -> void:
 	s = a
 
 
+## Overdrive: soft-clips the sound (tanh), so it growls and the peaks flatten. 1 is gentle.
+func drive(amount: float) -> void:
+	var a := s
+	var norm := tanh(amount)
+	for i in a.size():
+		a[i] = tanh(a[i] * amount) / norm
+	s = a
+
+
 func gain(g: float) -> void:
 	var a := s
 	for i in a.size():
