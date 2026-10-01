@@ -110,6 +110,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 
 - **Playtest (2026-09-30, user):** the clock reads well at its size. The user reached the chopper with a little under a third of the time left: slightly generous, but kept as-is for the test level.
 - **Direction (user):** the chopper time will vary by level: easier levels get more time, harder levels less. When there's more than one mission, the timeline should live with each mission (e.g. in its `route.json`), with `Tuning` as the default.
+- **Lined up with the chopper (user direction, 2026-10-01):** over the last `CHOPPER_FUNNEL` (15 m) of the extraction area, you're steered into the centre lane, the same forced movement as at the halfway doors, so you always run straight into the chopper. Swipes left or right do nothing there.
 
 ### PROPOSED — Longer test level, more troopers (user direction)
 - User felt the level was a little short. Every route is roughly doubled, with more obstacles and more cover blocks. Still one test level; the aim is to feel out length.

@@ -22,6 +22,9 @@ const MARKER_LANES := 3
 const STAIR_HEADROOM := 2.9
 ## How far before a halfway marker the outer lanes are steered into its doorway.
 const MARKER_FUNNEL := 8.0
+## Over the last this-many metres of the extraction area you're steered into the centre lane, so you
+## always run straight into the chopper.
+const CHOPPER_FUNNEL := 15.0
 
 ## Obstacle kinds: size, height off the ground, look, and how to get past it.
 ## "tex" names a PsxTextures function; without one the obstacle is flat "color".
@@ -218,7 +221,7 @@ func _physics_process(delta: float) -> void:
 			if not door.get("done", false) and _player.distance_run() >= door["at"] - 0.9 and door["seg"].get("promoted", false):
 				door["done"] = true
 				_bash_door(door["node"], door.get("swing", 1.0))
-			_funnel_to_markers()
+		_funnel_to_markers()
 		_runner.update(_player.distance_run(), _player.lane)
 		_check_obstacles()
 		_update_combat(delta)
@@ -1809,8 +1812,9 @@ func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
 	_markers.append({"at": seg["start"] + at, "seg": seg})
 
 
-## The outer lanes can't get through a halfway marker's doorway: just before one, anyone out
-## there is steered in to the nearest lane that can.
+## Forced movement. The outer lanes can't get through a halfway marker's doorway: just before one,
+## anyone out there is steered in to the nearest lane that can. And at the very end you're steered
+## into the centre lane, lined up with the chopper.
 func _funnel_to_markers() -> void:
 	if _player.in_cover:
 		return
@@ -1820,6 +1824,10 @@ func _funnel_to_markers() -> void:
 	for m in _markers:
 		if m["seg"].get("promoted", false) and d >= m["at"] - MARKER_FUNNEL and d <= m["at"] + 0.3:
 			_player.lane = clampi(_player.lane, mid - reach, mid + reach)
+	# The run to the chopper: into the centre lane, lined up with it.
+	var seg := _segment_at(d)
+	if _graph.end_type(seg["id"]) == "extract" and seg.get("promoted", false) and d >= float(seg["end"]) - CHOPPER_FUNNEL:
+		_player.lane = mid
 
 
 ## Out of the room: the door flies open off its hinge and the camera jolts.
