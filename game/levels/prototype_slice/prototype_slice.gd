@@ -296,12 +296,29 @@ func _apply_settings() -> void:
 ## How far through the mission you are, 0 to 1: the distance run, against the distance run plus
 ## the shortest way on from here to the chopper.
 func _progress() -> float:
+	return _progress_at(_player.distance_run())
+
+
+## The same, for a point `at` on the road behind you (the squad): measured against your way on,
+## so it sits on the rail just below you.
+func _progress_at(at: float) -> float:
 	var d := maxf(0.0, _player.distance_run())
 	if _segments.is_empty():
 		return 0.0
 	var seg := _segment_at(d)
 	var left := maxf(0.0, float(seg["end"]) - d) + _graph.shortest_after(seg["id"])
-	return d / maxf(d + left, 1.0)
+	return maxf(0.0, at) / maxf(d + left, 1.0)
+
+
+## The squad's lead guard on the progress rail, while any of them are still chasing.
+func _squad_progress() -> float:
+	if _squad_caught:
+		return -1.0
+	var lead := -INF
+	for g in _squad:
+		if is_instance_valid(g) and g.is_chasing():
+			lead = maxf(lead, g.at)
+	return _progress_at(lead) if lead > -INF else -1.0
 
 
 func start_run() -> void:
@@ -347,6 +364,7 @@ func _physics_process(delta: float) -> void:
 	_update_environment(delta)
 	_hud.show_clock(_clock.fraction(), _clock.lift_fraction())
 	_hud.show_progress(_progress())
+	_hud.show_squad_progress(_squad_progress())
 
 
 ## The night sky and the far city skyline, centred on the camera so they always stay far away.

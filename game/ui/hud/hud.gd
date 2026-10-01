@@ -271,6 +271,8 @@ class RunnerBar extends Control:
 ## and an arrow pointing right marks where you are.
 class ProgressRail extends Control:
 	var fraction := 0.0
+	## The Alert 3 squad's lead guard, 0..1 like you, or -1 while no squad is chasing.
+	var squad := -1.0
 	const TOP := 116.0
 	const BOTTOM := 330.0
 	const X := 12.0
@@ -278,6 +280,12 @@ class ProgressRail extends Control:
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func set_squad(f: float) -> void:
+		f = clampf(f, 0.0, 1.0) if f >= 0.0 else -1.0
+		if absf(f - squad) > 0.002:
+			squad = f
+			queue_redraw()
 
 	func set_fraction(f: float) -> void:
 		f = clampf(f, 0.0, 1.0)
@@ -298,6 +306,11 @@ class ProgressRail extends Control:
 		draw_rect(Rect2(X - 2, TOP - 7, 6, 4), UiKit.PAPER)
 		draw_rect(Rect2(X + 4, TOP - 6, 4, 1), UiKit.PAPER)
 		draw_rect(Rect2(X - 2, BOTTOM + 3, 5, 5), UiKit.DIM)
+		# The squad's lead guard (only while they're chasing): a red triangle, drawn under your arrow.
+		if squad >= 0.0:
+			var sy := lerpf(BOTTOM, TOP, squad)
+			draw_colored_polygon(PackedVector2Array([Vector2(X - 9, sy - 4), Vector2(X - 2, sy), Vector2(X - 9, sy + 4)]), UiKit.INK)
+			draw_colored_polygon(PackedVector2Array([Vector2(X - 8, sy - 3), Vector2(X - 3, sy), Vector2(X - 8, sy + 3)]), UiKit.RED)
 		# You: an arrow pointing right, at the rail.
 		var a := PackedVector2Array([Vector2(X - 9, y - 4), Vector2(X - 2, y), Vector2(X - 9, y + 4)])
 		draw_colored_polygon(a, UiKit.INK)
@@ -621,6 +634,12 @@ func show_clock(fraction: float, lift_fraction: float = -1.0) -> void:
 	if _clock and absf(_clock.fraction - fraction) > 0.001:
 		_clock.fraction = fraction
 		_clock.queue_redraw()
+
+
+## Where the Alert 3 squad's lead guard is on the rail (0..1), or -1 to hide it.
+func show_squad_progress(fraction: float) -> void:
+	if _rail:
+		_rail.set_squad(fraction)
 
 
 ## How far through the mission you are (0 at the start, 1 at the chopper).
