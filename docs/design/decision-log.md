@@ -188,6 +188,16 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Alert 3 (ALERT):** at least as many guards as Alert 2, plus dogs. The chasing squad and rear-view CCTV come in stage 3.
 - Test level, rifle guards at Alert 1 / 2 / 3: LOBBY 1/2/3, MAIN FLOOR 2/3/3, EXIT 0/2/3, ROOFTOPS 1/2/3, ROOFTOPS (far) 0/2/3, TUNNEL 1/2/3. A unit test holds the rules: Alert 1 has at most 2 per section and at least one section has none; Alert 2 has more than Alert 1, Alert 3 no fewer than Alert 2; dogs only from Alert 2; one alarm runner, Alert 1 only.
 
+### PROPOSED — Alert 3 pursuit squad and rear-view CCTV (user direction, 2026-10-01; stage 3)
+- **A squad chases you at Alert 3 (user):** when alert reaches 3, a squad comes after you from behind, one guard in each lane (5), starting `squad_start_gap` (25 m) back. A radio squelch and "SQUAD ON YOUR TAIL".
+- **They gain only when you slow down (user decision):** they run at your normal run speed. Cover, stumbles and dog bites let them close the gap; run clean and they never catch you. At Alert 3, stopping in cover is a risk.
+- **Caught means CAPTURED (user decision):** if any of them reaches you, they grab you and the run ends CAPTURED. This resolves "Who captures the player?".
+- **They never shoot (user decision):** the threat is being caught. Dodging lanes is for the guards ahead of you.
+- **They can hit obstacles (user):** like you, they jump barriers and slide under pipes, but they don't always get the timing right (user): each jump or slide comes off `squad_timing_chance` (75%) of the time, and otherwise he trips over the barrier or runs into the pipe and he's out of the chase. Each keeps to his lane; when cover (a crate or a wall) comes up in it, he usually spots it and swerves round it into a clear neighbouring lane (`squad_dodge_chance`, 60% per piece of cover), and otherwise runs straight into it: he falls and is out of the chase for good (user decision). Leading them through corridors full of cover thins them out. "SQUAD SHAKEN OFF" when they're all down. (First built with no swerving: the test level's main floor is so full of cover that the whole squad was down within seconds.)
+- **Alert drops below 3** (an alarm box): they fall back and give up. If alert reaches 3 again, a fresh squad comes after you.
+- **Rear-view CCTV (user):** a small rear-view monitor under the clock, like a mirror (flipped, so a guard in your left lane shows on the left): the corridor behind you, live (a second, low-res camera with a long lens), as green-tinted CCTV footage, with REAR CAM, a blinking REC and the number still chasing. Red tracking boxes mark each guard still after you (the footage alone was too dark to pick them out). Only while a squad is after you. The IN COVER hint moves below it.
+- Tuning: `squad_start_gap`, `squad_catch_distance` (`Tuning`, Squad).
+
 ### PROPOSED — Security Trooper: the alarm runner (LOCKED roster; behaviour by user direction, 2026-10-01)
 - **One per run, at Alert 1 (user):** placed in `route.json` (`"kind": "security_trooper"`, `"max_alert": 1`). The test level has him in the MAIN FLOOR LOBBY. Darker uniform, a radio, no rifle; he never shoots.
 - **He runs ahead of you, for a couple of sections (user):** "not just across the corridor". When you come within `security_trigger_distance` (40 m, further than you can shoot: you get about 7 s of chase before he's in range) he shouts (a "!") and sprints off down the route ahead of you, weaving round walls, vaulting low obstacles and ducking under pipes. He runs a little slower than you (10 vs 11 m/s), so you slowly close in, but walls, bends, stumbles and cover lose you ground. He's heading for an alarm `security_alarm_distance` (230 m, about two sections) further on.
@@ -307,8 +317,8 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Tripwires unchanged: running through one only raises alert. Placeholder 3 HP stays.
 - **Playtest (2026-09-30, user):** feels good; keep the current values.
 
-### OPEN — Who captures the player?
-- Capture is a LOCKED failure state, but no enemy causes it now that Heavies are blockers. Resolve at Point 8 (Failure states).
+### RESOLVED — Who captures the player? (2026-10-01)
+- Capture is a LOCKED failure state, but no enemy caused it once Heavies became blockers. **Resolved (user decision):** the Alert 3 pursuit squad captures you if it catches you (see "Alert 3 pursuit squad"). Missing the ladder at a dead end still ends CAPTURED too.
 
 ### Tech
 - Godot 4.7.2, GDScript (not C#: mobile C# export is the weaker path), Compatibility renderer.

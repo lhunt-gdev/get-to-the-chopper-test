@@ -22,6 +22,7 @@ func _run() -> void:
 	_test_seen_troopers_stay()
 	_test_mission_layout()
 	_test_trooper_tiers()
+	_test_squad_rules()
 	_test_swipe_direction()
 	_test_sounds()
 	await _test_targeting_priority()
@@ -167,6 +168,27 @@ func _test_trooper_tiers() -> void:
 	_check(sec.get_threat_priority() > 60, "a running runner is shot before a charging dog or an aiming trooper")
 	sec.free()
 
+
+## The Alert 3 pursuit squad: each guard runs into cover in his own lane (and only his), and
+## the squad catches you when one gets within reach. They start well back, out of reach.
+func _test_squad_rules() -> void:
+	var w := 1.4
+	_check(PursuitGuard.runs_into(49.0, 49.7, 1.4, 50.0, 1.4, w), "a squad guard runs into cover in his lane")
+	_check(not PursuitGuard.runs_into(49.0, 49.7, 0.0, 50.0, 1.4, w), "cover in the next lane doesn't stop him")
+	_check(not PursuitGuard.runs_into(40.0, 40.2, 1.4, 50.0, 1.4, w), "cover further on hasn't been reached yet")
+	_check(not PursuitGuard.runs_into(52.0, 52.2, 1.4, 50.0, 1.4, w), "cover he's already past is behind him")
+	_check(PursuitGuard.catches(99.0, 100.0, 1.2), "one of them right behind you has caught you")
+	_check(not PursuitGuard.catches(90.0, 100.0, 1.2), "10 m back hasn't")
+	var tt := Tuning.new()
+	_check(tt.squad_start_gap > tt.squad_catch_distance + 20.0, "the squad starts well back: run clean and they never get you")
+	# Each guard decides once per obstacle whether he gets it right (a swerve, a jump, a slide).
+	var pg := PursuitGuard.new(tt)
+	pg.set_seed(42)
+	var first := pg.spots("t50.0:1.4", 0.5)
+	_check(pg.spots("t50.0:1.4", 0.5) == first, "a squad guard's timing on one obstacle doesn't change his mind halfway")
+	_check(pg.spots("never", 0.0) == false and pg.spots("always", 1.0) == true, "timing chance 0 always fails, 1 always clears")
+	_check(tt.squad_timing_chance > 0.5 and tt.squad_timing_chance < 1.0, "they mostly time jumps and slides right, but not always")
+	pg.free()
 
 ## Dropping the alert never makes a trooper you've already seen vanish.
 func _test_seen_troopers_stay() -> void:

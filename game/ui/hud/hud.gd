@@ -19,6 +19,7 @@ const ALERT_COLORS := {1: UiKit.GREEN, 2: UiKit.AMBER, 3: UiKit.RED}
 var _status: StatusPanel
 var _message: MessageBox
 var _runner_bar: RunnerBar
+var _rear: RearMonitor
 var _rail: ProgressRail
 var _junction: RichTextLabel
 var _title: Label
@@ -155,6 +156,80 @@ class MessageBox extends Control:
 		var on := not blink or fmod(_shown, 0.6) < 0.42
 		if on:
 			draw_string(UiKit.font(), Vector2(r.position.x + 12, 11), typed, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, color)
+
+
+## Under the clock while the Alert 3 squad is after you: a small rear-view CCTV monitor showing
+## the corridor behind you (the level's rear camera), like a mirror, and how many are still
+## chasing.
+class RearMonitor extends Control:
+	const TOP := 78.0
+	var chasing := 0
+	var _t := 0.0
+	var _picture: TextureRect
+	## Tracking boxes over each guard still chasing: [x, y (0..1 in the picture), size px].
+	var marks: Array = []
+	var _overlay: Control
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		_picture = TextureRect.new()
+		_picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_picture.stretch_mode = TextureRect.STRETCH_SCALE
+		var mat := ShaderMaterial.new()
+		mat.shader = preload("res://assets/shaders/psx/rear_cctv.gdshader")
+		_picture.material = mat
+		add_child(_picture)
+		_overlay = Control.new()  # drawn over the picture, and clipped to it
+		_overlay.clip_contents = true
+		_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_overlay)
+		_overlay.draw.connect(_draw_marks)
+
+	func show_feed(tex: Texture2D) -> void:
+		_picture.texture = tex
+		var w := get_viewport_rect().size.x
+		var pic := Vector2(128, 72) if tex == null else Vector2(tex.get_size())
+		_picture.position = Vector2(roundf((w - pic.x) / 2.0), TOP + 13.0)
+		_picture.size = pic
+		_overlay.position = _picture.position
+		_overlay.size = pic
+		visible = tex != null
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()  # REC blinks
+		_overlay.queue_redraw()
+
+	func _draw() -> void:
+		var r := Rect2(_picture.position - Vector2(4, 13), _picture.size + Vector2(8, 17))
+		var c := UiKit.RED if chasing > 0 else UiKit.TEAL_DIM
+		UiKit.panel(self, r, c, UiKit.PANEL_SOLID, 3.0)
+		var f := UiKit.font()
+		if fmod(_t, 1.0) < 0.6:
+			draw_string(f, Vector2(r.position.x + 5, r.position.y + 10), "●", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)  # REC
+		draw_string(f, Vector2(r.position.x + 13, r.position.y + 10), "REAR CAM", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
+		# How many are still after you (up here: the picture covers anything drawn under it).
+		var label := "SQUAD %d" % chasing if chasing > 0 else "CLEAR"
+		draw_string(f, Vector2(r.end.x - 6 - label.length() * 6, r.position.y + 10), label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED if chasing > 0 else UiKit.GREEN)
+
+	## Red tracking brackets over the guards, sized by how close they are (the footage alone is
+	## too dark and grainy to pick them out).
+	func _draw_marks() -> void:
+		var sz := _overlay.size
+		for m in marks:
+			var c := Vector2(m[0] * sz.x, m[1] * sz.y)
+			var s: float = m[2]
+			var col := Color(UiKit.RED, 0.9)
+			var k := s * 0.35
+			for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				var p := c + corner * s * 0.5
+				_overlay.draw_line(p, p - Vector2(corner.x * k, 0), col, 1.0)
+				_overlay.draw_line(p, p - Vector2(0, corner.y * k), col, 1.0)
 
 
 ## Under the message box while the alarm runner is loose: how close he is to his alarm.
@@ -482,9 +557,10 @@ func set_letterbox(on: bool, seconds: float = 0.0) -> void:
 
 ## The in-run HUD shows only during a run (not over the main menu, the pan or the end screens).
 func set_playing(on: bool) -> void:
-	for n in [_status, _clock, _fire, _rail, _pause, _message, _runner_bar]:
+	for n in [_status, _clock, _fire, _rail, _pause, _message, _runner_bar, _rear]:
 		if n:
-			n.visible = on and (n != _message or _message.text != "") and (n != _runner_bar or _runner_bar.fraction >= 0.0)
+			n.visible = on and (n != _message or _message.text != "") and (n != _runner_bar or _runner_bar.fraction >= 0.0) \
+					and (n != _rear or _rear._picture.texture != null)
 
 
 ## MGS-style location caption: the area's name types out bottom left, then fades.
@@ -520,6 +596,9 @@ func setup(tuning: Tuning) -> void:
 	_message.offset_top = 40  # just under the clock
 	_message.visible = false
 	add_child(_message)
+	_rear = RearMonitor.new()
+	_rear.visible = false
+	add_child(_rear)
 	_runner_bar = RunnerBar.new()
 	_runner_bar.visible = false
 	add_child(_runner_bar)
@@ -561,6 +640,23 @@ func show_runner(fraction: float) -> void:
 		_runner_bar.set_fraction(fraction)
 
 
+## The rear-view CCTV: the rear camera's picture (null hides the monitor), and how many of the
+## squad are still chasing.
+func show_rear(feed: Texture2D) -> void:
+	if _rear:
+		_rear.show_feed(feed)
+
+
+func set_rear_marks(m: Array) -> void:
+	if _rear:
+		_rear.marks = m
+
+
+func set_rear_count(n: int) -> void:
+	if _rear:
+		_rear.chasing = n
+
+
 func show_hit() -> void:
 	_flash.color.a = 0.45
 	create_tween().tween_property(_flash, "color:a", 0.0, 0.3)
@@ -585,6 +681,8 @@ func fire_kick() -> void:
 
 func show_cover_hint(on: bool) -> void:
 	_hint.text = "IN COVER - SWIPE < > TO BREAK COVER" if on else ""
+	# Below the rear-view monitor while it's up (Alert 3), otherwise in its usual place.
+	_hint.offset_top = 176 if _rear and _rear.visible else 104
 
 
 ## Legacy prompt after the opening pan: the menu now does this, so it's just the mission title.
@@ -620,6 +718,7 @@ func show_end(_reason: StringName, _route_summary: String) -> void:
 	clear_junction()
 	_message.show_message("", UiKit.PAPER, 0.0, false)
 	show_runner(-1.0)
+	show_rear(null)
 	_hint.text = ""
 	set_playing(false)
 

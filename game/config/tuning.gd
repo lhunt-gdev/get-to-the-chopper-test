@@ -198,3 +198,18 @@ var fire_on_left := false
 @export var security_startle_time: float = 0.25
 ## Hits to bring him down.
 @export var security_health: int = 2
+
+@export_group("Squad")
+## How far behind you (m) the Alert 3 squad starts. They run at your run speed, so they only
+## gain on you when you slow down (cover, stumbles, bites).
+@export var squad_start_gap: float = 25.0
+## How close (m) one of them has to get to grab you: CAPTURED.
+@export var squad_catch_distance: float = 1.2
+## The chance (0..1) a squad guard spots cover coming up in his lane and swerves round it.
+## Otherwise he runs into it and he's out.
+@export_range(0.0, 1.0) var squad_dodge_chance: float = 0.6
+## The chance (0..1) a squad guard times a jump (barrier) or a slide (pipe) right. Otherwise he
+## trips over it or runs into it, and he's out.
+@export_range(0.0, 1.0) var squad_timing_chance: float = 0.75
+## The rear-view CCTV's picture size (pixels; it's scaled up 1:1 in a small monitor under the clock).
+@export var squad_cctv_size: Vector2i = Vector2i(128, 72)

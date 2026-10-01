@@ -32,6 +32,8 @@ extends Node
 ##   dog_dodge    - as dog_bite, but swipes out of the dog's lane when it barks:
 ##                  it runs past
 ##   runner_escapes - main route, never shoots the alarm runner: he gets to his alarm (Alert 2)
+##   squad_caught - trips both main-route wires (Alert 3, the squad comes after us), then takes
+##                  the next cover and stays in it: the squad catches up, CAPTURED
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -77,7 +79,7 @@ func _ready() -> void:
 			_prefer = {&"main_floor_lobby": 1}
 		"dog_bite", "dog_dodge":
 			_trip_in = [&"main_floor_lobby"]
-		"ground_loud", "ground_alarms":
+		"ground_loud", "ground_alarms", "squad_caught":
 			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 	_level = LEVEL.instantiate()
 	add_child(_level)
@@ -101,7 +103,8 @@ func _physics_process(_delta: float) -> void:
 		_took_cover = true
 		_cover_frames += 1
 		# Break cover once nobody ahead is alive to shoot at us.
-		if scenario != "camper" and not _trooper_ahead(d):
+		var hiding := scenario == "squad_caught" and GameState.alert_level >= 3
+		if scenario != "camper" and not hiding and not _trooper_ahead(d):
 			_player.handle_swipe(Vector2i.RIGHT if _player.lane < lane_count / 2 else Vector2i.LEFT)
 		return
 
@@ -203,7 +206,7 @@ func _charging_dog(d: float) -> RusherDog:
 func _blocked_ahead(obstacles: Array, lane: int, d: float) -> bool:
 	var x := _player.lane_x(lane)
 	for o: Dictionary in obstacles:
-		var seeking_cover := scenario in ["cover", "camper"] and not _took_cover
+		var seeking_cover := (scenario in ["cover", "camper"] and not _took_cover) or (scenario == "squad_caught" and GameState.alert_level >= 3)
 		var blocks: bool = o["pass"] == "cover" and not seeking_cover
 		if blocks and absf(o["x"] - x) < 0.1 and o["at"] + o["depth"] > d - 0.5 and o["at"] - d < LOOK_AHEAD:
 			return true
@@ -226,9 +229,9 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d time=%.1f" % [scenario, reason,
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d time=%.1f" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
-			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _level._clock.elapsed])
+			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _level._clock.elapsed])
 	get_tree().quit()
 
 

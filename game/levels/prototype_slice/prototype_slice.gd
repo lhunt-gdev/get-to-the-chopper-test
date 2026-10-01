@@ -27,6 +27,8 @@ const MARKER_FUNNEL := 8.0
 ## Over the last this-many metres of the extraction area you're steered into the centre lane, so you
 ## always run straight into the chopper.
 const CHOPPER_FUNNEL := 15.0
+## How far behind you (m) the road and its obstacles are kept: the Alert 3 squad starts 25 m back.
+const BEHIND_KEEP := 50.0
 
 ## Obstacle kinds: size, height off the ground, look, and how to get past it.
 ## "tex" names a PsxTextures function; without one the obstacle is flat "color".
@@ -149,6 +151,14 @@ var _shake := 0.0
 var _cam_base := Transform3D.IDENTITY
 ## Obstacles can't trip you again until this game time (seconds into the run), after a stumble.
 var _stumble_grace_until := -1.0
+## The Alert 3 pursuit squad: its guards (chasing, down, or falling back), whether one is out for
+## this spell at Alert 3, and the rear-view CCTV camera that watches them.
+var _squad: Array[PursuitGuard] = []
+var _squad_on := false
+var _squad_caught := false
+var _squad_shaken := false
+var _rear_vp: SubViewport
+var _rear_cam: Camera3D
 
 @onready var _player: Player = $Player
 @onready var _camera: Camera3D = $Camera3D
@@ -328,9 +338,12 @@ func _physics_process(delta: float) -> void:
 		_runner.update(_player.distance_run(), _player.lane)
 		_check_obstacles()
 		_update_combat(delta)
+		if GameState.run_active:
+			_update_squad(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
+	_update_rear_camera()
 	_update_environment(delta)
 	_hud.show_clock(_clock.fraction(), _clock.lift_fraction())
 	_hud.show_progress(_progress())
@@ -1014,6 +1027,11 @@ func _on_alert_changed() -> void:
 			_audio.play("alert_down", -2.0, 0.0, "UI")
 	_last_alert = level
 	_audio.set_alert(level)
+	# Alert 3: the pursuit squad comes after you; below it, they fall back.
+	if GameState.run_active and level >= 3 and not _squad_on:
+		_spawn_squad()
+	elif level < 3 and _squad_on:
+		_squad_fall_back()
 	_build_branches()
 	_build_fork_cue()
 
@@ -2544,13 +2562,14 @@ func _remap_lane(lane: int, authored: int) -> int:
 
 func _despawn_behind() -> void:
 	var d := _player.distance_run()
-	while _segments.size() > 1 and _segments[0]["end"] < d - 15.0:
+	# Kept a while behind you: the Alert 3 squad runs (and trips) on the road behind you.
+	while _segments.size() > 1 and _segments[0]["end"] < d - BEHIND_KEEP:
 		_segments.pop_front()["node"].queue_free()
 	for r in _retired:
 		if d > r["gone_at"] and is_instance_valid(r["node"]):
 			r["node"].queue_free()
 	_retired = _retired.filter(func(r: Dictionary) -> bool: return is_instance_valid(r["node"]) and d <= r["gone_at"])
-	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["at"] > d - 10.0)
+	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["at"] > d - BEHIND_KEEP)
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool:
 		return is_instance_valid(c["node"]) and c["node"].at > d - 10.0)
 
@@ -2746,6 +2765,209 @@ func _runner_segment(at: float) -> Dictionary:
 	return {}
 
 
+## Alert 3: a squad comes after you from behind, one guard in each lane.
+func _spawn_squad() -> void:
+	_squad_on = true
+	_squad_shaken = false
+	var d := _player.distance_run()
+	for i in tuning.lane_count:
+		var g := PursuitGuard.new(tuning)
+		g.at = d - tuning.squad_start_gap - (i % 2) * 1.5  # a ragged line, not a wall of men
+		g.x = _player.lane_x(i)
+		g.home_x = g.x
+		g.set_seed(i * 7919 + int(d))  # repeatable: the same run, the same squad
+		_world.add_child(g)
+		g.update(0.0, tuning.run_speed, [], [], _route_point)  # placed before it's drawn
+		_squad.append(g)
+	RunLog.record_event("squad", {"node": _runner.current, "size": tuning.lane_count})
+	_audio.play("squelch", -4.0, 0.0, "UI")
+	_hud.show_chopper_message("SQUAD ON YOUR TAIL", Color("ff4b3a"), 3.0, false)
+	_set_rear_cctv(true)
+
+
+## Alert's dropped below 3: they pull up and give up the chase.
+func _squad_fall_back() -> void:
+	_squad_on = false
+	var any := false
+	for g in _squad:
+		if is_instance_valid(g) and g.is_chasing():
+			g.give_up()
+			any = true
+	if any and GameState.run_active:
+		_hud.show_chopper_message("SQUAD FALLING BACK", Color("9fd36b"), 2.5, false)
+	get_tree().create_timer(2.5).timeout.connect(func() -> void:
+		if not _squad_on:
+			_set_rear_cctv(false))
+
+
+## The squad runs on after you at your run speed (so it only gains while you're slowed). Each
+## guard jumps barriers and slides under pipes in his lane, but runs into any cover in it and
+## is out. If one reaches you, you're caught.
+func _update_squad(delta: float) -> void:
+	if _squad.is_empty() or _squad_caught:
+		return
+	var d := _player.distance_run()
+	var chasing := 0
+	for g in _squad:
+		if not is_instance_valid(g):
+			continue
+		if g.is_chasing():
+			g.x = move_toward(g.x, _squad_lane_target(g), 7.0 * delta)
+		var lows: Array = []
+		var highs: Array = []
+		var covers: Array = []
+		for o in _obstacles:
+			if absf(o["at"] - g.at) < 2.0 and absf(o["x"] - g.x) < 0.9:
+				var pass_kind := String(o["pass"])
+				if pass_kind in ["jump", "slide"]:
+					# He jumps it or slides under it if he gets the timing right; if not, it's
+					# as good as a wall: he trips over it or runs into it.
+					if not g.spots("t%.1f:%.1f" % [o["at"], o["x"]], tuning.squad_timing_chance):
+						covers.append(o)
+					elif pass_kind == "jump":
+						lows.append(o)
+					else:
+						highs.append(o)
+				elif pass_kind == "cover":
+					covers.append(o)
+		var before := g.at
+		g.update(delta, tuning.run_speed, lows, highs, _route_point)
+		if not g.is_chasing():
+			continue
+		for o in covers:
+			if PursuitGuard.runs_into(before, g.at, g.x, o["at"], o["x"], tuning.lane_width):
+				g.fall()
+				RunLog.record_event("squad_out", {"node": _runner.current})
+				_audio.play("fall", -9.0, 0.08)
+				_audio.play("grunt_%d" % (randi() % 3), -10.0, 0.05)
+				break
+		if not g.is_chasing():
+			continue
+		chasing += 1
+		if PursuitGuard.catches(g.at, d, tuning.squad_catch_distance):
+			_caught_by_squad()
+			return
+	_hud.set_rear_count(chasing)
+	if chasing == 0 and _squad_on and not _squad_shaken:
+		# Every one of them ran into cover. (No new squad until alert drops and comes back to 3.)
+		_squad_shaken = true
+		_hud.show_chopper_message("SQUAD SHAKEN OFF", Color("9fd36b"), 2.5, false)
+		get_tree().create_timer(2.5).timeout.connect(func() -> void:
+			if _squad_shaken:
+				_set_rear_cctv(false))
+	# Those left far behind are gone.
+	for g in _squad:
+		if is_instance_valid(g) and g.at < d - 60.0:
+			g.queue_free()
+	_squad = _squad.filter(func(g: PursuitGuard) -> bool: return is_instance_valid(g) and not g.is_queued_for_deletion())
+
+
+## Where a squad guard heads across the road: his own lane, unless cover is coming up in it and
+## he's spotted it (squad_dodge_chance), when he swerves into a clear neighbouring lane round it.
+## If he hasn't spotted it, or both sides are blocked too, he keeps going: into it.
+func _squad_lane_target(g: PursuitGuard) -> float:
+	for o in _obstacles:
+		if o["pass"] != "cover" or absf(o["x"] - g.home_x) > 0.9:
+			continue
+		var ahead: float = o["at"] - g.at
+		if ahead < -0.8 or ahead > 6.0:
+			continue
+		if not g.spots("%.1f:%.1f" % [o["at"], o["x"]], tuning.squad_dodge_chance):
+			return g.home_x
+		# The nearest clear lane, up to two over (nearer first, then toward the middle).
+		var edge := tuning.lane_count * tuning.lane_width / 2.0
+		var sides: Array[float] = []
+		for k in [1, -1, 2, -2]:
+			sides.append(g.home_x + k * tuning.lane_width)
+		sides.sort_custom(func(a: float, b: float) -> bool:
+			var da := roundi(absf(a - g.home_x) / tuning.lane_width)
+			var db := roundi(absf(b - g.home_x) / tuning.lane_width)
+			return da < db or (da == db and absf(a) < absf(b)))
+		for sx in sides:
+			if absf(sx) < edge and not _cover_at(o["at"], sx):
+				return sx
+		return g.home_x
+	return g.home_x
+
+
+## Is there cover across the road at x, around `at`?
+func _cover_at(at: float, x: float) -> bool:
+	for o in _obstacles:
+		if o["pass"] == "cover" and absf(o["at"] - at) < 1.5 and absf(o["x"] - x) < 0.5:
+			return true
+	return false
+
+
+## Caught: they grab you, close round you, and it's CAPTURED.
+func _caught_by_squad() -> void:
+	_squad_caught = true
+	RunLog.record_event("squad_caught", {"node": _runner.current})
+	Engine.time_scale = 1.0
+	_hud.clear_junction()
+	_hud.show_chopper_message("CAUGHT", Color("ff4b3a"), 3.0, false)
+	_player.in_cover = false
+	_player.surrender()
+	_place_player()
+	var behind := _player.global_transform
+	var i := 0
+	for g in _squad:
+		if not is_instance_valid(g) or not g.is_chasing():
+			continue
+		g.grab()
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var spot := Vector3(side * (1.2 + (i / 2) * 0.9), 0, 1.3 + (i / 2) * 0.8)
+		g.create_tween().tween_property(g, "global_transform", behind * Transform3D(Basis.IDENTITY, spot), 0.35).set_ease(Tween.EASE_OUT)
+		i += 1
+	_audio.play("squelch", -4.0, 0.0, "UI")
+	get_tree().create_timer(tuning.capture_duration).timeout.connect(_end.bind(GameState.END_CAPTURED))
+
+
+## The rear-view CCTV: a second, low-res camera above you looking back down the route, shown in
+## the HUD's monitor under the clock. Only renders while it's on.
+func _set_rear_cctv(on: bool) -> void:
+	if on and _rear_vp == null:
+		_rear_vp = SubViewport.new()
+		_rear_vp.name = "RearCctv"
+		_rear_vp.size = tuning.squad_cctv_size
+		add_child(_rear_vp)
+		_rear_cam = Camera3D.new()
+		_rear_cam.fov = 30.0  # a long lens, like a zoomed security camera: the squad reads at 25 m
+		_rear_cam.far = 70.0
+		# Its own copy of the world's look, with thinner fog (kept in step below): the squad 30 m
+		# back would vanish in the corridor fog otherwise.
+		_rear_cam.environment = _env.duplicate()
+		_rear_vp.add_child(_rear_cam)
+		_rear_cam.current = true
+	if _rear_vp == null:
+		return
+	_rear_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED
+	_hud.show_rear(_rear_vp.get_texture() if on else null)
+	_update_rear_camera()
+
+
+func _update_rear_camera() -> void:
+	if _rear_cam == null or _rear_vp.render_target_update_mode == SubViewport.UPDATE_DISABLED or _segments.is_empty():
+		return
+	var d := _player.distance_run()
+	var eye := _route_point(d + 0.8, 0.0, 2.4)
+	var look := _route_point(d - tuning.squad_start_gap, 0.0, 0.9)
+	_rear_cam.global_transform = Transform3D(Basis.IDENTITY, eye).looking_at(look, Vector3.UP)
+	# A tracking box over each guard still chasing (mirrored, like the picture).
+	var marks: Array = []
+	for g in _squad:
+		if is_instance_valid(g) and g.is_chasing():
+			var p := g.global_position + Vector3.UP * 1.0
+			if not _rear_cam.is_position_behind(p):
+				var uv := _rear_cam.unproject_position(p) / Vector2(_rear_vp.size)
+				var dist := _rear_cam.global_position.distance_to(p)
+				marks.append([1.0 - uv.x, uv.y, clampf(260.0 / maxf(dist, 1.0), 6.0, 30.0)])
+	_hud.set_rear_marks(marks)
+	var env := _rear_cam.environment
+	env.fog_density = _env.fog_density * 0.35
+	env.fog_light_color = _env.fog_light_color
+	env.ambient_light_color = _env.ambient_light_color
+
+
 ## An alarm box hit lowers alert by one level; that can lift a lockdown door.
 func _on_alarm_destroyed(node_id: StringName) -> void:
 	RunLog.record_event("alarm_hit", {"node": node_id})
@@ -2885,6 +3107,7 @@ func _on_junction_cleared() -> void:
 
 
 func _on_run_ended(reason: StringName) -> void:
+	_set_rear_cctv(false)
 	Engine.time_scale = 1.0
 	_clock.stop()
 	_fire_held = false
