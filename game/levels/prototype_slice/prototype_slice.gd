@@ -68,6 +68,8 @@ const THEMES := {
 const DEAD_END_COLOR := Color("b03a2e")
 ## Render layer for stairwell structure (see _build_stairwell). Everything else is on layer 1.
 const STAIRWELL_LAYER := 2
+## Collision layer for things you can't see or shoot through (see _sees()).
+const SIGHT_LAYER := 16
 const GUARD_COLOR := Color("4a5260")
 ## Light in an area with no "ambient" of its own.
 const DEFAULT_AMBIENT := Color(0.4, 0.42, 0.44)
@@ -113,8 +115,8 @@ var _intro_left := 0.0
 var _doors: Array[Dictionary] = []
 ## Halfway markers built so far: {at (route distance), seg}. See _build_marker.
 var _markers: Array[Dictionary] = []
-## Solid things shots can't pass: walls, the halfway markers' walls and doors, stairwell doors.
-## {at, x0, x1, open (Callable or null), seg, owner}. See Sightlines.
+## Cover walls, in route space: {at, x0, x1, seg, owner}. Used to find the wall you're in cover
+## behind, so you lean round its edge (line of sight itself is real rays: see _sees()).
 var _blockers: Array[Dictionary] = []
 ## Mood lighting: the lamps, the area's ambient and moonlight (see Ambience).
 var _ambience: Ambience
@@ -616,9 +618,12 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				# Outdoors with no walls to lean on: an electrical cabinet or a stack of open vent pipes.
 				one_piece = _build_roof_wall(node, seg, at, x0, x1, wall_looks[walls_seen % wall_looks.size()])
 				walls_seen += 1
+				_solid_box(node, _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3((x0 + x1) / 2.0, 1.3, 0)),
+						Vector3(x1 - x0, 2.6, 1.0))  # you can't see or shoot through it
 			else:
 				var w := _item_box(node, seg, at, Vector3((x0 + x1) / 2.0, y, 0), Vector3(x1 - x0, size.y, size.z), Color.WHITE)
 				w.material_override = PsxMaterials.textured(_obstacle_texture(tex_name), Vector2(3, 2))
+				_make_solid(w)
 				one_piece = w
 			# Solid: shots don't go through it, only round its edge (see Sightlines).
 			_blockers.append({"at": start + at, "x0": x0, "x1": x1, "seg": seg, "owner": node})
@@ -1061,6 +1066,7 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 				_item_box(parent, seg, j, Vector3(side * (road_w / 2.0 + 1.0), ph / 2.0, 0), Vector3(1.0, ph, 1.0), theme["color"].darkened(0.5))
 		if theme.get("wall_decor", false):
 			_wall_decor(parent, seg, side, maxf(open, ramp), length)
+	_make_solid(parent)  # corridor walls, bend joins and pillars block line of sight
 
 
 func _is_stairs(seg: Dictionary) -> bool:
@@ -1090,6 +1096,7 @@ func _build_stairwell(outer: Node3D, seg: Dictionary) -> void:
 	parent.name = "Stairwell"
 	outer.add_child(parent)
 	_build_stairwell_parts(parent, seg)
+	_make_solid(parent)  # its walls, slabs and doors (not the sheared inner tube)
 	_set_render_layer(parent, STAIRWELL_LAYER)
 
 
@@ -1168,6 +1175,77 @@ func _build_stairwell_parts(parent: Node3D, seg: Dictionary) -> void:
 						.material_override = mat1
 
 
+## Makes the solid things under `root` (walls, doors, stairwell blocks) block line of sight: an
+## invisible collision box on each wall-sized box or upright plane. Skips small fittings, glowing
+## lamps and signs, and sheared or mirrored pieces (physics can't take those). See _sees().
+func _make_solid(root: Node) -> void:
+	if root is MeshInstance3D:
+		_solid_mesh(root)
+	for m in root.find_children("*", "MeshInstance3D", true, false):
+		_solid_mesh(m)
+
+
+func _solid_mesh(m: MeshInstance3D) -> void:
+	if m.has_meta("solid") or m.material_override is StandardMaterial3D:
+		return
+	var size := Vector3.ZERO
+	if m.mesh is BoxMesh:
+		size = (m.mesh as BoxMesh).size
+	elif m.mesh is PlaneMesh and (m.mesh as PlaneMesh).orientation == PlaneMesh.FACE_Z:
+		var p: Vector2 = (m.mesh as PlaneMesh).size
+		size = Vector3(p.x, p.y, 0.06)
+	else:
+		return
+	if maxf(size.x, maxf(size.y, size.z)) < 0.9:
+		return
+	var b := m.global_transform.basis
+	if absf(b.x.length() - 1.0) > 0.01 or absf(b.y.length() - 1.0) > 0.01 or absf(b.z.length() - 1.0) > 0.01 \
+			or absf(b.x.dot(b.y)) > 0.01 or absf(b.y.dot(b.z)) > 0.01 or b.determinant() < 0.0:
+		return
+	m.set_meta("solid", true)
+	_solid_box(m, Transform3D.IDENTITY, size)
+
+
+## An invisible box (for line of sight only) under `parent`, at `xf` in its space.
+func _solid_box(parent: Node3D, xf: Transform3D, size: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = SIGHT_LAYER
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	parent.add_child(body)
+	body.transform = xf
+
+
+## True if nothing solid is between two points: what you can see, you can shoot (and be shot from).
+func _sees(from: Vector3, to: Vector3) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(from, to, SIGHT_LAYER)
+	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+## Where your shots come from: your chest, or, in cover behind a wall, just past the edge of it
+## you can lean round (a wall running into the side wall only has one).
+func _gun_origin() -> Vector3:
+	var d := _player.distance_run()
+	var x := _player.track_x
+	if _player.in_cover:
+		var wall = Sightlines.cover_wall(d, x, _live_blockers())
+		if wall != null:
+			var side := tuning.lane_count * tuning.lane_width / 2.0
+			var lo: float = wall["x0"]
+			var hi: float = wall["x1"]
+			var left_ok := lo > -side
+			var right_ok := hi < side
+			if left_ok and (not right_ok or x - lo <= hi - x):
+				x = lo - 0.3
+			elif right_ok:
+				x = hi + 0.3
+	return _route_point(d, x, 1.3)
+
+
 ## A box sheared to follow a slope (stairs): vertical sides and ends, its bottom running from
 ## `into0` to `into1` at `y` above the route there, `size_x` across and `size_y` tall.
 func _slope_box(parent: Node3D, seg: Dictionary, into0: float, into1: float, x: float, y: float,
@@ -1209,9 +1287,6 @@ func _build_door(parent: Node3D, seg: Dictionary, into: float, x: float, top: fl
 		var door := {"node": hinge, "at": seg["start"] + into, "owner": seg["node"], "seg": seg,
 				"sound": "door_steel" if theme.get("stair_door", "door") == "steel_door" else "door_wood"}
 		_doors.append(door)
-		# Shut, the stairwell is sealed: no shots in or out until you burst the door.
-		_blockers.append({"at": door["at"], "x0": -INF, "x1": INF, "seg": seg, "owner": seg["node"],
-				"open": func() -> bool: return door.get("done", false)})
 
 
 ## Open-sky areas (rooftops): no side walls. The roofing runs out to a low lip at the edge, and
@@ -1703,6 +1778,7 @@ func _build_start_room(seg: Dictionary) -> void:
 	var panel := _box(hinge, Vector3(dw - 0.04, dh - 0.02, 0.07), Vector3(dw / 2.0, dh / 2.0, 0), Color.WHITE)
 	panel.material_override = PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
 	_doors.append({"node": hinge, "at": 0.0, "owner": seg["node"], "seg": seg, "sound": "door_wood"})
+	_make_solid(room)
 	# Furniture, clear of the player's lane.
 	_item_box(room, seg, -8.0, Vector3(_player.lane_x(0), 0.38, 0), Vector3(1.4, 0.76, 0.8), Color.WHITE).material_override = \
 			PsxMaterials.textured(PsxTextures.desk(), Vector2(3, 2))
@@ -1838,7 +1914,10 @@ func _searchlight(parent: Node3D, seg: Dictionary, z: float, side: int) -> void:
 ## Halfway through the area (not a checkpoint): a wall right across, side wall to side wall and up
 ## to the ceiling, with a double door over the middle lanes that you burst through. Office doors on
 ## the main floor, barred gates in the tunnel. The outer lanes are funnelled in just before it.
-func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
+func _build_marker(outer: Node3D, seg: Dictionary, at: float) -> void:
+	var parent := Node3D.new()  # all of it in one node, so it can be made solid in one go
+	parent.name = "Marker"
+	outer.add_child(parent)
 	var theme := _theme(seg["id"])
 	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
 	var top: float = CEILING_Y if theme.get("ceiling", false) else maxf(theme["height"], 3.0)
@@ -1883,12 +1962,9 @@ func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
 			if s < 0:  # one crash for the pair
 				door["sound"] = "door_bars" if barred else "door_wood"
 			_doors.append(door)
-			if s < 0:  # the doorway is solid until the doors are burst open (they go together)
-				_blockers.append({"at": door["at"], "x0": -ow / 2.0, "x1": ow / 2.0, "seg": seg, "owner": seg["node"],
-						"open": func() -> bool: return door.get("done", false)})
-	# The wall either side of the doorway is always solid.
-	_blockers.append({"at": seg["start"] + at, "x0": -INF, "x1": -ow / 2.0, "seg": seg, "owner": seg["node"]})
-	_blockers.append({"at": seg["start"] + at, "x0": ow / 2.0, "x1": INF, "seg": seg, "owner": seg["node"]})
+		# Each leaf blocks line of sight until it swings open (the mirrored office leaf can't carry
+		# a collision box of its own, so the hinge does).
+		_solid_box(hinge, Transform3D(Basis.IDENTITY, Vector3(mid, dh / 2.0, 0)), Vector3(leaf_w, dh, 0.1))
 	# Over the doorway: a red emergency lamp at the tunnel gates, a green exit sign at office doors.
 	var sign_col := Color("ff3a28") if barred else Color("40d070")
 	var sign := _item_box(parent, seg, at - 0.2, Vector3(0, dh + 0.3, 0), Vector3(0.7 if not barred else 0.3, 0.18 if not barred else 0.25, 0.06), Color.WHITE)
@@ -1897,6 +1973,7 @@ func _build_marker(parent: Node3D, seg: Dictionary, at: float) -> void:
 	parent.add_child(glow_at)
 	glow_at.transform = _frame_at(seg, at - 1.0) * Transform3D(Basis.IDENTITY, Vector3(0, dh + 0.2, 0))
 	_ambience.add_lamp(glow_at, sign_col * (1.2 if barred else 0.7), 5.0 if barred else 3.5, {"alert": false})
+	_make_solid(parent)  # the wall either side and over the doorway
 	_markers.append({"at": seg["start"] + at, "seg": seg})
 
 
@@ -1936,6 +2013,7 @@ func _build_dead_end(parent: Node3D, seg: Dictionary) -> void:
 	var w := (tuning.lane_count - 2) * tuning.lane_width
 	var wall := _item_box(parent, seg, length, Vector3(0, h / 2.0, -0.2), Vector3(w, h, 0.4), Color.WHITE)
 	wall.material_override = PsxMaterials.textured(_wall_texture(theme), Vector2(3, 2))
+	_make_solid(wall)
 
 
 ## Rails and rungs up (or down) the ladder lane at the start of the segment the ladder leads to.
@@ -2028,6 +2106,7 @@ func _build_locked_stub(seg: Dictionary, edge: Dictionary, slam: bool) -> Node3D
 	door.add_child(_sign_label("LOCKDOWN", DEAD_END_COLOR, width * 0.8, Vector3(0, h * 0.6, 0.2)))
 	door.set_meta("closed_y", door.position.y)
 	door.set_meta("open_y", door.position.y + h + 0.3)
+	_make_solid(door)  # shut, you can't see (or shoot) past it
 	if slam:
 		door.position.y = door.get_meta("open_y")
 		door.create_tween().tween_property(door, "position:y", door.get_meta("closed_y"), tuning.lockdown_close_time) \
@@ -2363,7 +2442,6 @@ func _update_combat(delta: float) -> void:
 	var d := _player.distance_run()
 	var alert := GameState.alert_level
 	var half_hit := tuning.lane_width * 0.5 + 0.15
-	var live := _live_blockers()
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
 		if not is_instance_valid(n):
@@ -2379,7 +2457,10 @@ func _update_combat(delta: float) -> void:
 			n.update(delta, tuning, d)
 			continue
 		var t: RifleTrooper = n
-		t.sight_clear = not Sightlines.blocked(t.at, t.x, d, _player.track_x, live)
+		# He only aims at you if he can see you (rays against the walls), and only bothers in range.
+		var ahead: float = t.at - d
+		if ahead > 0.5 and ahead <= tuning.trooper_aim_range + 1.0:
+			t.sight_clear = _sees(t.global_position + Vector3.UP * 1.3, _player.global_position + Vector3.UP * 1.1)
 		var shot := t.update(delta, tuning, alert, d, _player.track_x, _player.in_cover,
 				_player.global_position, _route_point)
 		if shot == RifleTrooper.Shot.MISSED:
@@ -2428,15 +2509,13 @@ func _route_point(d: float, x: float, y: float) -> Vector3:
 func fire_target() -> Node3D:
 	var alert := GameState.alert_level
 	var candidates: Array[Node3D] = []
-	# Only what you can see: over boxes and barriers, round walls' edges, never through them. In
-	# cover behind a wall you lean out round it, so that wall doesn't block your shots.
-	var d := _player.distance_run()
-	var live := _live_blockers()
-	var lean = Sightlines.cover_wall(d, _player.track_x, live) if _player.in_cover else null
+	# Only what you can see: a ray from your gun to him, against the walls (low cover has no
+	# collision, so you shoot over it). In cover behind a wall, the ray starts round its edge.
+	var gun := _gun_origin()
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
 		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert) \
-				and not Sightlines.blocked(d, _player.track_x, n.at, n.x, live, lean):
+				and _sees(gun, n.global_position + Vector3.UP * (1.2 if n is RifleTrooper else 0.0)):
 			candidates.append(n)
 	var origin := _player.global_position + Vector3(0, 1.2, 0)
 	var forward := -_player.global_transform.basis.z
@@ -2457,11 +2536,18 @@ func set_fire_held(held: bool) -> void:
 func _shoot() -> void:
 	_audio.play("gun", -3.0, 0.05)
 	var from := _player.global_transform * Vector3(0.25, 1.2, -0.4)
+	if _player.in_cover:
+		from = _gun_origin()  # leaning out round the wall
 	var target := fire_target()
 	var to := from + (-_player.global_transform.basis.z) * 20.0
 	if target != null:
 		to = target.global_position + Vector3(0, 1.1 if target is RifleTrooper else 0.0, 0)
 		target.call("hit")
+	else:
+		# Nothing to hit: the shot stops at the first wall in the way, not through it.
+		var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, SIGHT_LAYER))
+		if not hit.is_empty():
+			to = hit["position"]
 	_shot_tracer.global_transform = Transform3D(Basis.looking_at(to - from) * Basis.from_scale(Vector3(1, 1, from.distance_to(to))), (from + to) / 2.0)
 	_shot_tracer.visible = true
 	get_tree().create_timer(0.05).timeout.connect(func() -> void: _shot_tracer.visible = false)

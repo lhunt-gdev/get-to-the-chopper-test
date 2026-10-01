@@ -186,21 +186,12 @@ func _test_trooper_rules() -> void:
 	_check(not RifleTrooper.shot_hits(1.4, 0.0, false, w), "change lane before the shot and he misses")
 	_check(RifleTrooper.shot_hits(0.5, 0.0, false, w), "halfway through a lane change you're still hit")
 	_check(not RifleTrooper.shot_hits(0.0, 0.0, true, w), "cover blocks the shot")
-	# Line of sight: walls are solid; boxes aren't blockers, so you shoot over them.
-	var wall := {"at": 20.0, "x0": 1.4, "x1": 4.5}  # a wall across the two right lanes
-	var walls := [wall]
-	_check(Sightlines.blocked(0.0, 2.8, 40.0, 2.8, walls), "can't shoot through a wall")
-	_check(not Sightlines.blocked(0.0, -2.8, 40.0, -2.8, walls), "a wall in other lanes doesn't block")
-	_check(not Sightlines.blocked(0.0, -2.8, 40.0, 2.8, walls), "you can shoot round a wall's edge at someone well behind it")
-	_check(Sightlines.blocked(18.6, 2.8, 40.0, 2.8, walls), "in the wall's lane just behind it, you're blocked...")
-	_check(not Sightlines.blocked(18.6, 2.8, 40.0, 2.8, walls, Sightlines.cover_wall(18.6, 2.8, walls)),
-			"...unless you're in cover there: you lean out round it")
+	# Line of sight is rays against the walls (in play); here, finding the wall you're in cover
+	# behind, so your shots lean out round it.
+	var walls := [{"at": 20.0, "x0": 1.4, "x1": 4.5}]  # a wall across the two right lanes
+	_check(Sightlines.cover_wall(18.6, 2.8, walls) != null, "in cover just behind a wall, that's the wall you lean round")
+	_check(Sightlines.cover_wall(18.6, -2.8, walls) == null, "a wall in other lanes isn't yours")
 	_check(Sightlines.cover_wall(10.0, 2.8, walls) == null, "not in cover behind a wall 10 m away")
-	var shut := {"done": false}
-	var doorway := [{"at": 20.0, "x0": -2.1, "x1": 2.1, "open": func() -> bool: return shut["done"]}]
-	_check(Sightlines.blocked(0.0, 0.0, 40.0, 0.0, doorway), "a shut door blocks the shot")
-	shut["done"] = true
-	_check(not Sightlines.blocked(0.0, 0.0, 40.0, 0.0, doorway), "burst open, you can shoot through the doorway")
 	var t := Tuning.new()
 	_check(RifleTrooper.aim_time(t, 1) > RifleTrooper.aim_time(t, 2) and RifleTrooper.aim_time(t, 2) > RifleTrooper.aim_time(t, 3),
 			"higher alert, less time to dodge")
