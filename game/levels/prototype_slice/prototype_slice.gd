@@ -82,6 +82,8 @@ const MOON_DIR := Vector3(-0.45, 1.0, 0.35)
 
 ## Retry skips the title card so the loop stays fast.
 static var _skip_title := false
+## The title screen (ENTER GAME) shows once per page load: its tap is what lets the browser play sound.
+static var _title_seen := false
 
 var _started := false
 var _graph: RouteGraph
@@ -232,11 +234,19 @@ func _ready() -> void:
 	else:
 		# The main menu, over the camera swaying slowly in front of you, with the theme playing.
 		_menu_open = true
-		_frontend.show_main()
 		_hud.set_playing(false)
 		_hud.set_letterbox(true)
-		_audio.play_menu_music()
 		_update_camera(1.0)
+		if _title_seen:
+			_frontend.show_main()
+			_audio.play_menu_music()
+		else:
+			# First the title screen: tapping ENTER GAME unlocks the sound, then the menu and its theme.
+			_frontend.show_title()
+			_frontend.title_done.connect(func() -> void:
+				_title_seen = true
+				_frontend.show_main()
+				_audio.play_menu_music(), CONNECT_ONE_SHOT)
 	_frontend.clicked.connect(func() -> void: _audio.play("tick", -2.0, 0.0, "UI"))
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
