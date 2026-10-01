@@ -184,3 +184,17 @@ var fire_on_left := false
 @export var rusher_windup_alert3: float = 0.35
 ## How fast it sprints at you (m/s; you're running at it too).
 @export var rusher_speed: float = 10.0
+
+@export_group("Security Trooper")
+## How close you get (m) before the alarm runner spots you and runs for it: further than you can
+## shoot (target_range), so you have to close in on him.
+@export var security_trigger_distance: float = 40.0
+## How far (m, route distance) he runs from where he spotted you to the alarm: about two sections.
+@export var security_alarm_distance: float = 230.0
+## How fast he sprints (m/s). A little slower than you, so you slowly close in (walls, bends,
+## stumbles and cover lose you ground).
+@export var security_speed: float = 10.0
+## Seconds he takes to turn and go after he's spotted you (the "!").
+@export var security_startle_time: float = 0.25
+## Hits to bring him down.
+@export var security_health: int = 2

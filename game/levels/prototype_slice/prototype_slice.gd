@@ -740,6 +740,20 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 
 	# Troopers stand in a lane and face you. Alarm boxes are on a wall, facing the road.
 	for e: Dictionary in _graph.node_data(id).get("enemies", []):
+		if e.get("kind", "") == "security_trooper":
+			# The alarm runner: stands in his lane facing you, until he spots you and runs for it.
+			var sec := SecurityTrooper.new(tuning)
+			sec.at = start + float(e["at"])
+			sec.x = _player.lane_x(_remap_lane(int(e.get("lane", 2)), authored_lanes))
+			sec.min_alert = int(e.get("min_alert", 1))
+			sec.max_alert = int(e.get("max_alert", 1))
+			# His alarm is on the wall on his side of the road (the left, from the middle lane).
+			sec.wall_x = (1.0 if sec.x > 0.0 else -1.0) * (tuning.lane_count * tuning.lane_width / 2.0 - 0.15)
+			node.add_child(sec)
+			sec.transform = _frame_at(seg, float(e["at"])) * Transform3D(Basis(Vector3.UP, PI), Vector3(sec.x, 0, 0))
+			_connect_security(sec)
+			_combatants.append({"node": sec, "owner": node, "seg": seg})
+			continue
 		if e.get("kind", "") == "rusher_dog":
 			# The Rusher: a guard dog standing in its lane, facing you, until it charges.
 			var dog := RusherDog.new(tuning)
@@ -872,7 +886,7 @@ func _retire(node: Node3D, gone_at: float) -> void:
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
 	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	for c in _combatants:
-		if c["owner"] == node and (c["node"] is RifleTrooper or c["node"] is RusherDog):
+		if c["owner"] == node and (c["node"] is RifleTrooper or c["node"] is RusherDog or c["node"] is SecurityTrooper):
 			c["node"].visible = false  # nobody left standing on a road you didn't take
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	_retired.append({"node": node, "gone_at": gone_at})
@@ -933,6 +947,46 @@ func _connect_dog_sounds(dog: RusherDog) -> void:
 		RunLog.record_event("dog_down", {"node": _runner.current})
 		_audio.play_at("yelp", dog.global_position + Vector3.UP * 0.6, 0.0, 0.06)
 		_audio.play_at("hit", dog.global_position + Vector3.UP * 0.6, -2.0, 0.08))
+
+
+## The alarm runner: his shout as he spots you and runs, being hit and going down, and the alarm
+## if he gets there. The HUD bar tracks his run.
+func _connect_security(sec: SecurityTrooper) -> void:
+	var head := func() -> Vector3: return sec.global_position + Vector3.UP * 1.5
+	sec.spotted.connect(func() -> void:
+		sec.reparent(_world)  # he outruns the area he stood in
+		RunLog.record_event("runner_spotted", {"node": _runner.current})
+		_audio.play_at("spotted", head.call(), -3.0)
+		_hud.show_chopper_message("STOP THE RUNNER", Color("ffb347"), 3.0, false)
+		_hud.show_runner(0.0))
+	sec.wounded.connect(func() -> void: _audio.play_at("hit", head.call(), 0.0, 0.08))
+	sec.knocked_down.connect(func() -> void:
+		RunLog.record_event("runner_down", {"node": _runner.current})
+		_audio.play_at("grunt_%d" % (randi() % 3), head.call(), -2.0, 0.05)
+		get_tree().create_timer(0.3).timeout.connect(func() -> void:
+			if is_instance_valid(sec):
+				_audio.play_at("fall", sec.global_position, -2.0, 0.05))
+		if sec.alarm_at > 0.0:  # he was on his way
+			_hud.show_runner(-1.0)
+			_hud.show_chopper_message("RUNNER DOWN", Color("9fd36b"), 2.5, false))
+	sec.raised.connect(func() -> void:
+		RunLog.record_event("runner_alarm", {"node": _runner.current})
+		_hud.show_runner(-1.0)
+		_hud.show_chopper_message("ALARM RAISED", Color("ff4b3a"), 2.5, false)
+		_build_runner_alarm(sec)
+		GameState.raise_alert())
+
+
+## Where the runner raised the alarm: a red panel on the wall, flashing.
+func _build_runner_alarm(sec: SecurityTrooper) -> void:
+	var seg := _runner_segment(sec.at)
+	if seg.is_empty():
+		return  # round a split you didn't take: you only hear about it
+	var px := signf(sec.wall_x) * (tuning.lane_count * tuning.lane_width / 2.0 + 0.45)
+	var panel := _item_box(seg["node"], seg, sec.at - seg["start"], Vector3(px, 1.7, 0), Vector3(0.14, 0.45, 0.4), Color.WHITE)
+	panel.material_override = PsxMaterials.glow(Color("ff3020"))
+	_ambience.add_lamp(panel, Color(1.0, 0.15, 0.1) * 1.6, 5.0, {"blink": 0.5, "alert": false})
+	_audio.play_at("klaxon", panel.global_position, -4.0)
 
 
 ## A trooper's sounds: the "!" when he starts aiming, his shots, being hit, and going down.
@@ -2583,12 +2637,15 @@ func _update_combat(delta: float) -> void:
 		if not c["seg"].get("promoted", false):
 			# On a branch ahead: not acting yet, but shown (and committed once seen) by the same
 			# alert rules, so you never see a trooper that isn't there, or lose one you've seen.
-			if n is RifleTrooper or n is RusherDog:
+			if n is RifleTrooper or n is RusherDog or n is SecurityTrooper:
 				n.note_seen(tuning, alert, d)
 				n.visible = n.is_active(alert)
 			continue
 		if n is AlarmBox:
 			n.update(delta, tuning, d)
+			continue
+		if n is SecurityTrooper:
+			_update_security(delta, n, d, alert)
 			continue
 		if n is RusherDog:
 			_update_dog(delta, n, d, alert)
@@ -2641,6 +2698,54 @@ func _update_dog(delta: float, dog: RusherDog, d: float, alert: int) -> void:
 		RunLog.record_event("dog_dodged", {"node": _runner.current})
 
 
+## The alarm runner: he runs on ahead of you, round walls, over low obstacles and under pipes,
+## to his alarm. Running into him knocks him down (he's unarmed, so it doesn't cost you a hit).
+func _update_security(delta: float, sec: SecurityTrooper, d: float, alert: int) -> void:
+	var walls: Array = []
+	var lows: Array = []
+	var highs: Array = []
+	var seg := _runner_segment(sec.at)
+	if sec.is_running() and not seg.is_empty():
+		var owner: Node3D = seg["node"]
+		for b in _blockers:
+			if b["owner"] == owner and absf(b["at"] - sec.at) < 8.0:
+				walls.append(b)
+		for o in _obstacles:
+			if o["owner"] == owner and absf(o["at"] - sec.at) < 2.0:
+				if o["pass"] == "slide":
+					highs.append({"at": o["at"], "x": o["x"]})
+				elif o["kind"] in ["barrier", "box"]:
+					lows.append({"at": o["at"], "x": o["x"]})
+	sec.update(delta, tuning, alert, d, walls, lows, highs, _runner_point)
+	if sec.is_running() and sec.state == SecurityTrooper.State.RUN:
+		_hud.show_runner(sec.progress())
+	if sec.is_alive() and sec.visible and absf(sec.at - d) < 0.6 \
+			and absf(sec.x - _player.track_x) <= tuning.lane_width * 0.5 + 0.15:
+		sec.knock_down()
+
+
+## Where the alarm runner is in the world: on the road you're on, or on the straight-on branch
+## just ahead of it (he keeps straight on). null where that stretch isn't built.
+func _runner_point(at: float, x: float, y: float) -> Variant:
+	var seg := _runner_segment(at)
+	if seg.is_empty():
+		return null
+	return seg["node"].global_transform * _frame_at(seg, at - seg["start"]) * Vector3(x, y, 0)
+
+
+func _runner_segment(at: float) -> Dictionary:
+	if _segments.is_empty() or at < _segments[0]["start"]:
+		return {}
+	if at <= _current["end"]:
+		return _segment_at(at)
+	var branches: Dictionary = _current["branches"]
+	for k in branches:
+		var b: Dictionary = branches[k]
+		if String(k).begins_with("straight:") and at <= b["end"]:
+			return b
+	return {}
+
+
 ## An alarm box hit lowers alert by one level; that can lift a lockdown door.
 func _on_alarm_destroyed(node_id: StringName) -> void:
 	RunLog.record_event("alarm_hit", {"node": node_id})
@@ -2676,7 +2781,7 @@ func fire_target() -> Node3D:
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
 		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert) \
-				and _sees(gun, n.global_position + Vector3.UP * _aim_height(n)):
+				and n.is_visible_in_tree() and _sees(gun, n.global_position + Vector3.UP * _aim_height(n)):
 			candidates.append(n)
 	var origin := _player.global_position + Vector3(0, 1.2, 0)
 	var forward := -_player.global_transform.basis.z
@@ -2687,6 +2792,8 @@ func fire_target() -> Node3D:
 
 ## Where on a target you aim: a trooper's chest, a dog's body, an alarm box's face.
 func _aim_height(n: Node3D) -> float:
+	if n is SecurityTrooper:
+		return 1.2
 	if n is RifleTrooper:
 		return 1.15
 	if n is RusherDog:
@@ -2787,7 +2894,7 @@ func _on_run_ended(reason: StringName) -> void:
 	# The end screen, a moment later (so you see what happened): the result, the debrief and the
 	# route taken (the LOCKED post-run route record).
 	var count := func(kind: String) -> int: return RunLog.events.filter(func(e: Dictionary) -> bool: return e["kind"] == kind).size()
-	var stats := {"time": _clock.elapsed, "hits": count.call("player_hit"), "downed": count.call("trooper_down") + count.call("dog_down"),
+	var stats := {"time": _clock.elapsed, "hits": count.call("player_hit"), "downed": count.call("trooper_down") + count.call("dog_down") + count.call("runner_down"),
 			"alert": GameState.alert_level, "route": RunLog.route_summary().split(" > ")}
 	get_tree().create_timer(1.1).timeout.connect(func() -> void: _frontend.show_end(reason, stats))
 	_audio.fade_loops(2.5)
@@ -2827,7 +2934,7 @@ func _enemy_near_screen(pos: Vector2) -> Node3D:
 	var best_d := tuning.tap_target_radius_px
 	for c in _combatants:
 		var n = c["node"]
-		if not (n is RifleTrooper or n is RusherDog) or not n.is_targetable(GameState.alert_level):
+		if not (n is RifleTrooper or n is RusherDog or n is SecurityTrooper) or not n.is_targetable(GameState.alert_level):
 			continue
 		var p: Vector3 = n.global_position + Vector3(0, 1.0, 0)
 		if _camera.is_position_behind(p):

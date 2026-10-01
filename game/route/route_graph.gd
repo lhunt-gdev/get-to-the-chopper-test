@@ -42,7 +42,7 @@ const STAIR_EXIT_CLEAR := 20.0
 ## Nothing (obstacle or trooper) this close before a halfway marker's double door, or this far
 ## after it: you burst through blind, so you need time to see what's ahead (like a stairwell's exit).
 ## Enemy kinds a level can place.
-const ENEMY_KINDS := ["rifle_trooper", "rusher_dog"]
+const ENEMY_KINDS := ["rifle_trooper", "rusher_dog", "security_trooper"]
 const MARKER_CLEAR_BEFORE := 6.0
 const MARKER_CLEAR_AFTER := 20.0
 ## Areas with no walls to mount tripwire emitters on (user rule: no tripwires on the rooftops).

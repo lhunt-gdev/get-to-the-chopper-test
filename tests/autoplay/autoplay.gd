@@ -26,10 +26,12 @@ extends Node
 ##   ground_alarms - main route, runs through both wires, shoots both alarm boxes: back to Alert 1
 ##   stumble_once - main route, but runs straight into the first barrier: a stumble (1 HP, a
 ##                  little time), not the end of the run
-##   dog_bite     - main route, but never shoots the lobby's guard dog and holds its lane when
+##   dog_bite     - runs through the lobby wire (Alert 2: the dogs come out), main route, never
+##                  shoots the EXIT's guard dog and holds its lane when
 ##                  it charges: bitten (a hit and a stumble), and still gets out
-##   dog_dodge    - main route, never shoots the dog, and swipes out of its lane when it barks:
+##   dog_dodge    - as dog_bite, but swipes out of the dog's lane when it barks:
 ##                  it runs past
+##   runner_escapes - main route, never shoots the alarm runner: he gets to his alarm (Alert 2)
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -73,6 +75,8 @@ func _ready() -> void:
 			_trip_in = [&"main_floor_lobby"]
 		"late_switch":
 			_prefer = {&"main_floor_lobby": 1}
+		"dog_bite", "dog_dodge":
+			_trip_in = [&"main_floor_lobby"]
 		"ground_loud", "ground_alarms":
 			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 	_level = LEVEL.instantiate()
@@ -168,6 +172,8 @@ func _shoot() -> void:
 	var want := target != null
 	if target is AlarmBox and not _may_shoot_alarm():
 		want = false
+	if target is SecurityTrooper and scenario == "runner_escapes":
+		want = false  # let him go
 	if target is RusherDog and scenario in ["dog_bite", "dog_dodge"]:
 		want = false  # leave the dog to bite or be dodged
 	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
@@ -220,9 +226,9 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d time=%.1f" % [scenario, reason,
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d time=%.1f" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
-			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _level._clock.elapsed])
+			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _level._clock.elapsed])
 	get_tree().quit()
 
 

@@ -25,7 +25,8 @@
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 2, "at": 44},
-        {"kind": "rusher_dog", "lane": 3, "at": 58},
+        {"kind": "security_trooper", "lane": 2, "at": 56, "max_alert": 1},
+        {"kind": "rusher_dog", "lane": 3, "at": 58, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 0, "at": 86, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 4, "at": 80, "min_alert": 3}
       ],
@@ -61,8 +62,8 @@
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 1, "at": 62},
-        {"kind": "rifle_trooper", "lane": 3, "at": 116, "min_alert": 2},
-        {"kind": "rifle_trooper", "lane": 0, "at": 94, "min_alert": 3}
+        {"kind": "rifle_trooper", "lane": 3, "at": 116},
+        {"kind": "rifle_trooper", "lane": 0, "at": 94, "min_alert": 2}
       ],
       "alarms": [
         {"side": "left", "at": 96}
@@ -114,7 +115,7 @@
         {"kind": "box", "lanes": [3], "at": 52}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 2, "at": 44},
+        {"kind": "rifle_trooper", "lane": 2, "at": 44, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 1, "at": 60, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 4, "at": 22, "min_alert": 3}
       ],
@@ -163,9 +164,10 @@
         {"kind": "box", "lanes": [2], "at": 96}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 2, "at": 48},
+        {"kind": "rifle_trooper", "lane": 2, "at": 48, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 1, "at": 72, "min_alert": 2},
-        {"kind": "rifle_trooper", "lane": 3, "at": 95, "min_alert": 3}
+        {"kind": "rifle_trooper", "lane": 3, "at": 95, "min_alert": 3},
+        {"kind": "rusher_dog", "lane": 2, "at": 90, "min_alert": 2}
       ],
       "next": [
         {"to": "helipad", "label": "HELIPAD"}

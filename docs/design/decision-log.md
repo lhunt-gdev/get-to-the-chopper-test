@@ -133,7 +133,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Alert (proposed):** higher alert means it notices you further off and barks for less time before charging (`Tuning`, Rusher).
 - **Route rules:** the same as troopers (none hidden right behind a wall, none too close to doors or stairwell exits).
 - **Look and sound:** a low-poly PS1 shepherd (tan with a black saddle) that gallops. Barks, a growl, a bite snap, a yelp.
-- **Test level (proposed):** one in the MAIN FLOOR LOBBY, and one on the ROOFTOPS at alert 2 and up.
+- **Test level (proposed):** one in the MAIN FLOOR LOBBY, one on the ROOFTOPS and one at the MAIN FLOOR EXIT, all at Alert 2 and up (see "Alert tiers").
 
 ### RESOLVED — Shooting through walls (user report, 2026-10-01)
 - The playtest after the real line-of-sight rays still showed shots going through walls. The user said to come back to it later. Next step: find the exact situation (which wall, what kind of shot).
@@ -179,6 +179,23 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Troopers are tiered by alert on every route (user decision):** each route has a set for each alert level, with fewer at Alert 1 than at 2 or 3. In the test level each segment has 1 trooper at Alert 1, 2 at Alert 2 and 3 at Alert 3 (`min_alert` in `route.json`). They appear or disappear live as alert goes up or down, so raising or lowering alert changes the pressure on whatever route you're on.
 - **Seen troopers stay (user rule):** when alert drops (e.g. you shoot an alarm box), troopers already active and in view don't disappear. A trooper is committed once he's active and within `trooper_commit_distance` (≈ how far you can see through the fog), or has started aiming; after that he stays whatever the alert. Only troopers further ahead, not yet seen, come and go with alert.
 - Note: the test level has only one tripwire, so Alert 3 can't be reached yet. The Alert 3 troopers are authored, ready for a second alert trigger.
+- **Superseded by "Alert tiers" below (2026-10-01):** Alert 1 is sparser than 1 per segment now.
+
+### PROPOSED — Alert tiers (user direction, 2026-10-01; stage 2 of the UI / alert / squad plan)
+- **Alert 1 (SNEAKING) is sparse (user):** 1 or 2 rifle guards dotted around a section, and some sections have none. No dogs. Plus one alarm runner (the Security Trooper, below) per run.
+- **Alert 2 (CAUTION) is busier (user):** more rifle guards than at Alert 1, and the dogs come out. Dogs appear only from Alert 2 up (the lobby dog moves from Alert 1 to 2; a new one guards the MAIN FLOOR EXIT).
+- **Alert 3 (ALERT):** at least as many guards as Alert 2, plus dogs. The chasing squad and rear-view CCTV come in stage 3.
+- Test level, rifle guards at Alert 1 / 2 / 3: LOBBY 1/2/3, MAIN FLOOR 2/3/3, EXIT 0/2/3, ROOFTOPS 1/2/3, ROOFTOPS (far) 0/2/3, TUNNEL 1/2/3. A unit test holds the rules: Alert 1 has at most 2 per section and at least one section has none; Alert 2 has more than Alert 1, Alert 3 no fewer than Alert 2; dogs only from Alert 2; one alarm runner, Alert 1 only.
+
+### PROPOSED — Security Trooper: the alarm runner (LOCKED roster; behaviour by user direction, 2026-10-01)
+- **One per run, at Alert 1 (user):** placed in `route.json` (`"kind": "security_trooper"`, `"max_alert": 1`). The test level has him in the MAIN FLOOR LOBBY. Darker uniform, a radio, no rifle; he never shoots.
+- **He runs ahead of you, for a couple of sections (user):** "not just across the corridor". When you come within `security_trigger_distance` (40 m, further than you can shoot: you get about 7 s of chase before he's in range) he shouts (a "!") and sprints off down the route ahead of you, weaving round walls, vaulting low obstacles and ducking under pipes. He runs a little slower than you (10 vs 11 m/s), so you slowly close in, but walls, bends, stumbles and cover lose you ground. He's heading for an alarm `security_alarm_distance` (230 m, about two sections) further on.
+- **Readable:** a lighter blue uniform than the riflemen, an amber belt, and a blinking amber light on his radio so you can follow him down a dark corridor.
+- **Stop him:** shoot him (`security_health` hits) while he's in sight. He's top priority for auto-targeting while running. Walls block your shots as usual, so he can duck out of sight. Running into him knocks him down.
+- **If he gets there:** he slams the alarm and alert goes up one level ("ALARM RAISED"). That's a valid choice (LOCKED): higher alert closes some routes and opens others. He then stays at the wall panel.
+- **He keeps to the straight-on route.** If you turn off at a split, you've lost him and he raises the alarm.
+- **HUD:** a blinking "STOP THE RUNNER" message under the clock with a bar showing how far he is from the alarm. "RUNNER DOWN" or "ALARM RAISED" when it's over.
+- Alert rising some other way (a tripwire) doesn't stop a runner who's already running.
 
 ### PROPOSED — Two kinds of cover replace the trucks (user decision)
 - The tall blocker boxes with the diamond (the placeholder "trucks") are removed and replaced with cover.

@@ -128,17 +128,44 @@ func _test_mission_layout() -> void:
 	_check(run_log.route_summary() == "ROOFTOPS > HELIPAD", "two stretches of rooftops show once: %s" % run_log.route_summary())
 
 
-## Every route has a trooper set per alert level, with fewer at Alert 1 than at 2, and at 2 than at 3.
+## Alert tiers (user direction): Alert 1 is sparse (at most 2 rifle guards a section, some with
+## none), Alert 2 has more, Alert 3 no fewer; dogs only from Alert 2; one alarm runner, Alert 1 only.
 func _test_trooper_tiers() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var empty_at_1 := 0
+	var runners := 0
 	for id in ["main_floor_lobby", "building_main_floor", "rooftops", "rooftops_far", "service_tunnel", "main_floor_exit"]:
 		var counts := [0, 0, 0]
 		for e in g.node_data(StringName(id)).get("enemies", []):
-			for alert in [1, 2, 3]:
-				if alert >= int(e.get("min_alert", 1)) and alert <= int(e.get("max_alert", 3)):
-					counts[alert - 1] += 1
-		_check(counts[0] >= 1 and counts[0] < counts[1] and counts[1] < counts[2],
-				"%s: more troopers at each alert level (%s)" % [id, counts])
+			match String(e.get("kind", "")):
+				"rifle_trooper":
+					for alert in [1, 2, 3]:
+						if alert >= int(e.get("min_alert", 1)) and alert <= int(e.get("max_alert", 3)):
+							counts[alert - 1] += 1
+				"rusher_dog":
+					_check(int(e.get("min_alert", 1)) >= 2, "%s: dogs only from Alert 2" % id)
+				"security_trooper":
+					runners += 1
+					_check(int(e.get("max_alert", 3)) == 1, "%s: the alarm runner is Alert 1 only" % id)
+		_check(counts[0] <= 2 and counts[0] < counts[1] and counts[1] <= counts[2],
+				"%s: sparse at Alert 1, more at 2, no fewer at 3 (%s)" % [id, counts])
+		if counts[0] == 0:
+			empty_at_1 += 1
+	_check(empty_at_1 >= 1, "some sections have no guards at Alert 1")
+	_check(runners == 1, "one alarm runner per run (%d)" % runners)
+	# How far he's got: 0 where he set off, 1 at the alarm.
+	_check(SecurityTrooper.run_progress(100.0, 330.0, 100.0) == 0.0, "the runner starts at 0")
+	_check(is_equal_approx(SecurityTrooper.run_progress(100.0, 330.0, 215.0), 0.5), "halfway to his alarm is 0.5")
+	_check(SecurityTrooper.run_progress(100.0, 330.0, 400.0) == 1.0, "at the alarm is 1")
+	var tt := Tuning.new()
+	_check(tt.security_speed < tt.run_speed and tt.security_speed > tt.run_speed * 0.85, "the runner is a little slower than you: you slowly close in")
+	_check(tt.security_trigger_distance > tt.target_range, "he spots you from further off than you can shoot")
+	_check(tt.security_alarm_distance >= 200.0, "he runs for a couple of sections, not just across the corridor")
+	var sec := SecurityTrooper.new(tt)
+	_check(sec.get_threat_priority() == 0, "a runner standing still isn't urgent")
+	sec.state = SecurityTrooper.State.RUN
+	_check(sec.get_threat_priority() > 60, "a running runner is shot before a charging dog or an aiming trooper")
+	sec.free()
 
 
 ## Dropping the alert never makes a trooper you've already seen vanish.

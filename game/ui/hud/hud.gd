@@ -18,6 +18,7 @@ const ALERT_COLORS := {1: UiKit.GREEN, 2: UiKit.AMBER, 3: UiKit.RED}
 
 var _status: StatusPanel
 var _message: MessageBox
+var _runner_bar: RunnerBar
 var _rail: ProgressRail
 var _junction: RichTextLabel
 var _title: Label
@@ -154,6 +155,41 @@ class MessageBox extends Control:
 		var on := not blink or fmod(_shown, 0.6) < 0.42
 		if on:
 			draw_string(UiKit.font(), Vector2(r.position.x + 12, 11), typed, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, color)
+
+
+## Under the message box while the alarm runner is loose: how close he is to his alarm.
+class RunnerBar extends Control:
+	var fraction := -1.0
+	var _t := 0.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func set_fraction(f: float) -> void:
+		if absf(f - fraction) > 0.002 or (f < 0.0) != (fraction < 0.0):
+			fraction = f
+			visible = f >= 0.0
+			queue_redraw()
+
+	func _process(delta: float) -> void:
+		if fraction >= 0.7:
+			_t += delta
+			queue_redraw()  # it blinks as he gets close
+
+	func _draw() -> void:
+		if fraction < 0.0:
+			return
+		var w := get_viewport_rect().size.x
+		var r := Rect2((w - 124.0) / 2.0, 60, 124, 14)
+		var hot := fraction >= 0.7
+		var c := UiKit.RED if hot and fmod(_t, 0.4) < 0.22 else UiKit.AMBER
+		UiKit.panel(self, r, c, UiKit.PANEL, 3.0)
+		draw_string(UiKit.font(), Vector2(r.position.x + 7, r.position.y + 10), "ALARM", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c)
+		var bar := Rect2(r.position.x + 42, r.position.y + 4, 74, 6)
+		draw_rect(bar, UiKit.INK)
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)), c)
+		draw_rect(bar, c.darkened(0.4), false, 1.0)
 
 
 ## Down the left side: the mission so far. The chopper is at the top, the start at the bottom,
@@ -446,9 +482,9 @@ func set_letterbox(on: bool, seconds: float = 0.0) -> void:
 
 ## The in-run HUD shows only during a run (not over the main menu, the pan or the end screens).
 func set_playing(on: bool) -> void:
-	for n in [_status, _clock, _fire, _rail, _pause, _message]:
+	for n in [_status, _clock, _fire, _rail, _pause, _message, _runner_bar]:
 		if n:
-			n.visible = on if n != _message else (on and _message.text != "")
+			n.visible = on and (n != _message or _message.text != "") and (n != _runner_bar or _runner_bar.fraction >= 0.0)
 
 
 ## MGS-style location caption: the area's name types out bottom left, then fades.
@@ -484,6 +520,9 @@ func setup(tuning: Tuning) -> void:
 	_message.offset_top = 40  # just under the clock
 	_message.visible = false
 	add_child(_message)
+	_runner_bar = RunnerBar.new()
+	_runner_bar.visible = false
+	add_child(_runner_bar)
 	_pause = PauseButton.new()
 	add_child(_pause)
 	_pause.pressed.connect(func() -> void: pause_pressed.emit())
@@ -514,6 +553,12 @@ func show_progress(fraction: float) -> void:
 ## A message under the clock. Persistent ones blink until cleared; others fade after a while.
 func show_chopper_message(text: String, color: Color, seconds: float, persistent: bool) -> void:
 	_message.show_message(text, color, seconds, persistent)
+
+
+## The alarm runner's progress to his alarm (0..1), or -1 to hide the bar.
+func show_runner(fraction: float) -> void:
+	if _runner_bar:
+		_runner_bar.set_fraction(fraction)
 
 
 func show_hit() -> void:
@@ -574,6 +619,7 @@ func clear_junction() -> void:
 func show_end(_reason: StringName, _route_summary: String) -> void:
 	clear_junction()
 	_message.show_message("", UiKit.PAPER, 0.0, false)
+	show_runner(-1.0)
 	_hint.text = ""
 	set_playing(false)
 
