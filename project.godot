@@ -10,6 +10,14 @@ config/description="PS1-style mobile escape action game. Proof-of-concept build.
 run/main_scene="res://game/levels/prototype_slice/prototype_slice.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
+[audio]
+
+; Web: Godot mixes the sound itself and streams it out ("Stream"), as on desktop. Its default
+; on the web ("Sample", the browser plays each sound) never looped loops and, with our buses,
+; routed every sound to nothing.
+general/default_playback_type.web=0
+driver/output_latency.web=80
+
 [autoload]
 
 RunLog="*res://game/autoload/run_log.gd"

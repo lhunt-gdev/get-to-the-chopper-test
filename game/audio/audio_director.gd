@@ -7,7 +7,6 @@ extends Node
 ## SoundBank builds sounds in code. Here the building is spread over frames (a few milliseconds
 ## each) from the moment the level loads, so the opening pan hides it and nothing stutters.
 
-const BUSES := ["Sfx", "Ambience", "Music", "UI"]
 ## Ambience per area theme.
 const AREA_AMBIENCE := {"office": "amb_office", "tunnel": "amb_tunnel", "rooftops": "amb_roof",
 		"helipad": "amb_roof", "compound": "amb_roof", "gate": "amb_roof"}
@@ -29,29 +28,19 @@ var _world: Node3D
 
 
 func _ready() -> void:
-	for bus in BUSES:
-		if AudioServer.get_bus_index(bus) < 0:
-			AudioServer.add_bus()
-			AudioServer.set_bus_name(AudioServer.bus_count - 1, bus)
-			AudioServer.set_bus_send(AudioServer.bus_count - 1, "Master")
-	_set_volumes()
 	for i in 12:
 		var p := AudioStreamPlayer.new()
-		p.bus = "Sfx"
 		add_child(p)
 		_pool.append(p)
 	for i in 2:
 		var a := AudioStreamPlayer.new()
-		a.bus = "Ambience"
 		a.volume_db = -80.0
 		add_child(a)
 		_amb.append(a)
 	_cctv = AudioStreamPlayer.new()
-	_cctv.bus = "Ambience"
 	add_child(_cctv)
 	for m in ["music_tension", "music_alert"]:
 		var mp := AudioStreamPlayer.new()
-		mp.bus = "Music"
 		mp.volume_db = -80.0
 		add_child(mp)
 		_music[m] = mp
@@ -64,11 +53,18 @@ func set_world(world: Node3D) -> void:
 	_world = world
 
 
-func _set_volumes() -> void:
-	var vols := {"Sfx": tuning.sfx_volume_db, "Ambience": tuning.ambience_volume_db,
-			"Music": tuning.music_volume_db, "UI": tuning.ui_volume_db}
-	for bus in vols:
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index(bus), vols[bus])
+## How loud each part of the mix is (dB). Everything plays through the Master bus: buses added
+## at runtime scramble the web build's audio routing (sounds reached nothing), so each category's
+## volume is applied per sound instead.
+func _mix(part: String) -> float:
+	match part:
+		"Ambience":
+			return tuning.ambience_volume_db
+		"Music":
+			return tuning.music_volume_db
+		"UI":
+			return tuning.ui_volume_db
+	return tuning.sfx_volume_db
 
 
 ## Queue a sound to be built in the background (if it isn't already).
@@ -91,13 +87,13 @@ func _process(delta: float) -> void:
 
 
 ## A one-shot, heard the same wherever you are. pitch_jitter: random +/- pitch, so repeats vary.
-func play(name: String, volume_db: float = 0.0, pitch_jitter: float = 0.0, bus: String = "Sfx") -> void:
+## `part`: which part of the mix it belongs to (its volume, see _mix).
+func play(name: String, volume_db: float = 0.0, pitch_jitter: float = 0.0, part: String = "Sfx") -> void:
 	var p := _free_player()
 	if p == null:
 		return
 	p.stream = SoundBank.get_stream(name)
-	p.bus = bus
-	p.volume_db = volume_db
+	p.volume_db = volume_db + _mix(part)
 	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
 	p.play()
 
@@ -109,8 +105,7 @@ func play_at(name: String, pos: Vector3, volume_db: float = 0.0, pitch_jitter: f
 		return
 	var p := AudioStreamPlayer3D.new()
 	p.stream = SoundBank.get_stream(name)
-	p.bus = "Sfx"
-	p.volume_db = volume_db
+	p.volume_db = volume_db + _mix("Sfx")
 	p.unit_size = 6.0
 	p.max_distance = max_distance
 	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
@@ -127,8 +122,7 @@ func play_at(name: String, pos: Vector3, volume_db: float = 0.0, pitch_jitter: f
 func attach_loop(node: Node3D, name: String, volume_db: float = 0.0, max_distance: float = 15.0, unit_size: float = 3.0) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()
 	p.stream = SoundBank.get_stream(name)
-	p.bus = "Sfx"
-	p.volume_db = volume_db
+	p.volume_db = volume_db + _mix("Sfx")
 	p.unit_size = unit_size
 	p.max_distance = max_distance
 	node.add_child(p)
@@ -155,7 +149,7 @@ func _fade_ambience(delta: float) -> void:
 		var p := _amb[i]
 		if not p.playing:
 			continue
-		var target := 0.0 if i == _amb_active else -80.0
+		var target := _mix("Ambience") if i == _amb_active else -80.0
 		p.volume_db = move_toward(p.volume_db, target, delta * 40.0)
 		if p.volume_db <= -79.0 and i != _amb_active:
 			p.stop()
@@ -165,7 +159,7 @@ func _fade_ambience(delta: float) -> void:
 func set_cctv(on: bool) -> void:
 	if on and not _cctv.playing:
 		_cctv.stream = SoundBank.get_stream("amb_cctv")
-		_cctv.volume_db = -6.0
+		_cctv.volume_db = -6.0 + _mix("Ambience")
 		_cctv.play()
 	elif not on and _cctv.playing:
 		_cctv.stop()
@@ -194,7 +188,7 @@ func _fade_music(delta: float) -> void:
 		var p: AudioStreamPlayer = _music[m]
 		if not p.playing:
 			continue
-		var target := 0.0 if m == _music_on else -80.0
+		var target := _mix("Music") if m == _music_on else -80.0
 		p.volume_db = move_toward(p.volume_db, target, delta * (30.0 if m == _music_on else 25.0))
 		if p.volume_db <= -79.0 and m != _music_on:
 			p.stop()
