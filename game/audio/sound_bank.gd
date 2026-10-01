@@ -339,16 +339,22 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.normalize(0.5)
 			return syn.to_stream(true)
 		"rotor":
-			# The chopper (loop): blade thumps 4.5 a second over a turbine whine.
+			# The chopper (loop): the blades' "whup-whup" (a slap of air 5.5 times a second, with a
+			# swish between) over a low engine rumble. No tonal whine (playtest: it was a constant
+			# buzz), and nothing footstep-like.
 			syn = Synth.create(2.0, SFX_RATE, seed_value)
-			for i in 9:
-				var t := i / 4.5
-				syn.noise(t, 0.13, 0.9, 260.0, 0.0, 0.002, 7.0)
-				syn.tone(t, 0.11, 72.0, 48.0, 0.6, Synth.Wave.SINE, 0.002, 6.0)
-			syn.tone(0.0, 2.0, 330.0, 330.0, 0.05, Synth.Wave.SAW, 0.0001, 0.0)
-			syn.tone(0.0, 2.0, 660.0, 660.0, 0.03, Synth.Wave.SINE, 0.0001, 0.0)
+			syn.noise(0.0, 2.0, 0.4, 110.0, 0.0, 0.0001, 0.0)  # engine rumble
+			var swish := Synth.create(2.0, SFX_RATE, seed_value + 1)
+			swish.noise(0.0, 2.0, 0.3, 900.0, 200.0, 0.0001, 0.0)
+			swish.swell(11.0, 0.8)  # rising and falling with each blade
+			syn.mix_in(swish, 0.0, 1.0)
+			for i in 11:
+				var t := i / 5.5
+				syn.noise(t, 0.1, 0.8, 380.0, 60.0, 0.004, 6.0)  # the slap
+				syn.tone(t, 0.08, 62.0, 44.0, 0.35, Synth.Wave.SINE, 0.004, 5.0)
+			syn.loopify(0.05)
 			syn.crush(9, 1)
-			syn.normalize(0.85)
+			syn.normalize(0.75)
 			return syn.to_stream(true)
 		_:
 			push_warning("SoundBank: no sound called '%s'" % name)

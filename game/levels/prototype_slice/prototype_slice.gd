@@ -1250,24 +1250,15 @@ func _sees(from: Vector3, to: Vector3) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 
-## Where your shots come from: your chest, or, in cover behind a wall, just past the edge of it
-## you can lean round (a wall running into the side wall only has one).
+## Where your shots come from: your chest.
 func _gun_origin() -> Vector3:
-	var d := _player.distance_run()
-	var x := _player.track_x
-	if _player.in_cover:
-		var wall = Sightlines.cover_wall(d, x, _live_blockers())
-		if wall != null:
-			var side := tuning.lane_count * tuning.lane_width / 2.0
-			var lo: float = wall["x0"]
-			var hi: float = wall["x1"]
-			var left_ok := lo > -side
-			var right_ok := hi < side
-			if left_ok and (not right_ok or x - lo <= hi - x):
-				x = lo - 0.3
-			elif right_ok:
-				x = hi + 0.3
-	return _route_point(d, x, 1.3)
+	return _route_point(_player.distance_run(), _player.track_x, 1.3)
+
+
+## In cover behind a wall you can't shoot at all (user decision: no shooting from behind walls).
+## Behind a box (low cover) you still shoot over it.
+func _behind_wall() -> bool:
+	return _player.in_cover and Sightlines.cover_wall(_player.distance_run(), _player.track_x, _live_blockers()) != null
 
 
 ## A box sheared to follow a slope (stairs): vertical sides and ends, its bottom running from
@@ -2592,8 +2583,10 @@ func _route_point(d: float, x: float, y: float) -> Vector3:
 func fire_target() -> Node3D:
 	var alert := GameState.alert_level
 	var candidates: Array[Node3D] = []
+	if _behind_wall():
+		return null  # no shooting from behind a wall
 	# Only what you can see: a ray from your gun to him, against the walls (low cover has no
-	# collision, so you shoot over it). In cover behind a wall, the ray starts round its edge.
+	# collision, so you shoot over it).
 	var gun := _gun_origin()
 	for c in _combatants:
 		var n = c["node"]  # RifleTrooper or AlarmBox
@@ -2626,10 +2619,10 @@ func set_fire_held(held: bool) -> void:
 
 
 func _shoot() -> void:
+	if _behind_wall():
+		return  # no shooting from behind a wall: not even into it
 	_audio.play("gun", -3.0, 0.05)
 	var from := _player.global_transform * Vector3(0.25, 1.2, -0.4)
-	if _player.in_cover:
-		from = _gun_origin()  # leaning out round the wall
 	var target := fire_target()
 	var to := from + (-_player.global_transform.basis.z) * 20.0
 	if target != null:
@@ -2705,6 +2698,7 @@ func _on_run_ended(reason: StringName) -> void:
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())
+	_audio.fade_loops(2.5)
 	_audio.stop_music()
 	_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")
 

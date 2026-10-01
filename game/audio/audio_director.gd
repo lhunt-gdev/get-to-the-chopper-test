@@ -25,6 +25,8 @@ var _cctv: AudioStreamPlayer
 var _music := {}
 var _music_on := ""
 var _world: Node3D
+## Loops stuck to things in the world (wires, steam, the chopper), so they can be faded at the end.
+var _loops: Array[AudioStreamPlayer3D] = []
 
 
 func _ready() -> void:
@@ -128,7 +130,19 @@ func attach_loop(node: Node3D, name: String, volume_db: float = 0.0, max_distanc
 	node.add_child(p)
 	# Start somewhere into the loop, so neighbouring loops don't pulse in step.
 	p.play(randf() * p.stream.get_length())
+	_loops.append(p)
 	return p
+
+
+## The run's over: fade every world loop (the chopper, wires, steam) out over `seconds`, so nothing
+## drones on under the end screen.
+func fade_loops(seconds: float) -> void:
+	for p in _loops:
+		if is_instance_valid(p) and p.playing:
+			var t := p.create_tween()
+			t.tween_property(p, "volume_db", -60.0, seconds)
+			t.tween_callback(p.stop)
+	_loops.clear()
 
 
 ## The area's ambience (by theme name), crossfading from the last one.
