@@ -45,6 +45,9 @@ const STAIR_EXIT_CLEAR := 20.0
 const ENEMY_KINDS := ["rifle_trooper", "rusher_dog", "security_trooper"]
 const MARKER_CLEAR_BEFORE := 6.0
 const MARKER_CLEAR_AFTER := 20.0
+## Zone doors (the old halfway marker, "marker" in route.json): this far into an area, after the
+## split behind you is decided.
+const ZONE_DOOR_AT := 8
 ## No cover wall on the inside of a corner (user rule): it blocks the view round it and looks
 ## wrong. Each bend is a jog: it turns toward its side, runs BEND_RUN m (Tuning.branch_out_length),
 ## then turns back, so it has two corners, the second with its inside on the other side. A corridor
@@ -296,16 +299,29 @@ func validate() -> PackedStringArray:
 					var behind := float(e.get("at", 0)) - float(ob.get("at", 0))
 					if int(e.get("lane", -1)) in lanes and behind >= 0.0 and behind < WALL_TROOPER_CLEARANCE:
 						problems.append("node '%s': trooper at %s m is hidden right behind the wall at %s m" % [id, e.get("at"), ob.get("at")])
+		# The quiet route (user): underground there are no enemies, tripwires or alarm boxes.
+		if String(n.get("tier", "ground")) == "underground":
+			if not n.get("enemies", []).is_empty():
+				problems.append("node '%s': no enemies underground" % id)
+			if not n.get("alarms", []).is_empty():
+				problems.append("node '%s': no alarm boxes underground" % id)
+			for ob in n.get("obstacles", []):
+				if String(ob.get("kind", "")) == "tripwire":
+					problems.append("node '%s': no tripwires underground (the alert can't change down there)" % id)
+		# Zone doors (user): every ground or underground area you can enter straight on from the
+		# same height starts with one; nothing else has one.
+		if needs_zone_door(id) != n.has("marker"):
+			problems.append("node '%s': %s" % [id, "needs a zone door (\"marker\": {\"at\": %d})" % ZONE_DOOR_AT if needs_zone_door(id) else "has a zone door but you never enter it straight on from the same height"])
 		if n.has("marker"):
 			var m_at := float(n["marker"].get("at", -1))
 			if n.get("theme", "") in NO_TRIPWIRE_THEMES:
-				problems.append("node '%s': no halfway marker on open roofs" % id)
+				problems.append("node '%s': no zone doors on open roofs" % id)
 			if m_at <= 0.0 or m_at >= length:
-				problems.append("node '%s': halfway marker at %s m is outside the area" % [id, m_at])
+				problems.append("node '%s': zone door at %s m is outside the area" % [id, m_at])
 			for thing in n.get("obstacles", []) + n.get("enemies", []):
 				var gap := float(thing.get("at", 0)) - m_at
 				if gap > -MARKER_CLEAR_BEFORE and gap < MARKER_CLEAR_AFTER:
-					problems.append("node '%s': %s at %s m is too close to the halfway marker at %s m" % [id, thing.get("kind"), thing.get("at"), m_at])
+					problems.append("node '%s': %s at %s m is too close to the zone door at %s m" % [id, thing.get("kind"), thing.get("at"), m_at])
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
 		problems.append_array(_corner_walls(id, n.get("obstacles", []), corners_of(id)))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
@@ -417,3 +433,17 @@ func corners_of(id: StringName) -> Array:
 				out.append({"at": 0.0, "inside": side_of(edge)})
 				out.append({"at": BEND_RUN, "inside": other[side_of(edge)]})
 	return out
+
+
+## Zone doors (user): a ground or underground area you can enter straight on from an area at the
+## same height (not the helipad, not open roofs) starts with a double door. Arriving by stairs, you
+## come in through the stairwell's own door instead, so the level skips it then.
+func needs_zone_door(id: StringName) -> bool:
+	var n := node_data(id)
+	if String(n.get("tier", "ground")) == "roof" or String(n.get("end", "")) != "" or n.get("theme", "") in NO_TRIPWIRE_THEMES:
+		return false
+	for from: StringName in _nodes:
+		for edge in _nodes[from].get("next", []):
+			if StringName(edge.get("to", "")) == id and side_of(edge) == "straight" and tier_of(from) == tier_of(id):
+				return true
+	return false

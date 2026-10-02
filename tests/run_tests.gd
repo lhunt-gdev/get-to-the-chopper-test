@@ -113,19 +113,19 @@ func _test_mission_layout() -> void:
 		{"id": "e", "tier": "ground", "end": "extract"},
 	]})
 	problems = " ".join(marked.validate())
-	_check("box at 46" in problems and "rifle_trooper at 53" in problems, "nothing right by a halfway marker's doors")
-	_check("box at 65" in problems, "nothing too soon after a halfway marker (you burst through blind)")
-	_check(not "box at 72" in problems, "things further on after a halfway marker are fine")
-	_check("no halfway marker on open roofs" in problems, "no halfway marker on the rooftops")
+	_check("box at 46" in problems and "rifle_trooper at 53" in problems, "nothing right by a zone door")
+	_check("box at 65" in problems, "nothing too soon after a zone door (you burst through blind)")
+	_check(not "box at 72" in problems, "things further on after a zone door are fine")
+	_check("no zone doors on open roofs" in problems, "no zone door on the rooftops")
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	_check(g.display_name(&"rooftops_far") == "ROOFTOPS", "the far rooftops show as ROOFTOPS")
+	_check(g.display_name(&"roof_edge") == "ROOF EDGE", "an area with no name of its own shows its id as a name")
 	var run_log: Node = root.get_node_or_null("RunLog")  # an autoload; not a global name in -s scripts
 	if run_log == null:
 		_check(false, "RunLog autoload is available")
 		return
 	run_log.begin()
 	run_log.enter_node(&"rooftops", g.display_name(&"rooftops"))
-	run_log.enter_node(&"rooftops_far", g.display_name(&"rooftops_far"))
+	run_log.enter_node(&"rooftops_2", "ROOFTOPS")  # a second stretch with the same name
 	run_log.enter_node(&"helipad", g.display_name(&"helipad"))
 	_check(run_log.route_summary() == "ROOFTOPS > HELIPAD", "two stretches of rooftops show once: %s" % run_log.route_summary())
 
@@ -136,9 +136,18 @@ func _test_trooper_tiers() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
 	var empty_at_1 := 0
 	var runners := 0
-	for id in ["main_floor_lobby", "building_main_floor", "rooftops", "rooftops_far", "service_tunnel", "main_floor_exit"]:
+	# Per height: obstacles per metre and rifle guards at Alert 2, summed over its areas.
+	var density := {"ground": [0, 0.0, 0], "roof": [0, 0.0, 0], "underground": [0, 0.0, 0]}
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://game/levels/prototype_slice/route.json"))
+	for node in data["nodes"]:
+		var id := StringName(node["id"])
+		if g.end_type(id) != "":
+			continue
+		var tier := String(node.get("tier", "ground"))
+		density[tier][0] += node.get("obstacles", []).size()
+		density[tier][1] += float(node.get("length", 50))
 		var counts := [0, 0, 0]
-		for e in g.node_data(StringName(id)).get("enemies", []):
+		for e in node.get("enemies", []):
 			match String(e.get("kind", "")):
 				"rifle_trooper":
 					for alert in [1, 2, 3]:
@@ -149,11 +158,22 @@ func _test_trooper_tiers() -> void:
 				"security_trooper":
 					runners += 1
 					_check(int(e.get("max_alert", 3)) == 1, "%s: the alarm runner is Alert 1 only" % id)
+		density[tier][2] += counts[1]
+		if tier == "underground":
+			_check(counts == [0, 0, 0], "%s: no guards underground (%s)" % [id, counts])
+			continue
 		_check(counts[0] <= 2 and counts[0] < counts[1] and counts[1] <= counts[2],
 				"%s: sparse at Alert 1, more at 2, no fewer at 3 (%s)" % [id, counts])
 		if counts[0] == 0:
 			empty_at_1 += 1
 	_check(empty_at_1 >= 1, "some sections have no guards at Alert 1")
+	# Each height's character (user): underground more obstacles than ground, roofs far fewer;
+	# roofs more guards than ground.
+	var per_m := func(t: String) -> float: return density[t][0] / maxf(density[t][1], 1.0)
+	var guards_per_m := func(t: String) -> float: return density[t][2] / maxf(density[t][1], 1.0)
+	_check(per_m.call("underground") > per_m.call("ground"), "more obstacles underground than on the ground (%.3f vs %.3f a metre)" % [per_m.call("underground"), per_m.call("ground")])
+	_check(per_m.call("roof") < per_m.call("ground") * 0.5, "far fewer obstacles on the roofs (%.3f vs %.3f a metre)" % [per_m.call("roof"), per_m.call("ground")])
+	_check(guards_per_m.call("roof") > guards_per_m.call("ground"), "more guards on the roofs than the ground (%.3f vs %.3f a metre at Alert 2)" % [guards_per_m.call("roof"), guards_per_m.call("ground")])
 	_check(runners == 1, "one alarm runner per run (%d)" % runners)
 	# How far he's got: 0 where he set off, 1 at the alarm.
 	_check(SecurityTrooper.run_progress(100.0, 330.0, 100.0) == 0.0, "the runner starts at 0")
@@ -242,7 +262,7 @@ func _test_chopper_stages() -> void:
 	_check(ExtractionClock.stage_at(gone, l, f, gone) == ExtractionClock.Stage.GONE, "chopper gone at the end")
 	_check(l < f and f < gone, "default chopper stages in order")
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	_check(float(g.mission().get("chopper", {}).get("gone_at", 0)) == 68.0, "this mission sets its own chopper time")
+	_check(float(g.mission().get("chopper", {}).get("gone_at", 0)) == 114.0, "this mission sets its own chopper time (scaled for the ~90 s level)")
 	var bad := RouteGraph.from_dict({"start": "a", "chopper": {"lands_at": 30, "lifts_at": 20, "gone_at": 40},
 			"nodes": [{"id": "a", "end": "extract"}]})
 	_check("chopper times must be" in " ".join(bad.validate()), "a mission's chopper times must be in order")

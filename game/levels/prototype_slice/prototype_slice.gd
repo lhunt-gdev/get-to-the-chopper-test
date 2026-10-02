@@ -829,7 +829,9 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		_item_box(node, seg, float(a["at"]), Vector3(ax, 1.37, 0), Vector3(0.6, 0.05, 0.78), Color("4e5358"))  # top plate
 		_combatants.append({"node": box, "owner": node, "seg": seg})
 
-	if _graph.node_data(id).has("marker"):
+	# The zone door into this area (not when you come in up or down the stairs: the stairwell has
+	# its own door).
+	if _graph.node_data(id).has("marker") and RouteGraph.via_of(edge) != "stairs":
 		_build_marker(node, seg, float(_graph.node_data(id)["marker"].get("at", length / 2.0)))
 	if not _has_straight(id) and _graph.end_type(id) == "":
 		_build_dead_end(node, seg)
@@ -2135,7 +2137,7 @@ func _searchlight(parent: Node3D, seg: Dictionary, z: float, side: int) -> void:
 	t.tween_property(swing, "rotation:y", -0.45, 2.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-## Halfway through the area (not a checkpoint): a wall right across, side wall to side wall and up
+## A zone door (the start of an area; it was the halfway marker): a wall right across, side wall to side wall and up
 ## to the ceiling, with a double door over the middle lanes that you burst through. Office doors on
 ## the main floor, barred gates in the tunnel. The outer lanes are funnelled in just before it.
 func _build_marker(outer: Node3D, seg: Dictionary, at: float) -> void:
@@ -2754,6 +2756,8 @@ func _update_security(delta: float, sec: SecurityTrooper, d: float, alert: int) 
 				elif o["kind"] in ["barrier", "box"]:
 					lows.append({"at": o["at"], "x": o["x"]})
 	sec.update(delta, tuning, alert, d, walls, lows, highs, _runner_point)
+	if sec.is_running():
+		sec.x = move_toward(sec.x, _through_doors(sec.at, sec.x), 7.0 * delta)  # through the zone doors
 	if sec.is_running() and sec.state == SecurityTrooper.State.RUN:
 		_hud.show_runner(sec.progress())
 	if sec.is_alive() and sec.visible and absf(sec.at - d) < 0.6 \
@@ -2884,6 +2888,20 @@ func _update_squad(delta: float) -> void:
 ## he's spotted it (squad_dodge_chance), when he swerves into a clear neighbouring lane round it.
 ## If he hasn't spotted it, or both sides are blocked too, he keeps going: into it.
 func _squad_lane_target(g: PursuitGuard) -> float:
+	return _through_doors(g.at, _squad_cover_target(g))
+
+
+## Zone doors only open across the middle lanes: anyone (the squad, the alarm runner) coming up to
+## one squeezes in toward the middle.
+func _through_doors(at: float, x: float) -> float:
+	var reach := (MARKER_LANES - 1) / 2 * tuning.lane_width
+	for m in _markers:
+		if at >= m["at"] - MARKER_FUNNEL and at <= m["at"] + 0.5:
+			return clampf(x, -reach, reach)
+	return x
+
+
+func _squad_cover_target(g: PursuitGuard) -> float:
 	for o in _obstacles:
 		if o["pass"] != "cover" or absf(o["x"] - g.home_x) > 0.9:
 			continue

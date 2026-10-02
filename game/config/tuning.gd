@@ -207,9 +207,9 @@ var fire_on_left := false
 @export var squad_catch_distance: float = 1.2
 ## The chance (0..1) a squad guard spots cover coming up in his lane and swerves round it.
 ## Otherwise he runs into it and he's out.
-@export_range(0.0, 1.0) var squad_dodge_chance: float = 0.6
+@export_range(0.0, 1.0) var squad_dodge_chance: float = 0.85
 ## The chance (0..1) a squad guard times a jump (barrier) or a slide (pipe) right. Otherwise he
 ## trips over it or runs into it, and he's out.
-@export_range(0.0, 1.0) var squad_timing_chance: float = 0.75
+@export_range(0.0, 1.0) var squad_timing_chance: float = 0.9
 ## The rear-view CCTV's picture size (pixels; it's scaled up 1:1 in a small monitor under the clock).
 @export var squad_cctv_size: Vector2i = Vector2i(128, 72)

@@ -7,16 +7,18 @@ extends Node
 ##   naive        - never moves or shoots; should be killed
 ##   ground       - keeps to the middle lanes: straight on through the main floor to the EXIT
 ##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
-##                  (open at alert 1), then a ladder up
+##                  (open at alert 1), through the underground to the STORM DRAIN's ladder up
 ##   tunnel_loud  - runs through MAIN FLOOR's wire: the TUNNEL locks down (alert 2), so the left
 ##                  lane carries straight on to the EXIT
 ##   tunnel_alarm - runs through MAIN FLOOR's wire, shoots its alarm box (back to alert 1, the
 ##                  door lifts) and takes the TUNNEL after all
 ##   roof_down    - right-lane stairs up to the ROOFTOPS, then left-lane stairs back down into
-##                  BUILDING MAIN FLOOR
+##                  the SECURITY WING
+##   warehouse_drop - main route to the WAREHOUSE, then its left-lane stairs down into the
+##                  PUMP STATION and the STORM DRAIN's ladder up
 ##   roof_loud    - runs through the first wire (alert 2), up to the ROOFTOPS, straight on to the
-##                  far end, right-lane ladder down
-##   miss_ladder  - as roof_loud, but stays in the middle at the end of the ROOFTOPS: captured
+##                  ROOF EDGE, right-lane ladder down
+##   miss_ladder  - as roof_loud, but stays in the middle at the ROOF EDGE: captured
 ##   late_switch  - heads for the right-lane stairs, then swipes back to the middle a few metres
 ##                  before the split: straight on must still be open, so MAIN FLOOR
 ##   cover        - runs into the first cover, holds fire until it's safe to shoot from cover,
@@ -60,21 +62,23 @@ func _ready() -> void:
 			scenario = a.get_slice("=", 1)
 	match scenario:
 		"tunnel_quiet":
-			_prefer = {&"building_main_floor": -1, &"service_tunnel": -1}
+			_prefer = {&"building_main_floor": -1, &"storm_drain": -1}
 		"tunnel_loud":
 			_prefer = {&"building_main_floor": -1}
 			_trip_in = [&"building_main_floor"]
 		"tunnel_alarm":
-			_prefer = {&"building_main_floor": -1, &"service_tunnel": -1}
+			_prefer = {&"building_main_floor": -1, &"storm_drain": -1}
 			_trip_in = [&"building_main_floor"]
 		"roof_down":
 			_prefer = {&"main_floor_lobby": 1, &"rooftops": -1}
 		"roof_loud":
-			_prefer = {&"main_floor_lobby": 1, &"rooftops_far": 1}
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
 			_trip_in = [&"main_floor_lobby"]
 		"miss_ladder":
-			_prefer = {&"main_floor_lobby": 1, &"rooftops_far": 0}
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 0}
 			_trip_in = [&"main_floor_lobby"]
+		"warehouse_drop":
+			_prefer = {&"warehouse": -1, &"storm_drain": -1}
 		"late_switch":
 			_prefer = {&"main_floor_lobby": 1}
 		"dog_bite", "dog_dodge":
@@ -86,7 +90,7 @@ func _ready() -> void:
 	_player = _level.get_node("Player")
 	GameState.run_ended.connect(_on_end)
 	_level.start_run()
-	get_tree().create_timer(150.0).timeout.connect(func() -> void: _report("timeout"))
+	get_tree().create_timer(200.0).timeout.connect(func() -> void: _report("timeout"))
 
 
 func _physics_process(_delta: float) -> void:
@@ -176,9 +180,14 @@ func _shoot() -> void:
 	if target is AlarmBox and not _may_shoot_alarm():
 		want = false
 	if target is SecurityTrooper and scenario == "runner_escapes":
-		want = false  # let him go
-	if target is RusherDog and scenario in ["dog_bite", "dog_dodge"]:
-		want = false  # leave the dog to bite or be dodged
+		# Let him go, but still deal with the riflemen: tap one to override the auto-aim.
+		var rifle := _rifleman_in_range()
+		if rifle != null:
+			_level._tapped = rifle
+			target = _level.fire_target()
+		want = target != null and not target is SecurityTrooper  # let him go
+	if target is RusherDog and scenario in ["dog_bite", "dog_dodge"] and _level._runner.current == &"main_floor_exit":
+		want = false  # leave the EXIT's dog to bite or be dodged (shoot the rest)
 	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
 		want = false  # prove the cover works: only shoot once we're behind it...
 	if scenario == "cover" and _player.in_cover and _cover_frames < 90:
@@ -198,7 +207,7 @@ func _trooper_ahead(d: float) -> bool:
 func _charging_dog(d: float) -> RusherDog:
 	for c in _level._combatants:
 		var n = c["node"]
-		if n is RusherDog and n.state in [RusherDog.State.WINDUP, RusherDog.State.CHARGE] and n.at > d:
+		if n is RusherDog and n.state in [RusherDog.State.WINDUP, RusherDog.State.CHARGE] and n.at > d and _level._runner.current == &"main_floor_exit":
 			return n
 	return null
 
@@ -243,3 +252,14 @@ func _may_shoot_alarm() -> bool:
 		"tunnel_alarm":
 			return _level._runner.current == &"building_main_floor"
 	return false
+
+
+## A live rifleman ahead within shooting range (runner_escapes taps him instead of the runner).
+func _rifleman_in_range() -> Node3D:
+	var d := _player.distance_run()
+	for c in _level._combatants:
+		var n = c["node"]
+		if n is RifleTrooper and c["seg"].get("promoted", false) and n.is_targetable(GameState.alert_level) \
+				and n.at > d and n.at - d < _player.tuning.target_range:
+			return n
+	return null
