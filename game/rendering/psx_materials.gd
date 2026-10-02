@@ -68,6 +68,18 @@ static func textured(tex: Texture2D, uv_scale: Vector2 = Vector2.ONE, unlit: boo
 	return _cache[key]
 
 
+## Tinted glass you can see through (the guard booth's windows): unlit, alpha-blended, both sides.
+static func glass(color: Color) -> StandardMaterial3D:
+	var key := "glass_" + color.to_html()
+	if not _cache.has(key):
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.albedo_color = color
+		_cache[key] = m
+	return _cache[key]
+
 ## Additive, unlit and see-through: light you can see in the air (searchlight beams, lamp haze).
 static func beam(color: Color) -> StandardMaterial3D:
 	var key := "beam_" + color.to_html()

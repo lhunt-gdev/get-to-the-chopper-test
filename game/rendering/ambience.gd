@@ -75,7 +75,7 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 	var near: Array[Dictionary] = []
 	for l in _lamps:
 		var node: Node3D = l["node"]
-		if not node.is_visible_in_tree():
+		if not node.is_inside_tree() or not node.is_visible_in_tree():  # e.g. walls rebuilt, the old ones on their way out
 			continue
 		l["lit"] = _lit(l)
 		var fixture = l["fixture"]

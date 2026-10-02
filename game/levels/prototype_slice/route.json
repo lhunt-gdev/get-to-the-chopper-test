@@ -76,7 +76,7 @@
     },
     {
       "id": "security_wing",
-      "theme": "office",
+      "theme": "security",
       "tier": "ground",
       "length": 120,
       "marker": {"at": 8},
@@ -89,7 +89,7 @@
         {"kind": "pipe", "lanes": [1, 2, 3], "at": 58},
         {"kind": "box", "lanes": [2], "at": 66},
         {"kind": "barrier", "lanes": [2, 3, 4], "at": 72},
-        {"kind": "wall", "lanes": [3, 4], "at": 80},
+        {"kind": "wall", "lanes": [3, 4], "at": 80, "look": "booth"},
         {"kind": "pipe", "lanes": [0, 1, 2], "at": 88},
         {"kind": "box", "lanes": [0], "at": 96},
         {"kind": "barrier", "lanes": [1, 2], "at": 100},

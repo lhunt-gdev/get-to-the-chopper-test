@@ -661,6 +661,145 @@ static func cover_wall() -> Texture2D:
 
 # --- Helpers ----------------------------------------------------------------------
 
+## Security wing wall (user reference): cold grey steel-and-concrete panels, a dark grey band
+## along the bottom with a steel kick rail, a seam down the middle, rivets, and grime.
+static func security_wall() -> Texture2D:
+	if _cache.has("security_wall"):
+		return _cache["security_wall"]
+	var img := _start("security_wall", Color("7e8486"), 0.035)
+	for y in 40:
+		for x in SIZE:
+			_shade(img, x, y, 1.04 - 0.08 * y / 40.0)
+	_bevel(img, Rect2i(0, 0, 32, 40), 1.12, 0.78)
+	_bevel(img, Rect2i(32, 0, 32, 40), 1.12, 0.78)
+	for x in SIZE:  # a steel rail between the panels and the dark band
+		_put(img, x, 40, Color("b0b6b8"))
+		_put(img, x, 41, Color("8c9294"))
+		_put(img, x, 42, Color("3a3e40"))
+	for y in range(43, SIZE):
+		for x in SIZE:
+			_put(img, x, y, img.get_pixel(x, y).darkened(0.48))
+	_bevel(img, Rect2i(0, 43, 64, 21), 1.1, 0.8)
+	for p in [Vector2i(3, 3), Vector2i(28, 3), Vector2i(35, 3), Vector2i(60, 3), Vector2i(3, 36), Vector2i(28, 36), Vector2i(35, 36), Vector2i(60, 36)]:
+		_rivet(img, p.x, p.y)
+	_blotches(img, "security_wall_scuffs", 4, 1, 3, Color("2e3234"), 0.4, Rect2i(0, 50, SIZE, 14))
+	_streaks(img, "security_wall_damp", 2, Color("4a5050"), 0.18)
+	_grime_bottom(img, "security_wall", 52, 0.3)
+	return _finish("security_wall", img)
+
+
+## Security wing floor (user reference): big grey-green concrete tiles, one lane wide, with dark
+## grout lines and worn, slightly mottled faces.
+static func security_floor() -> Texture2D:
+	if _cache.has("security_floor"):
+		return _cache["security_floor"]
+	var img := _start("security_floor", Color("5c625a"), 0.04)
+	var rng := _rng("security_floor_tiles")
+	for ty in 2:
+		var k := rng.randf_range(0.94, 1.06)
+		for y in range(ty * 32, ty * 32 + 32):
+			for x in SIZE:
+				_shade(img, x, y, k)
+		_bevel(img, Rect2i(0, ty * 32, SIZE, 32), 1.08, 0.85)
+	_noise(img, "security_floor_mottle", 4, 0.05)
+	for i in SIZE:
+		for g in 2:
+			_put(img, g, i, Color("2a2e2a"))  # grout between lanes
+			_put(img, i, g, Color("2e322e"))  # and between tiles
+	_cracks(img, "security_floor_cracks", 2, 10, 0.75)
+	_blotches(img, "security_floor_scuffs", 6, 1, 2, Color("3a3e38"), 0.4)
+	return _finish("security_floor", img)
+
+
+## A bank of four CCTV monitors in a black frame (user reference): grey-blue footage of empty
+## corridors, scanlines, and a red REC dot on one.
+static func cctv_monitors() -> Texture2D:
+	if _cache.has("cctv_monitors"):
+		return _cache["cctv_monitors"]
+	var img := _start("cctv_monitors", Color("1a1c1e"), 0.02)
+	var rng := _rng("cctv_monitors_feeds")
+	for sy in 2:
+		for sx in 2:
+			var r := Rect2i(4 + sx * 30, 4 + sy * 30, 26, 26)
+			_fill(img, r, Color("5a6a78"))
+			# A corridor in perspective: dark floor and walls, a lit far end.
+			var vx := r.position.x + 13 + rng.randi_range(-3, 3)
+			var vy := r.position.y + 11
+			for y in range(r.position.y, r.end.y):
+				for x in range(r.position.x, r.end.x):
+					var d := absf(float(x - vx)) / maxf(1.0, absf(float(y - vy)) + 1.0)
+					if y > vy and d < 1.4:
+						_put(img, x, y, Color("3e4a54"))  # floor
+					elif d > 1.6:
+						_shade(img, x, y, 0.78)  # walls
+			_fill(img, Rect2i(vx - 2, vy - 3, 4, 4), Color("b8c8d4"))
+			for y in range(r.position.y, r.end.y, 2):
+				for x in range(r.position.x, r.end.x):
+					_shade(img, x, y, 0.85)  # scanlines
+			_bevel(img, r, 0.6, 1.25)
+	_put(img, 8, 8, Color("ff3a2a"))
+	_put(img, 9, 8, Color("ff3a2a"))
+	return _finish("cctv_monitors", img)
+
+
+## One CCTV screen (the 3D monitor banks): grey-blue footage of a corridor in perspective, a lit
+## far end, scanlines and a timestamp bar. `view` picks one of a few different corridors.
+static func cctv_screen(view: int) -> Texture2D:
+	var key := "cctv_screen_%d" % view
+	if _cache.has(key):
+		return _cache[key]
+	var img := _start(key, Color("5e7080"), 0.04)
+	var vx: int = 32 + [0, -9, 8, -4][view % 4]
+	var vy: int = 26 + [0, 4, -3, 2][view % 4]
+	for y in SIZE:
+		for x in SIZE:
+			var d := absf(float(x - vx)) / maxf(1.0, absf(float(y - vy)) + 1.0)
+			if y > vy and d < 1.3:
+				_put(img, x, y, Color("3e4c58"))  # floor
+			elif y < vy and d < 1.1:
+				_put(img, x, y, Color("6c7e8c"))  # ceiling
+			elif d > 1.5:
+				_shade(img, x, y, 0.72)  # walls
+	_fill(img, Rect2i(vx - 4, vy - 6, 8, 8), Color("c0d0dc"))  # the lit far end
+	if view % 2 == 1:
+		_fill(img, Rect2i(vx + 6, vy + 6, 3, 9), Color("2a3036"))  # someone standing there
+	for y in range(0, SIZE, 2):
+		for x in SIZE:
+			_shade(img, x, y, 0.82)  # scanlines
+	_fill(img, Rect2i(2, SIZE - 8, 26, 5), Color("1e2428"))  # timestamp bar
+	for x in range(4, 26, 3):
+		_put(img, x, SIZE - 6, Color("d8e0e4"))
+	if view == 0:
+		_fill(img, Rect2i(SIZE - 8, 3, 4, 4), Color("ff3a2a"))  # REC
+	return _finish(key, img)
+
+
+## The guard booth's window (user reference): through the glass, a dim room with a desk, a lit
+## monitor and a chair; a steel frame with a horizontal bar and a reflection streak.
+static func booth_window() -> Texture2D:
+	if _cache.has("booth_window"):
+		return _cache["booth_window"]
+	var img := _start("booth_window", Color("1e262c"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			_shade(img, x, y, 0.8 + 0.4 * y / SIZE)
+	_fill(img, Rect2i(6, 40, 52, 6), Color("3a3e40"))  # the desk
+	_fill(img, Rect2i(6, 46, 52, 14), Color("2a2e30"))
+	_fill(img, Rect2i(14, 26, 14, 12), Color("101214"))  # a monitor...
+	_fill(img, Rect2i(16, 28, 10, 8), Color("7a96a8"))  # ...lit
+	_fill(img, Rect2i(19, 38, 4, 2), Color("1a1c1e"))
+	_fill(img, Rect2i(38, 30, 10, 12), Color("181a1c"))  # a chair back
+	_fill(img, Rect2i(44, 20, 14, 3), Color("c8c0a0"))  # a strip light at the back
+	for i in range(0, 40):  # a reflection across the glass
+		_blend(img, 8 + i, 50 - i, Color("8aa0ac"), 0.35)
+		_blend(img, 9 + i, 50 - i, Color("8aa0ac"), 0.2)
+	for x in SIZE:
+		_put(img, x, 32, Color("6a7074"))
+		_put(img, x, 33, Color("3a3e40"))
+	_frame(img, 3, Color("4a5054"))
+	return _finish("booth_window", img)
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)

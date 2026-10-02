@@ -27,13 +27,13 @@ const WALL_TROOPER_CLEARANCE := 15.0
 const CROSSING_WINDOW := 4.0
 ## How deep each object is along the route (metres), and the clear gap needed between two
 ## objects in the same lane (user rule: nothing overlaps).
-const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "trooper": 0.5}
+const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "booth": 3.5, "trooper": 0.5}
 const MIN_GAP := 1.0
 ## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
-const LOOKS := {"pipe": ["pipe", "wires", "double_pipe"], "box": ["crate", "desk", "cabinet", "roof_vent"],
+const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe"], "box": ["crate", "desk", "cabinet", "roof_vent"],
 		"barrier": ["cabinet", "blockade", "vent"]}
 ## Themes whose slide obstacles are live wires (unless "look" says otherwise).
-const WIRE_THEMES := ["office"]
+const WIRE_THEMES := ["office", "security"]
 ## Live wires span only this many neighbouring lanes (user rule: never all 5).
 const WIRE_LANES := [3, 4]
 ## Nothing (obstacle or trooper) this close to the start of an area reached by stairs: the flight
@@ -213,7 +213,9 @@ static func _forced_crossings(id: StringName, obstacles: Array) -> PackedStringA
 static func _overlaps(id: StringName, obstacles: Array, enemies: Array) -> PackedStringArray:
 	var things: Array[Dictionary] = []
 	for o in obstacles:
-		things.append({"what": String(o.get("kind", "")), "at": float(o.get("at", 0)), "lanes": o.get("lanes", [])})
+		# A guard booth runs 3 m on down the road behind its front face: centre it there, deeper.
+		var booth := String(o.get("look", "")) == "booth"
+		things.append({"what": "booth" if booth else String(o.get("kind", "")), "at": float(o.get("at", 0)) - (1.25 if booth else 0.0), "lanes": o.get("lanes", [])})
 	for e in enemies:
 		things.append({"what": "trooper", "at": float(e.get("at", 0)), "lanes": [e.get("lane", -1)]})
 	var problems := PackedStringArray()
