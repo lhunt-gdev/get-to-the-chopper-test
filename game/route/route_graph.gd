@@ -30,10 +30,10 @@ const CROSSING_WINDOW := 4.0
 const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "booth": 3.5, "trooper": 0.5}
 const MIN_GAP := 1.0
 ## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
-const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe"], "box": ["crate", "desk", "cabinet", "roof_vent"],
+const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe", "bunting"], "box": ["crate", "desk", "cabinet", "roof_vent"],
 		"barrier": ["cabinet", "blockade", "vent"]}
 ## Themes whose slide obstacles are live wires (unless "look" says otherwise).
-const WIRE_THEMES := ["office", "security"]
+const WIRE_THEMES := ["office", "security", "canteen"]
 ## Live wires span only this many neighbouring lanes (user rule: never all 5).
 const WIRE_LANES := [3, 4]
 ## Nothing (obstacle or trooper) this close to the start of an area reached by stairs: the flight
@@ -336,6 +336,17 @@ func validate() -> PackedStringArray:
 				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
 			if float(e.get("at", -1)) < 0.0 or float(e.get("at", -1)) > length:
 				problems.append("node '%s': enemy at %s m is outside the segment" % [id, e.get("at")])
+		# A room built into a side wall (the canteen's kitchen) needs a straight stretch of wall.
+		if n.has("alcove"):
+			var al: Dictionary = n["alcove"]
+			var a0 := float(al.get("at", -1))
+			var a1 := a0 + float(al.get("length", 16.0))
+			if a0 < MARKER_CLEAR_AFTER + ZONE_DOOR_AT or a1 > length - 2.0:
+				problems.append("node '%s': the alcove at %s m must sit clear of the zone door and the end" % [id, al.get("at")])
+			for bend in n.get("bends", []):
+				var b := float(bend.get("at", 0))
+				if a1 > b - 2.0 and a0 < b + BEND_RUN + 2.0:
+					problems.append("node '%s': the alcove at %s m runs into the bend at %s m" % [id, al.get("at"), b])
 		# Searchlights (user): only on the open roofs, not right outside a stairwell, 20 m apart.
 		var lights: Array = n.get("searchlights", [])
 		var entered_by_stairs := false

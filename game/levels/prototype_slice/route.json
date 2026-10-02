@@ -108,7 +108,8 @@
     },
     {
       "id": "staff_canteen",
-      "theme": "office",
+      "theme": "canteen",
+      "alcove": {"side": "right", "at": 70, "length": 16},
       "tier": "ground",
       "length": 110,
       "bends": [{"at": 50, "side": "right"}],

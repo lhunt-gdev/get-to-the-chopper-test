@@ -800,6 +800,174 @@ static func booth_window() -> Texture2D:
 	return _finish("booth_window", img)
 
 
+## STAFF CANTEEN wall (user reference): warm beige plaster panels over a dark grey band with a
+## steel rail, a little grubby.
+static func canteen_wall() -> Texture2D:
+	if _cache.has("canteen_wall"):
+		return _cache["canteen_wall"]
+	var img := _start("canteen_wall", Color("8c8676"), 0.035)
+	for y in 38:
+		for x in SIZE:
+			_shade(img, x, y, 1.05 - 0.1 * y / 38.0)
+	_groove_v(img, 0, 0, 38)
+	_groove_v(img, 32, 0, 38)
+	for x in SIZE:
+		_put(img, x, 38, Color("b4ae9c"))
+		_put(img, x, 39, Color("6c685c"))
+	for y in range(40, SIZE):
+		for x in SIZE:
+			_put(img, x, y, img.get_pixel(x, y).darkened(0.55))
+	_bevel(img, Rect2i(0, 40, 64, 24), 1.1, 0.8)
+	_blotches(img, "canteen_wall_stains", 3, 2, 4, Color("6a5a3c"), 0.25, Rect2i(0, 0, SIZE, 38))
+	_grime_bottom(img, "canteen_wall", 54, 0.3)
+	return _finish("canteen_wall", img)
+
+
+## STAFF CANTEEN floor: big pale beige-grey tiles, one lane wide, with dark grout and wear.
+static func canteen_floor() -> Texture2D:
+	if _cache.has("canteen_floor"):
+		return _cache["canteen_floor"]
+	var img := _start("canteen_floor", Color("8a8676"), 0.035)
+	var rng := _rng("canteen_floor_tiles")
+	for ty in 2:
+		var k := rng.randf_range(0.95, 1.05)
+		for y in range(ty * 32, ty * 32 + 32):
+			for x in SIZE:
+				_shade(img, x, y, k)
+		_bevel(img, Rect2i(0, ty * 32, SIZE, 32), 1.06, 0.88)
+	_noise(img, "canteen_floor_mottle", 4, 0.04)
+	for i in SIZE:
+		for g in 2:
+			_put(img, g, i, Color("3c3a32"))
+			_put(img, i, g, Color("44423a"))
+	_blotches(img, "canteen_floor_scuffs", 6, 1, 2, Color("5a5648"), 0.4)
+	return _finish("canteen_floor", img)
+
+
+## A vending machine's front: `kind` 0 = a drinks machine in `tint` (red, blue or orange; a big can
+## logo and buttons),
+## 1 = the snack machine (rows of coloured packets behind glass, a keypad).
+static func vending_front(kind: int, tint: Color = Color("c41e1e")) -> Texture2D:
+	var key := "vending_%d_%s" % [kind, tint.to_html(false)]
+	if _cache.has(key):
+		return _cache[key]
+	var img := _start(key, tint if kind == 0 else Color("1c2230"), 0.03)
+	if kind == 0:
+		for y in SIZE:
+			for x in range(4, 46):
+				_shade(img, x, y, 1.1 - 0.25 * absf(x - 25) / 21.0)
+		# A white wave and a can shape.
+		for i in 44:
+			var y := 30 + int(sin(i * 0.25) * 6.0)
+			for w in 3:
+				_put(img, 4 + i % 42, y + w, Color("f0e8e0"))
+		_fill(img, Rect2i(18, 12, 12, 14), Color("e8e0d8"))
+		_fill(img, Rect2i(19, 13, 10, 12), tint.darkened(0.1))
+		_fill(img, Rect2i(48, 6, 12, 40), Color("2a1a1a"))  # the button panel
+		for b in 6:
+			_fill(img, Rect2i(50, 9 + b * 6, 8, 4), Color("e8e0c8") if b % 2 == 0 else Color("e8c040"))
+		_fill(img, Rect2i(12, 52, 30, 8), Color("101010"))  # the drop slot
+	else:
+		var colours := [Color("e8c040"), Color("e05030"), Color("40a0e0"), Color("60c060"), Color("e8e0d0"), Color("c060c0")]
+		var rng := _rng("vending_snacks")
+		for row in 6:
+			for col in 5:
+				_fill(img, Rect2i(4 + col * 8, 4 + row * 9, 6, 7), colours[rng.randi_range(0, colours.size() - 1)])
+				_put(img, 4 + col * 8, 4 + row * 9, Color("f8f0e0"))
+			for x in range(3, 44):
+				_put(img, x, 11 + row * 9, Color("8a909a"))  # shelf
+		_fill(img, Rect2i(48, 8, 12, 22), Color("3a404a"))  # keypad
+		for k in 9:
+			_put(img, 50 + (k % 3) * 3, 11 + (k / 3) * 4, Color("c8d0d8"))
+		_fill(img, Rect2i(6, 56, 34, 6), Color("08080a"))
+	_frame(img, 2, Color("2a2a2a"))
+	return _finish(key, img)
+
+
+## A menu board over the serving counter: a lit food picture (`item` 0 burger, 1 noodles, 2 soup)
+## and lines of prices, on black.
+static func menu_board(item: int) -> Texture2D:
+	var key := "menu_board_%d" % item
+	if _cache.has(key):
+		return _cache[key]
+	var img := _start(key, Color("141414"), 0.02)
+	match item:
+		0:
+			_fill(img, Rect2i(8, 18, 20, 5), Color("d8a050"))  # bun
+			_fill(img, Rect2i(7, 23, 22, 3), Color("60a040"))  # lettuce
+			_fill(img, Rect2i(8, 26, 20, 4), Color("6a3a1e"))  # patty
+			_fill(img, Rect2i(8, 30, 20, 4), Color("d8a050"))
+		1:
+			_fill(img, Rect2i(6, 24, 24, 10), Color("e8e8e0"))  # bowl
+			for i in 5:
+				_fill(img, Rect2i(8 + i * 4, 18 + i % 2, 2, 8), Color("e8c060"))  # noodles
+			_fill(img, Rect2i(10, 20, 6, 3), Color("d04030"))
+		2:
+			_fill(img, Rect2i(6, 24, 24, 10), Color("e8e8e0"))
+			_fill(img, Rect2i(8, 22, 20, 4), Color("c86a30"))  # soup
+	for ly in range(16, 40, 6):
+		for lx in range(36, 58):
+			if lx % 7 != 6:
+				_put(img, lx, ly, Color("e8e4d8"))
+	_frame(img, 3, Color("4a4a46"))
+	return _finish(key, img)
+
+
+## STAFF CANTEEN pillar (cover walls, user reference): dark grey concrete with a pale band round
+## the middle and a darker foot, chipped at the edges.
+static func canteen_pillar() -> Texture2D:
+	if _cache.has("canteen_pillar"):
+		return _cache["canteen_pillar"]
+	var img := _start("canteen_pillar", Color("4a4c4e"), 0.04)
+	for y in range(22, 34):
+		for x in SIZE:
+			_put(img, x, y, Color("8e8a7c"))  # the pale band
+	for x in SIZE:
+		_put(img, x, 21, Color("2e3032"))
+		_put(img, x, 34, Color("2e3032"))
+	for y in range(52, SIZE):
+		for x in SIZE:
+			_shade(img, x, y, 0.7)
+	_bevel(img, Rect2i(0, 0, SIZE, SIZE), 1.1, 0.8)
+	_blotches(img, "canteen_pillar_chips", 4, 1, 2, Color("6a6c6c"), 0.5)
+	_grime_bottom(img, "canteen_pillar", 50, 0.3)
+	return _finish("canteen_pillar", img)
+
+
+## Kitchen back wall: white glazed tiles, grout, a grease stain.
+static func kitchen_tile() -> Texture2D:
+	if _cache.has("kitchen_tile"):
+		return _cache["kitchen_tile"]
+	var img := _start("kitchen_tile", Color("c8c8bc"), 0.03)
+	_tiles(img, 16, 16, Color("8a8a7e"))
+	_blotches(img, "kitchen_grease", 2, 3, 6, Color("a08a5a"), 0.3)
+	return _finish("kitchen_tile", img)
+
+
+## A stainless-steel fridge door: brushed vertical grain, a long handle, a vent at the bottom.
+static func fridge() -> Texture2D:
+	if _cache.has("fridge"):
+		return _cache["fridge"]
+	var img := _start("fridge", Color("a4aaac"), 0.02)
+	var rng := _rng("fridge_grain")
+	for x in SIZE:
+		var k := rng.randf_range(0.92, 1.08)
+		for y in SIZE:
+			_shade(img, x, y, k)
+	_bevel(img, Rect2i(2, 2, 60, 26), 1.12, 0.8)
+	_bevel(img, Rect2i(2, 30, 60, 26), 1.12, 0.8)
+	for y in range(6, 24):
+		_put(img, 54, y, Color("e0e4e4"))
+		_put(img, 55, y, Color("6a7072"))
+	for y in range(34, 52):
+		_put(img, 54, y, Color("e0e4e4"))
+		_put(img, 55, y, Color("6a7072"))
+	for y in range(58, 63, 2):
+		for x in range(6, 58):
+			_put(img, x, y, Color("3a3e40"))
+	return _finish("fridge", img)
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
