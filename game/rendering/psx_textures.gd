@@ -1291,6 +1291,21 @@ static func city_backdrop() -> Texture2D:
 
 
 
+## HELIPAD paving (user reference): big grey concrete slabs, speckled, with dark joints. One slab
+## per lane.
+static func helipad_slab() -> Texture2D:
+	if _cache.has("helipad_slab"):
+		return _cache["helipad_slab"]
+	var img := _start("helipad_slab", Color("6a6c6e"), 0.05)
+	_aggregate(img, "helipad_slab_flecks", 300, 0.16)
+	for i in SIZE:
+		for w in 2:
+			_put(img, i, w, Color("2e3032"))
+			_put(img, w, i, Color("2e3032"))
+	_blotches(img, "helipad_slab_stains", 3, 6, 14, Color("4a4c4c"), 0.25)
+	return _finish("helipad_slab", img)
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)

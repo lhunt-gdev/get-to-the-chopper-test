@@ -135,8 +135,10 @@ const THEMES := {
 			"wall_decor": "exit", "glass_walls": true, "pillar_every": 10, "pillar_tex": "exit_granite", "glass_front": true,
 			"skins": {"barrier_looks": ["speedgate"], "pipe": "exit_sign", "box_look": "planter", "wall": "exit_granite"}},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
-	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "helipad", "snow": true,
-			"color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
+	# HELIPAD (user reference): a wide rooftop pad at night, the landing ring and H, red edge lights,
+	# floodlight masts, a railing round the edge, supply crates; the chopper broadside on the pad.
+	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "pad", "snow": true,
+			"color": Color("5c5c55"), "height": 0.6, "ground": "helipad_slab", "open_deck": true},
 }
 ## The light out in an outdoor stretch of an indoor area (the LOADING DOCK's yard): night sky.
 const OUTDOOR_LIGHT := {"ambient": Color(0.24, 0.27, 0.36), "moon": Color(0.34, 0.4, 0.6), "fog": 0.016, "fog_color": Color("121828")}
@@ -1429,6 +1431,9 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 	var via := RouteGraph.via_of(seg["edge"])
 	if theme.get("no_walls", false):
 		_build_roof_edges(parent, seg, open_l, open_r)
+		return
+	if theme.get("open_deck", false):
+		_build_helipad(parent, seg, ramp)
 		return
 	for side in [-1, 1]:
 		var open := open_l if side < 0 else open_r
@@ -2909,6 +2914,195 @@ func _build_exit_front(parent: Node3D, seg: Dictionary) -> void:
 			_doors.append(door)
 
 
+## The HELIPAD (user reference): a wide rooftop pad at night instead of side walls. The deck runs
+## out well past the road on both sides and on past its end, under the chopper (which stands 3 m
+## past the end). Paving in big slabs, hazard lines along the road's edges and a hazard band across
+## where the pad starts, the yellow landing ring with a white H, red edge lights round it and two
+## on posts by the way in, floodlight masts at the corners, a railing and low parapet round the
+## edge, and the building's front dropping away below. Supply crates, a red crate, a concrete
+## block, a bollard and utility cabinets along the sides.
+func _build_helipad(parent: Node3D, seg: Dictionary, from: float) -> void:
+	var L: float = seg["length"]
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var half := road_half + 8.5  # the deck's half width
+	var zc := L + 3.0  # the pad's centre, under the chopper
+	var far := L + 13.0
+	var slab := PsxTextures.helipad_slab()
+	var front := PsxMaterials.textured(PsxTextures.building_night(), Vector2(3, 2), true)
+	# The deck: out from the road on each side, and across beyond the road's end.
+	for s in [-1.0, 1.0]:
+		var w := half - road_half
+		_strip(parent, seg, from, L, s * (road_half + w / 2.0), w, 0.0, slab, w / tuning.lane_width, tuning.lane_width)
+	_strip(parent, seg, L, far, 0.0, half * 2.0, 0.0, slab, half * 2.0 / tuning.lane_width, tuning.lane_width)
+	# Its thickness, and the building's front dropping away below its edges.
+	var mid := (from + far) / 2.0
+	for s in [-1.0, 1.0]:
+		_item_box(parent, seg, mid, Vector3(s * (half + 0.2), -10.0, 0), Vector3(0.4, 20.0, far - from), Color.WHITE).material_override = front
+	_item_box(parent, seg, far + 0.2, Vector3(0, -10.0, 0), Vector3(half * 2.0 + 0.8, 20.0, 0.4), Color.WHITE).material_override = front
+	# The parapet and railing round the edge.
+	var rail := Color("8a8e90")
+	for s in [-1.0, 1.0]:
+		_item_box(parent, seg, mid, Vector3(s * half, 0.15, 0), Vector3(0.3, 0.3, far - from), Color("5c5e5c"))
+		for y in [0.65, 1.1]:
+			_item_box(parent, seg, mid, Vector3(s * half, y, 0), Vector3(0.05, 0.05, far - from), rail)
+	_item_box(parent, seg, far, Vector3(0, 0.15, 0), Vector3(half * 2.0, 0.3, 0.3), Color("5c5e5c"))
+	for y in [0.65, 1.1]:
+		_item_box(parent, seg, far, Vector3(0, y, 0), Vector3(half * 2.0, 0.05, 0.05), rail)
+	var p := ceilf(from / 2.0) * 2.0
+	while p <= far:
+		for s in [-1.0, 1.0]:
+			_item_box(parent, seg, p, Vector3(s * half, 0.55, 0), Vector3(0.06, 1.1, 0.06), rail)
+		p += 2.0
+	var x := -half + 1.0
+	while x < half:
+		_item_box(parent, seg, far, Vector3(x, 0.55, 0), Vector3(0.06, 1.1, 0.06), rail)
+		x += 2.0
+	# Hazard lines along the road's edges up to the pad, and a hazard band across where it starts.
+	var hz := PsxTextures.hazard()
+	var band := zc - 7.5
+	for s in [-1.0, 1.0]:
+		if band - 0.5 > from:
+			_strip(parent, seg, from, band - 0.5, s * (road_half - 0.1), 0.2, 0.008, hz, 1.0, 0.8)
+	_strip(parent, seg, band - 0.35, band, 0.0, road_half * 2.0 - 0.4, 0.008, hz, 10.0, 0.35)
+	# The landing ring and the H, read from the way in.
+	var yellow := PsxMaterials.flat(Color("d8b020"))
+	var ring_r := 5.6
+	var bits := 32
+	for k in bits:
+		var a := TAU * k / bits
+		var seg_len := TAU * ring_r / bits + 0.05
+		var b := _item_box(parent, seg, zc - ring_r * cos(a), Vector3(ring_r * sin(a), 0.01, 0), Vector3(seg_len, 0.012, 0.3), Color.WHITE)
+		b.material_override = yellow
+		b.rotation.y += a  # along the ring
+	var white := Color("e8e8e0")
+	for s in [-1.0, 1.0]:
+		_item_box(parent, seg, zc, Vector3(s * 1.1, 0.012, 0), Vector3(0.55, 0.012, 3.4), white)
+	_item_box(parent, seg, zc, Vector3(0, 0.012, 0), Vector3(1.7, 0.012, 0.55), white)
+	# Red edge lights round the ring, and two on posts either side of the way in.
+	var red_on := PsxMaterials.glow(Color("ff2a18"))
+	var lit := 0
+	for k in 12:
+		var a := TAU * (k + 0.5) / 12
+		var l := _item_box(parent, seg, zc - (ring_r + 0.9) * cos(a), Vector3((ring_r + 0.9) * sin(a), 0.12, 0), Vector3(0.3, 0.24, 0.3), Color.WHITE)
+		l.material_override = red_on
+		if k % 3 == 0 and lit < 4:
+			_ambience.add_lamp(l, Color(1.0, 0.18, 0.1) * 0.9, 3.0, {"alert": false})
+			lit += 1
+	for s in [-1.0, 1.0]:
+		_item_box(parent, seg, band - 0.8, Vector3(s * (road_half + 0.45), 0.4, 0), Vector3(0.45, 0.8, 0.45), Color("4a4c4e"))
+		var head := _item_box(parent, seg, band - 0.8, Vector3(s * (road_half + 0.45), 0.92, 0), Vector3(0.4, 0.24, 0.4), Color.WHITE)
+		head.material_override = red_on
+		_ambience.add_lamp(head, Color(1.0, 0.18, 0.1) * 1.1, 3.5, {"alert": false})
+	# Floodlight masts at the corners of the pad.
+	for c in [[-1.0, zc - 9.0], [1.0, zc - 9.0], [-1.0, zc + 8.5], [1.0, zc + 8.5]]:
+		var mx: float = c[0] * (half - 1.2)
+		var mz: float = c[1]
+		_item_box(parent, seg, mz, Vector3(mx, 3.4, 0), Vector3(0.16, 6.8, 0.16), Color("6a6e70"))
+		_item_box(parent, seg, mz, Vector3(mx, 6.9, 0), Vector3(1.2, 0.1, 0.2), Color("4a4e50"))
+		for k in 4:
+			var lamp := _item_box(parent, seg, mz, Vector3(mx + (k % 2 - 0.5) * 0.55, 7.15 + (k / 2) * 0.4, 0.05), Vector3(0.42, 0.32, 0.12), Color.WHITE)
+			lamp.material_override = PsxMaterials.glow(Color("f4f0dc"))
+			if k == 0:
+				_ambience.add_lamp(lamp, Color(0.95, 0.95, 0.85) * 1.6, 14.0, {"alert": false})
+	# Along the sides: stacked military crates on the right, a red crate, a concrete block and a
+	# yellow bollard on the left, grey utility cabinets by the railing.
+	var olive := PsxMaterials.textured(PsxTextures.olive_crate(), Vector2(3, 2))
+	for k in 5:
+		var holder := Node3D.new()
+		parent.add_child(holder)
+		var cz := band - 1.5 - k * 1.25
+		if cz < from + 1.0:
+			break
+		holder.transform = _frame_at(seg, cz) * Transform3D(Basis(Vector3.UP, 0.06 * (k % 3 - 1)), Vector3(road_half + 1.2 + (k % 2) * 0.15, 0, 0))
+		_box(holder, Vector3(1.1, 0.9, 1.1), Vector3(0, 0.45, 0), Color.WHITE).material_override = olive
+		if k % 2 == 0:
+			_box(holder, Vector3(1.0, 0.8, 1.0), Vector3(0.05, 1.3, 0.05), Color.WHITE).material_override = olive
+	var red_crate := _item_box(parent, seg, band - 2.0, Vector3(-(road_half + 2.6), 0.4, 0), Vector3(0.9, 0.8, 0.8), Color.WHITE)
+	red_crate.material_override = PsxMaterials.flat(Color("7a2a20"))
+	_item_box(parent, seg, band - 1.2, Vector3(-(road_half + 1.3), 0.45, 0), Vector3(1.0, 0.9, 1.0), Color("6e706c"))  # concrete block
+	_item_box(parent, seg, band - 4.0, Vector3(-(road_half + 0.5), 0.45, 0), Vector3(0.22, 0.9, 0.22), Color("d8b020"))  # bollard
+	_item_box(parent, seg, band - 4.0, Vector3(-(road_half + 0.5), 0.75, 0), Vector3(0.24, 0.08, 0.24), Color("1a1a1a"))
+	for c in [[-1.0, zc + 6.0], [1.0, zc - 4.0]]:
+		_item_box(parent, seg, c[1], Vector3(c[0] * (half - 0.8), 0.8, 0), Vector3(0.7, 1.6, 1.2), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.cabinet(), Vector2(3, 2))
+
+
+## The chopper (user reference, built to the player's scale): a military transport helicopter about
+## 13 m long with a 15 m rotor, broadside on the pad, nose to the left, tail to the right, its cabin
+## door slid open toward you with a dim light inside, so you run straight in. Local +z is toward you.
+func _build_chopper_model(chopper: Node3D) -> void:
+	var body := Color("3a4036")
+	var dark := Color("262a24")
+	var glass := Color("16242c")
+	# The cabin, belly and nose; the door opening sits in the middle, right in front of you.
+	_box(chopper, Vector3(4.6, 2.0, 2.5), Vector3(0.5, 1.75, 0), body)  # cabin
+	_box(chopper, Vector3(4.4, 0.25, 2.2), Vector3(0.5, 0.65, 0), dark)  # belly
+	_box(chopper, Vector3(1.7, 1.6, 2.1), Vector3(-2.65, 1.65, 0), body)  # nose
+	var screen := _box(chopper, Vector3(1.0, 0.08, 1.9), Vector3(-2.85, 2.35, 0), glass)  # windscreen, sloping
+	screen.rotation.z = 0.55
+	_box(chopper, Vector3(0.5, 0.9, 1.8), Vector3(-3.55, 1.4, 0), body.darkened(0.1))  # chin
+	for s in [-1.0, 1.0]:
+		_box(chopper, Vector3(1.2, 0.7, 0.04), Vector3(-2.6, 2.05, s * 1.06), glass)  # cockpit side windows
+	_box(chopper, Vector3(0.3, 0.12, 1.4), Vector3(-2.1, 1.75, 0), Color.WHITE).material_override = \
+			PsxMaterials.glow(Color("2a8a4a"))  # the instrument panel glowing through the glass
+	# The door: slid back, the dark cabin inside with a dim light, a gun on its mount.
+	_box(chopper, Vector3(2.0, 1.7, 0.04), Vector3(0.0, 1.7, 1.26), Color("0e100e"))  # the opening
+	_box(chopper, Vector3(1.9, 1.75, 0.06), Vector3(1.95, 1.72, 1.3), body.lightened(0.06))  # the door, slid back
+	_box(chopper, Vector3(0.7, 0.5, 0.02), Vector3(1.95, 2.1, 1.34), glass)  # its window
+	_box(chopper, Vector3(1.9, 0.05, 0.1), Vector3(0.95, 2.62, 1.3), Color("6a6e66"))  # door rail
+	var inside := _box(chopper, Vector3(0.3, 0.06, 0.3), Vector3(0.0, 2.45, 0.6), Color.WHITE)
+	inside.material_override = PsxMaterials.glow(Color("c8a060"))
+	_ambience.add_lamp(inside, Color(1.0, 0.75, 0.45) * 0.9, 3.0, {"alert": false})
+	_box(chopper, Vector3(0.08, 0.08, 0.9), Vector3(-0.85, 1.75, 1.45), Color("141414"))  # door gun barrel
+	_box(chopper, Vector3(0.2, 0.2, 0.35), Vector3(-0.85, 1.75, 0.95), Color("1e1e1e"))  # its body
+	_box(chopper, Vector3(0.05, 0.75, 0.05), Vector3(-0.85, 1.35, 0.95), Color("2a2a2a"))  # its post
+	# The engine housing on top, the exhaust, the mast and rotor.
+	_box(chopper, Vector3(3.0, 0.65, 1.7), Vector3(0.7, 3.07, 0), body.darkened(0.08))
+	_box(chopper, Vector3(0.5, 0.35, 0.5), Vector3(2.35, 3.05, 0.45), dark)  # exhaust
+	_box(chopper, Vector3(0.22, 0.6, 0.22), Vector3(0.6, 3.65, 0), dark)  # mast
+	var rotor := Node3D.new()
+	chopper.add_child(rotor)
+	rotor.position = Vector3(0.6, 3.98, 0)
+	_box(rotor, Vector3(0.6, 0.18, 0.6), Vector3.ZERO, dark)  # hub
+	for k in 4:  # four blades
+		var arm := Node3D.new()
+		rotor.add_child(arm)
+		arm.rotation.y = k * PI / 2.0
+		_box(arm, Vector3(7.6, 0.06, 0.42), Vector3(3.9, 0, 0), Color("141414"))
+	var spin := rotor.create_tween().set_loops()
+	spin.tween_property(rotor, "rotation:y", TAU, 0.35).from(0.0)
+	# The tail boom, fin, stabiliser and tail rotor, to the right.
+	_box(chopper, Vector3(3.6, 0.85, 1.0), Vector3(4.6, 2.2, 0), body)
+	_box(chopper, Vector3(3.8, 0.55, 0.62), Vector3(8.3, 2.25, 0), body)
+	var fin := _box(chopper, Vector3(1.0, 2.2, 0.18), Vector3(10.0, 3.2, 0), body)
+	fin.rotation.z = -0.3
+	_box(chopper, Vector3(0.9, 0.06, 2.6), Vector3(9.2, 2.35, 0), body.darkened(0.05))  # stabiliser
+	var tail_rotor := Node3D.new()
+	chopper.add_child(tail_rotor)
+	tail_rotor.position = Vector3(10.3, 3.6, 0.22)
+	for k in 2:
+		var tb := _box(tail_rotor, Vector3(0.18, 2.4, 0.04), Vector3.ZERO, Color("141414"))
+		tb.rotation.z = k * PI / 2.0
+	var tspin := tail_rotor.create_tween().set_loops()
+	tspin.tween_property(tail_rotor, "rotation:z", TAU, 0.2).from(0.0)
+	# Skids.
+	for s in [-1.0, 1.0]:
+		_box(chopper, Vector3(6.2, 0.1, 0.1), Vector3(0.2, 0.08, s * 1.25), Color("4a4e48"))
+		for sx in [-1.4, 2.0]:
+			var strut := _box(chopper, Vector3(0.09, 0.62, 0.09), Vector3(sx, 0.38, s * 1.12), Color("4a4e48"))
+			strut.rotation.x = -s * 0.25
+	# Lights: a blinking red one on the fin, a red beacon on top, the landing light lighting the pad.
+	var tail := _box(chopper, Vector3(0.18, 0.18, 0.18), Vector3(10.35, 4.25, 0), Color.WHITE)
+	tail.material_override = PsxMaterials.glow(Color("ff3020"))
+	_ambience.add_lamp(tail, Color(1.0, 0.15, 0.1) * 1.5, 5.0, {"blink": 1.1, "alert": false, "fixture": tail,
+			"on_mat": PsxMaterials.glow(Color("ff3020")), "off_mat": PsxMaterials.flat(Color("401010"))})
+	_box(chopper, Vector3(0.2, 0.14, 0.2), Vector3(0.7, 3.47, 0), Color.WHITE).material_override = PsxMaterials.glow(Color("ff3020"))
+	var land := Node3D.new()
+	chopper.add_child(land)
+	land.position = Vector3(0, 1.2, 3.0)
+	_ambience.add_lamp(land, Color(0.9, 0.95, 1.0) * 1.2, 7.0, {"alert": false})
+
+
 ## A keycard reader on the wall: a dark box with a slot and a red LED, `dz` along the road.
 func _card_reader(holder: Node3D, out: float, dz: float, red: Material) -> void:
 	_box(holder, Vector3(0.08, 0.3, 0.18), Vector3(out * 0.04, 1.25, dz), Color("1e2022"))
@@ -4276,6 +4470,8 @@ func _ground(id: StringName) -> Texture2D:
 			return PsxTextures.lobby_floor()
 		"exit_floor":
 			return PsxTextures.exit_floor()
+		"helipad_slab":
+			return PsxTextures.helipad_slab()
 		"warehouse_floor":
 			return PsxTextures.warehouse_floor()
 		"canteen_floor":
@@ -4293,7 +4489,7 @@ func _ground(id: StringName) -> Texture2D:
 
 ## How long one floor tile is along the road (office tiles and roofing are square, one lane wide).
 func _ground_tile(id: StringName) -> float:
-	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "exit_floor", "gravel"] else 4.0
+	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "exit_floor", "helipad_slab", "gravel"] else 4.0
 
 
 func _wall_texture(theme: Dictionary) -> Texture2D:
@@ -4407,20 +4603,7 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 		var t := (_clock.elapsed - _clock.lifts_at) / (_clock.gone_at - _clock.lifts_at)
 		chopper.position.y += 2.5 * t
 		chopper.create_tween().tween_property(chopper, "position:y", xf.origin.y + 2.5, _clock.gone_at - _clock.elapsed)
-	_box(chopper, Vector3(2.2, 1.6, 4.5), Vector3(0, 1.2, 0), Color("2f3b2a"))
-	_box(chopper, Vector3(0.5, 0.5, 4.0), Vector3(0, 1.6, 4.0), Color("2f3b2a"))
-	# A blinking red light on the tail, and a white one under the nose lighting the pad.
-	var tail := _box(chopper, Vector3(0.18, 0.18, 0.18), Vector3(0, 1.95, 5.9), Color.WHITE)
-	tail.material_override = PsxMaterials.glow(Color("ff3020"))
-	_ambience.add_lamp(tail, Color(1.0, 0.15, 0.1) * 1.5, 5.0, {"blink": 1.1, "alert": false, "fixture": tail,
-			"on_mat": PsxMaterials.glow(Color("ff3020")), "off_mat": PsxMaterials.flat(Color("401010"))})
-	var nose := Node3D.new()
-	chopper.add_child(nose)
-	nose.position = Vector3(0, 1.0, -3.0)
-	_ambience.add_lamp(nose, Color(0.9, 0.95, 1.0) * 1.2, 7.0, {"alert": false})
-	var rotor := _box(chopper, Vector3(9.0, 0.08, 0.35), Vector3(0, 2.2, 0), Color("111111"))
-	var tween := rotor.create_tween().set_loops()
-	tween.tween_property(rotor, "rotation:y", TAU, 0.35).from(0.0)
+	_build_chopper_model(chopper)
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
