@@ -115,16 +115,16 @@
       "bends": [{"at": 50, "side": "right"}],
       "marker": {"at": 8},
       "obstacles": [
-        {"kind": "box", "lanes": [2], "at": 30},
+        {"kind": "box", "lanes": [1, 2], "at": 30},
         {"kind": "barrier", "lanes": [0, 1], "at": 36},
-        {"kind": "box", "lanes": [0], "at": 42},
+        {"kind": "box", "lanes": [0, 1], "at": 42},
         {"kind": "pipe", "lanes": [2, 3, 4], "at": 46},
-        {"kind": "box", "lanes": [4], "at": 56},
+        {"kind": "box", "lanes": [3, 4], "at": 56},
         {"kind": "barrier", "lanes": [1, 2, 3], "at": 62},
         {"kind": "wall", "lanes": [0, 1], "at": 72},
-        {"kind": "box", "lanes": [3], "at": 74},
+        {"kind": "box", "lanes": [3, 4], "at": 74},
         {"kind": "pipe", "lanes": [1, 2, 3], "at": 82},
-        {"kind": "box", "lanes": [2], "at": 90, "material": "metal"},
+        {"kind": "box", "lanes": [2, 3], "at": 90, "material": "metal"},
         {"kind": "barrier", "lanes": [3, 4], "at": 96}
       ],
       "enemies": [

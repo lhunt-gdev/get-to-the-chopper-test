@@ -870,7 +870,12 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 			elif box_look == "warehouse":
 				mesh = _build_warehouse_box(node, seg, at, x, lane, String(ob.get("material", "wood")) == "metal")
 			elif box_look == "table":
-				mesh = _build_canteen_table(node, seg, at, x, lane)
+				# One long table across the whole run of lanes, built once (user: two lanes wide).
+				if lane == lanes.keys().min():
+					var trun: Array = lanes.keys()
+					reception = _build_canteen_table(node, seg, at, _player.lane_x(trun.min()) - tuning.lane_width / 2.0 + 0.05,
+							_player.lane_x(trun.max()) + tuning.lane_width / 2.0 - 0.05, trun.min())
+				mesh = reception
 			elif box_look == "roof_vent":
 				mesh = _build_roof_vent(node, seg, at, x, lane)
 			elif mesh == null:
@@ -2484,7 +2489,9 @@ func _build_reception(parent: Node3D, seg: Dictionary, at: float, x0: float, x1:
 	return holder
 
 
-## MAIN FLOOR LOBBY box cover: a concrete planter with a shrub (wood), or a black leather sofa (metal).
+## MAIN FLOOR LOBBY box cover: a concrete planter with a shrub (wood), or a black leather sofa
+## (metal) with a tall plant in a pot behind it, so it stands tall enough to hide you crouching
+## (scale pass, user).
 func _build_lobby_box(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int, metal: bool) -> Node3D:
 	var holder := Node3D.new()
 	parent.add_child(holder)
@@ -2502,6 +2509,14 @@ func _build_lobby_box(parent: Node3D, seg: Dictionary, at: float, x: float, lane
 		for s in [-1.0, 1.0]:
 			_box(holder, Vector3(0.16, 0.62, 0.8), Vector3(s * 0.6, 0.31, 0), black.lightened(0.05))  # arms
 		_box(holder, Vector3(1.0, 0.04, 0.6), Vector3(0, 0.47, 0.05), Color("26262a"))  # cushion seams
+		# The tall plant behind it: a pot on the floor, a trunk, and leaves up to about 1.7 m.
+		var px := 0.3 if lane % 2 == 0 else -0.3
+		_box(holder, Vector3(0.45, 0.5, 0.45), Vector3(px, 0.25, -0.65), Color("5a5c5e"))
+		_box(holder, Vector3(0.06, 0.8, 0.06), Vector3(px, 0.9, -0.65), Color("4a3a28"))
+		for k in 9:
+			var leaf := _box(holder, Vector3(0.12, 0.7, 0.3), Vector3(px + 0.18 * cos(k * 0.7), 1.2 + 0.05 * (k % 3), -0.65 + 0.16 * sin(k * 0.7)),
+					Color("2e5a26").lightened(0.05 * (k % 3)))
+			leaf.rotation = Vector3(0.55 * sin(k * 1.7), k * 0.7, 0.55 * cos(k * 1.3))
 	return holder
 
 
@@ -3319,34 +3334,59 @@ func _build_vending_wall(parent: Node3D, seg: Dictionary, at: float, x0: float, 
 	return holder
 
 
-## STAFF CANTEEN box cover: a canteen table with a tray, a cup and a plate, two chairs at it (one
-## pulled out toward you).
-func _build_canteen_table(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
+## STAFF CANTEEN box cover: one long canteen table across the run of lanes x0..x1 (user: two lanes
+## wide, for scale), built once for the run. Place settings (tray, plate, cup) down it, chairs both
+## sides (some pulled out toward you), and in each lane something tall on it, a big drinks
+## dispenser or a stack of trays, so it stands tall enough to hide you crouching behind it.
+func _build_canteen_table(parent: Node3D, seg: Dictionary, at: float, x0: float, x1: float, lane0: int) -> Node3D:
 	var holder := Node3D.new()
 	parent.add_child(holder)
-	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var cx := (x0 + x1) / 2.0
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(cx, 0, 0))
+	var w := x1 - x0 - 0.1
+	var lanes := maxi(1, roundi((x1 - x0) / tuning.lane_width))
 	var wood := Color("a07a46")
 	var leg := Color("2a2c2e")
-	_box(holder, Vector3(1.24, 0.07, 0.86), Vector3(0, 0.76, 0), wood)
-	_box(holder, Vector3(1.26, 0.03, 0.88), Vector3(0, 0.72, 0), wood.darkened(0.4))
-	for lx in [-0.55, 0.55]:
+	_box(holder, Vector3(w, 0.07, 0.86), Vector3(0, 0.76, 0), wood)
+	_box(holder, Vector3(w + 0.02, 0.03, 0.88), Vector3(0, 0.72, 0), wood.darkened(0.4))
+	var legs_x: Array = [-(w / 2.0 - 0.08), w / 2.0 - 0.08]
+	if lanes > 1:
+		legs_x.append(0.0)
+	for lx in legs_x:
 		for lz in [-0.36, 0.36]:
 			_box(holder, Vector3(0.06, 0.72, 0.06), Vector3(lx, 0.36, lz), leg)
-	var flip := 1.0 if lane % 2 == 0 else -1.0
-	_box(holder, Vector3(0.44, 0.03, 0.32), Vector3(0.2 * flip, 0.81, 0.05), Color("c8ccc8"))  # tray
-	_box(holder, Vector3(0.16, 0.02, 0.16), Vector3(0.2 * flip, 0.83, 0.05), Color("e8e8e0"))  # plate
-	var cup := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.05
-	cyl.bottom_radius = 0.04
-	cyl.height = 0.13
-	cyl.radial_segments = 8
-	cup.mesh = cyl
-	cup.material_override = PsxMaterials.flat(Color("c42020"))
-	holder.add_child(cup)
-	cup.position = Vector3(-0.35 * flip, 0.86, -0.1)
-	for c in [[0.3 * flip, 0.62, 0.15], [-0.3 * flip, -0.55, 0.0]]:  # chairs: one pulled out toward you
-		_canteen_chair(holder, Vector3(c[0], 0, c[1]), c[2], false)
+	for i in lanes:
+		var mx := -w / 2.0 + w * (i + 0.5) / lanes  # the middle of this lane's stretch of table
+		var flip := 1.0 if (lane0 + i) % 2 == 0 else -1.0
+		_box(holder, Vector3(0.44, 0.03, 0.32), Vector3(mx + 0.25 * flip, 0.81, 0.12), Color("c8ccc8"))  # tray
+		_box(holder, Vector3(0.16, 0.02, 0.16), Vector3(mx + 0.25 * flip, 0.83, 0.12), Color("e8e8e0"))  # plate
+		var cup := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.05
+		cyl.bottom_radius = 0.04
+		cyl.height = 0.13
+		cyl.radial_segments = 8
+		cup.mesh = cyl
+		cup.material_override = PsxMaterials.flat(Color("c42020") if i % 2 == 0 else Color("e8e4d8"))
+		holder.add_child(cup)
+		cup.position = Vector3(mx - 0.4 * flip, 0.86, 0.2)
+		var tall := mx - 0.12 * flip
+		if (lane0 + i) % 2 == 0:
+			# The drinks dispenser: a steel base, a clear tank of orange squash, a lid, a tap toward you.
+			_box(holder, Vector3(0.36, 0.12, 0.32), Vector3(tall, 0.86, -0.12), Color("8a9094"))
+			_box(holder, Vector3(0.32, 0.36, 0.28), Vector3(tall, 1.1, -0.12), Color.WHITE).material_override = \
+					PsxMaterials.glass(Color(1.0, 0.55, 0.15, 0.55))
+			_box(holder, Vector3(0.24, 0.24, 0.2), Vector3(tall, 1.06, -0.12), Color("d86a1a"))  # the squash inside
+			_box(holder, Vector3(0.36, 0.06, 0.32), Vector3(tall, 1.31, -0.12), Color("6a7076"))  # lid
+			_box(holder, Vector3(0.06, 0.06, 0.08), Vector3(tall, 0.96, 0.07), Color("2a2c2e"))  # tap
+		else:
+			for k in 9:  # a stack of trays, a couple askew
+				var tr := _box(holder, Vector3(0.44, 0.025, 0.32), Vector3(tall, 0.81 + k * 0.03, -0.16), Color("c8ccc8").darkened(0.06 * (k % 2)))
+				tr.rotation.y = 0.12 * sin(k * 2.1)
+		# A chair each side of this stretch: the near one pulled out toward you, or pushed in.
+		var pulled := absi(hash([seg["id"], at, i])) % 2 == 0
+		_canteen_chair(holder, Vector3(mx + 0.3 * flip, 0, 0.62 if pulled else 0.5), 0.15 * flip, false)
+		_canteen_chair(holder, Vector3(mx - 0.2 * flip, 0, -0.55), 0.0, false)
 	return holder
 
 
