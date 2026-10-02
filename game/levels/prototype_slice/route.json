@@ -245,13 +245,17 @@
         {"kind": "box", "lanes": [0], "at": 86, "material": "metal"}
       ],
       "enemies": [
+        {"kind": "rifle_trooper", "lane": 2, "at": 30},
+        {"kind": "rifle_trooper", "lane": 3, "at": 40},
         {"kind": "rifle_trooper", "lane": 1, "at": 50},
         {"kind": "rifle_trooper", "lane": 3, "at": 92},
         {"kind": "rifle_trooper", "lane": 0, "at": 70, "min_alert": 2},
         {"kind": "rusher_dog", "lane": 2, "at": 80, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 4, "at": 100, "min_alert": 3},
-        {"kind": "rifle_trooper", "lane": 4, "at": 36, "min_alert": 3},
         {"kind": "rusher_dog", "lane": 1, "at": 58, "min_alert": 3}
+      ],
+      "searchlights": [
+        {"at": 34, "side": "right"}
       ],
       "alarms": [
         {"side": "left", "at": 40}
@@ -275,11 +279,17 @@
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 3, "at": 40},
+        {"kind": "rifle_trooper", "lane": 0, "at": 54},
         {"kind": "rifle_trooper", "lane": 4, "at": 80},
+        {"kind": "rifle_trooper", "lane": 2, "at": 100},
         {"kind": "rifle_trooper", "lane": 2, "at": 60, "min_alert": 2},
         {"kind": "rusher_dog", "lane": 1, "at": 104, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 0, "at": 110, "min_alert": 3},
         {"kind": "rusher_dog", "lane": 3, "at": 88, "min_alert": 3}
+      ],
+      "searchlights": [
+        {"at": 44, "side": "left"},
+        {"at": 92, "side": "right"}
       ],
       "next": [
         {"to": "gantry", "label": "GANTRY"}
@@ -295,11 +305,16 @@
         {"kind": "box", "lanes": [2], "at": 60}
       ],
       "enemies": [
+        {"kind": "rifle_trooper", "lane": 3, "at": 40},
         {"kind": "rifle_trooper", "lane": 0, "at": 46},
+        {"kind": "rifle_trooper", "lane": 1, "at": 56},
         {"kind": "rifle_trooper", "lane": 4, "at": 72},
         {"kind": "rifle_trooper", "lane": 2, "at": 66, "min_alert": 2},
         {"kind": "rusher_dog", "lane": 3, "at": 52, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 1, "at": 80, "min_alert": 3}
+      ],
+      "searchlights": [
+        {"at": 50, "side": "right"}
       ],
       "next": [
         {"to": "skylights", "label": "SKYLIGHTS"}
@@ -318,11 +333,17 @@
       ],
       "enemies": [
         {"kind": "rifle_trooper", "lane": 1, "at": 38},
+        {"kind": "rifle_trooper", "lane": 3, "at": 52},
         {"kind": "rifle_trooper", "lane": 2, "at": 76},
+        {"kind": "rifle_trooper", "lane": 1, "at": 88},
         {"kind": "rifle_trooper", "lane": 4, "at": 58, "min_alert": 2},
         {"kind": "rusher_dog", "lane": 1, "at": 94, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 0, "at": 102, "min_alert": 3},
         {"kind": "rusher_dog", "lane": 3, "at": 70, "min_alert": 3}
+      ],
+      "searchlights": [
+        {"at": 42, "side": "right"},
+        {"at": 80, "side": "left"}
       ],
       "next": [
         {"to": "antenna_farm", "label": "ANTENNA FARM"}
@@ -341,12 +362,18 @@
         {"kind": "box", "lanes": [2], "at": 100}
       ],
       "enemies": [
+        {"kind": "rifle_trooper", "lane": 3, "at": 40},
         {"kind": "rifle_trooper", "lane": 1, "at": 50},
         {"kind": "rifle_trooper", "lane": 2, "at": 90},
+        {"kind": "rifle_trooper", "lane": 0, "at": 104},
         {"kind": "rifle_trooper", "lane": 4, "at": 68, "min_alert": 2},
         {"kind": "rusher_dog", "lane": 1, "at": 84, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 3, "at": 110, "min_alert": 3},
         {"kind": "rusher_dog", "lane": 2, "at": 58, "min_alert": 3}
+      ],
+      "searchlights": [
+        {"at": 56, "side": "left"},
+        {"at": 96, "side": "right"}
       ],
       "next": [
         {"to": "roof_edge", "label": "ROOF EDGE"}
@@ -363,11 +390,16 @@
         {"kind": "wall", "lanes": [0, 1], "at": 64}
       ],
       "enemies": [
+        {"kind": "rifle_trooper", "lane": 0, "at": 32},
         {"kind": "rifle_trooper", "lane": 2, "at": 40},
+        {"kind": "rifle_trooper", "lane": 3, "at": 60},
         {"kind": "rifle_trooper", "lane": 4, "at": 72},
         {"kind": "rifle_trooper", "lane": 0, "at": 56, "min_alert": 2},
         {"kind": "rusher_dog", "lane": 2, "at": 84, "min_alert": 2},
         {"kind": "rifle_trooper", "lane": 1, "at": 88, "min_alert": 3}
+      ],
+      "searchlights": [
+        {"at": 46, "side": "left"}
       ],
       "next": [
         {"to": "helipad", "label": "LADDER", "side": "left", "via": "ladder"},
@@ -380,20 +412,27 @@
       "tier": "underground",
       "length": 100,
       "obstacles": [
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 22},
-        {"kind": "barrier", "lanes": [2, 3, 4], "at": 31},
-        {"kind": "box", "lanes": [0], "at": 31, "material": "metal"},
-        {"kind": "pipe", "lanes": [0, 1, 2], "at": 40},
-        {"kind": "box", "lanes": [4], "at": 40},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 49},
-        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 58},
-        {"kind": "box", "lanes": [0], "at": 58},
-        {"kind": "barrier", "lanes": [0, 1, 2], "at": 67},
-        {"kind": "box", "lanes": [3], "at": 67, "material": "metal"},
-        {"kind": "pipe", "lanes": [2, 3, 4], "at": 76},
-        {"kind": "box", "lanes": [0], "at": 76},
-        {"kind": "barrier", "lanes": [2, 3, 4], "at": 85},
-        {"kind": "pipe", "lanes": [0, 1], "at": 93}
+        {"kind": "pipe", "lanes": [0, 1], "at": 22},
+        {"kind": "box", "lanes": [2], "at": 22, "material": "metal"},
+        {"kind": "barrier", "lanes": [0, 1, 2], "at": 32},
+        {"kind": "box", "lanes": [3], "at": 32},
+        {"kind": "box", "lanes": [4], "at": 32},
+        {"kind": "pipe", "lanes": [1, 2, 3], "at": 41},
+        {"kind": "box", "lanes": [0], "at": 41, "material": "metal"},
+        {"kind": "barrier", "lanes": [3, 4], "at": 51},
+        {"kind": "box", "lanes": [1], "at": 51},
+        {"kind": "box", "lanes": [2], "at": 51},
+        {"kind": "pipe", "lanes": [0, 1, 2, 3], "at": 60},
+        {"kind": "box", "lanes": [4], "at": 60, "material": "metal"},
+        {"kind": "pipe", "lanes": [3, 4], "at": 69},
+        {"kind": "barrier", "lanes": [0, 1], "at": 69},
+        {"kind": "box", "lanes": [2], "at": 69},
+        {"kind": "barrier", "lanes": [2, 3, 4], "at": 78},
+        {"kind": "box", "lanes": [0], "at": 78},
+        {"kind": "box", "lanes": [1], "at": 78, "material": "metal"},
+        {"kind": "pipe", "lanes": [0, 1, 2], "at": 87},
+        {"kind": "box", "lanes": [3], "at": 87},
+        {"kind": "box", "lanes": [2], "at": 95}
       ],
       "next": [
         {"to": "boiler_room", "label": "BOILER ROOM"}
@@ -407,21 +446,30 @@
       "bends": [{"at": 60, "side": "right"}],
       "marker": {"at": 8},
       "obstacles": [
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 30},
+        {"kind": "barrier", "lanes": [2, 3, 4], "at": 30},
+        {"kind": "box", "lanes": [1], "at": 30, "material": "metal"},
         {"kind": "pipe", "lanes": [0, 1, 2], "at": 39},
-        {"kind": "box", "lanes": [4], "at": 39, "material": "metal"},
-        {"kind": "barrier", "lanes": [2, 3, 4], "at": 48},
+        {"kind": "box", "lanes": [3], "at": 39},
+        {"kind": "barrier", "lanes": [1, 2, 3], "at": 48},
         {"kind": "box", "lanes": [0], "at": 48},
-        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 57},
-        {"kind": "box", "lanes": [1], "at": 66, "material": "metal"},
-        {"kind": "box", "lanes": [3], "at": 66, "material": "metal"},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 75},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3], "at": 84},
-        {"kind": "box", "lanes": [4], "at": 84},
-        {"kind": "barrier", "lanes": [0, 1, 2], "at": 93},
-        {"kind": "pipe", "lanes": [2, 3, 4], "at": 102},
-        {"kind": "box", "lanes": [0], "at": 102},
-        {"kind": "barrier", "lanes": [1, 2, 3], "at": 111}
+        {"kind": "box", "lanes": [4], "at": 48, "material": "metal"},
+        {"kind": "pipe", "lanes": [3, 4], "at": 58},
+        {"kind": "box", "lanes": [2], "at": 58},
+        {"kind": "barrier", "lanes": [0, 1], "at": 67},
+        {"kind": "box", "lanes": [3], "at": 67},
+        {"kind": "box", "lanes": [4], "at": 67, "material": "metal"},
+        {"kind": "pipe", "lanes": [0, 1], "at": 76},
+        {"kind": "barrier", "lanes": [4], "at": 76},
+        {"kind": "box", "lanes": [2], "at": 76},
+        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 85},
+        {"kind": "box", "lanes": [0], "at": 85},
+        {"kind": "barrier", "lanes": [1, 2, 3], "at": 94},
+        {"kind": "box", "lanes": [4], "at": 94, "material": "metal"},
+        {"kind": "pipe", "lanes": [3, 4], "at": 103},
+        {"kind": "box", "lanes": [1], "at": 103},
+        {"kind": "box", "lanes": [2], "at": 103},
+        {"kind": "barrier", "lanes": [0, 1, 2], "at": 112},
+        {"kind": "box", "lanes": [3], "at": 112, "material": "metal"}
       ],
       "next": [
         {"to": "sewer", "label": "SEWER"}
@@ -435,21 +483,30 @@
       "bends": [{"at": 70, "side": "left"}],
       "marker": {"at": 8},
       "obstacles": [
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30},
-        {"kind": "barrier", "lanes": [0, 1], "at": 39},
-        {"kind": "box", "lanes": [3], "at": 39},
-        {"kind": "pipe", "lanes": [2, 3, 4], "at": 48},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 57},
-        {"kind": "box", "lanes": [0], "at": 66, "material": "metal"},
-        {"kind": "pipe", "lanes": [2, 3, 4], "at": 66},
-        {"kind": "barrier", "lanes": [1, 2, 3], "at": 75},
-        {"kind": "pipe", "lanes": [0, 1, 2], "at": 84},
-        {"kind": "box", "lanes": [4], "at": 84, "material": "metal"},
-        {"kind": "barrier", "lanes": [2, 3, 4], "at": 93},
-        {"kind": "box", "lanes": [1], "at": 102},
-        {"kind": "box", "lanes": [3], "at": 102},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 111},
-        {"kind": "barrier", "lanes": [0, 1, 2], "at": 120}
+        {"kind": "pipe", "lanes": [0, 1], "at": 30},
+        {"kind": "box", "lanes": [2], "at": 30},
+        {"kind": "box", "lanes": [3], "at": 30},
+        {"kind": "barrier", "lanes": [1, 2, 3, 4], "at": 40},
+        {"kind": "box", "lanes": [0], "at": 40, "material": "metal"},
+        {"kind": "pipe", "lanes": [1, 2, 3], "at": 49},
+        {"kind": "box", "lanes": [4], "at": 49},
+        {"kind": "barrier", "lanes": [2, 3], "at": 58},
+        {"kind": "box", "lanes": [1], "at": 58},
+        {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 68},
+        {"kind": "box", "lanes": [2], "at": 68, "material": "metal"},
+        {"kind": "barrier", "lanes": [3, 4], "at": 77},
+        {"kind": "box", "lanes": [0], "at": 77},
+        {"kind": "box", "lanes": [1], "at": 77},
+        {"kind": "pipe", "lanes": [0, 1, 2], "at": 86},
+        {"kind": "box", "lanes": [3], "at": 86, "material": "metal"},
+        {"kind": "barrier", "lanes": [0, 1, 4], "at": 96},
+        {"kind": "box", "lanes": [2], "at": 96},
+        {"kind": "pipe", "lanes": [1, 2, 3], "at": 105},
+        {"kind": "box", "lanes": [4], "at": 105},
+        {"kind": "barrier", "lanes": [2, 3], "at": 114},
+        {"kind": "box", "lanes": [0], "at": 114, "material": "metal"},
+        {"kind": "box", "lanes": [1], "at": 114},
+        {"kind": "box", "lanes": [3], "at": 123}
       ],
       "next": [
         {"to": "pump_station", "label": "PUMPS"}
@@ -462,18 +519,25 @@
       "length": 110,
       "marker": {"at": 8},
       "obstacles": [
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 30},
-        {"kind": "pipe", "lanes": [1, 2, 3], "at": 39},
-        {"kind": "box", "lanes": [0], "at": 39},
-        {"kind": "barrier", "lanes": [2, 3, 4], "at": 48},
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 57},
-        {"kind": "box", "lanes": [2], "at": 66, "material": "metal"},
-        {"kind": "barrier", "lanes": [0, 1], "at": 66},
-        {"kind": "pipe", "lanes": [2, 3, 4], "at": 75},
-        {"kind": "box", "lanes": [0], "at": 75},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3], "at": 84},
-        {"kind": "pipe", "lanes": [1, 2, 3, 4], "at": 93},
-        {"kind": "box", "lanes": [3], "at": 102}
+        {"kind": "pipe", "lanes": [2, 3, 4], "at": 30},
+        {"kind": "box", "lanes": [1], "at": 30, "material": "metal"},
+        {"kind": "barrier", "lanes": [0, 1], "at": 39},
+        {"kind": "box", "lanes": [3], "at": 39},
+        {"kind": "box", "lanes": [4], "at": 39},
+        {"kind": "pipe", "lanes": [0, 1], "at": 48},
+        {"kind": "box", "lanes": [2], "at": 48, "material": "metal"},
+        {"kind": "barrier", "lanes": [2, 3, 4], "at": 57},
+        {"kind": "box", "lanes": [0], "at": 57},
+        {"kind": "pipe", "lanes": [0, 1, 2, 3], "at": 66},
+        {"kind": "box", "lanes": [4], "at": 66},
+        {"kind": "barrier", "lanes": [3], "at": 75},
+        {"kind": "box", "lanes": [1], "at": 75, "material": "metal"},
+        {"kind": "box", "lanes": [2], "at": 75},
+        {"kind": "pipe", "lanes": [0, 1], "at": 84},
+        {"kind": "box", "lanes": [3], "at": 84},
+        {"kind": "barrier", "lanes": [1, 2, 3, 4], "at": 93},
+        {"kind": "box", "lanes": [0], "at": 93, "material": "metal"},
+        {"kind": "box", "lanes": [2], "at": 102}
       ],
       "next": [
         {"to": "storm_drain", "label": "STORM DRAIN"}
@@ -486,14 +550,23 @@
       "length": 100,
       "marker": {"at": 8},
       "obstacles": [
-        {"kind": "pipe", "lanes": [0, 1, 2, 3, 4], "at": 30},
-        {"kind": "barrier", "lanes": [1, 2, 3], "at": 39},
-        {"kind": "box", "lanes": [4], "at": 39},
+        {"kind": "pipe", "lanes": [0, 1, 3, 4], "at": 30},
+        {"kind": "box", "lanes": [2], "at": 30},
+        {"kind": "barrier", "lanes": [2, 3], "at": 39},
+        {"kind": "box", "lanes": [0], "at": 39, "material": "metal"},
+        {"kind": "box", "lanes": [1], "at": 39},
         {"kind": "pipe", "lanes": [0, 1, 2], "at": 48},
-        {"kind": "barrier", "lanes": [0, 1, 2, 3, 4], "at": 57},
-        {"kind": "box", "lanes": [1], "at": 66, "material": "metal"},
-        {"kind": "pipe", "lanes": [3, 4], "at": 66},
-        {"kind": "barrier", "lanes": [2, 3, 4], "at": 75}
+        {"kind": "box", "lanes": [3], "at": 48},
+        {"kind": "box", "lanes": [4], "at": 48, "material": "metal"},
+        {"kind": "barrier", "lanes": [2, 3, 4], "at": 57},
+        {"kind": "box", "lanes": [1], "at": 57},
+        {"kind": "pipe", "lanes": [0], "at": 66},
+        {"kind": "box", "lanes": [2], "at": 66},
+        {"kind": "box", "lanes": [3], "at": 66, "material": "metal"},
+        {"kind": "barrier", "lanes": [1, 2], "at": 75},
+        {"kind": "box", "lanes": [0], "at": 75},
+        {"kind": "box", "lanes": [4], "at": 75},
+        {"kind": "box", "lanes": [2], "at": 82, "material": "metal"}
       ],
       "next": [
         {"to": "helipad", "label": "LADDER", "side": "left", "via": "ladder"},

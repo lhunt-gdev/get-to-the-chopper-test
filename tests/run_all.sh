@@ -39,5 +39,6 @@ expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=
 expect dog_bite    "reason=extracted alert=2 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1 doors=13 dogs=1/0/"
 expect dog_dodge   "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=13 dogs=0/1/"
 expect runner_escapes "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=13 dogs=0/0/4 runner=1/1"
+expect roof_spotted "reason=extracted alert=3 route=$R > HELIPAD"
 expect squad_caught "reason=captured alert=3 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR |"
 exit $fail

@@ -184,7 +184,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Superseded by "Alert tiers" below (2026-10-01):** Alert 1 is sparser than 1 per segment now.
 
 ### PROPOSED — Alert tiers (user direction, 2026-10-01; stage 2 of the UI / alert / squad plan)
-- **Alert 1 (SNEAKING) is sparse (user):** 1 or 2 rifle guards dotted around a section, and some sections have none. No dogs. Plus one alarm runner (the Security Trooper, below) per run.
+- **Alert 1 (SNEAKING) is sparse (user):** 1 or 2 rifle guards dotted around a section, and some sections have none (on the ground; the roofs have more, see "Longer level"). No dogs. Plus one alarm runner (the Security Trooper, below) per run.
 - **Alert 2 (CAUTION) is busier (user):** more rifle guards than at Alert 1, and the dogs come out. Dogs appear only from Alert 2 up (the lobby dog moves from Alert 1 to 2; a new one guards the MAIN FLOOR EXIT).
 - **Alert 3 (ALERT):** at least as many guards as Alert 2, plus dogs. The chasing squad and rear-view CCTV come in stage 3.
 - Test level, rifle guards at Alert 1 / 2 / 3: LOBBY 1/2/3, MAIN FLOOR 2/3/3, EXIT 0/2/3, ROOFTOPS 1/2/3, ROOFTOPS (far) 0/2/3, TUNNEL 1/2/3. A unit test holds the rules: Alert 1 has at most 2 per section and at least one section has none; Alert 2 has more than Alert 1, Alert 3 no fewer than Alert 2; dogs only from Alert 2; one alarm runner, Alert 1 only.
@@ -253,12 +253,20 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
   - So 5 decision points instead of 2, and routes split and rejoin. The underground branches off early and doesn't come back up (supersedes "late branches needn't come back" for this level; the user agreed the layout).
 - **Each height has its own character (user):**
   - **Underground:** no enemies at all (no riflemen, dogs or alarm runner), and no tripwires or alarm boxes, so the alert can't change down there. More obstacles to get past instead (rows about 9 m apart; a jump or slide takes ~0.6 s, ~7 m).
-  - **Roofs:** far fewer obstacles, but more guards and dogs: 2 riflemen at Alert 1 (the most the Alert 1 rule allows), 3+ at Alert 2, 4+ at Alert 3, dogs from Alert 2 (the alert-tier rule). No tripwires (as before).
+    - **Playtest (user, 2026-10-02):** too easy to stay in the middle lane: most rows were full-width barriers or pipes you could jump or slide in place. Now every row has crates in one or two lanes, in a changing pattern, beside barriers and pipes, so you keep switching lanes. Rule (unit test): in each underground area, every lane is blocked by a crate at least twice, so no lane is safe to stay in.
+  - **Roofs:** far fewer obstacles, but more guards and dogs, dogs from Alert 2 (the alert-tier rule). No tripwires (as before).
+    - **Playtest (user, 2026-10-02):** the roofs lacked guards. Fewer obstacles means a few more guards than normal at every alert level, Alert 1 too: 4 riflemen an area at Alert 1, 5 at Alert 2, 6 at Alert 3 (ground: 0–2, ~3, ~4). This relaxes the "Alert 1 is sparse" rule for the roofs only.
   - **Ground:** in between, as now. Three tripwires (LOBBY, BUILDING MAIN FLOOR, LOADING DOCK), each followed by an alarm box.
   - Route validation enforces the underground rules, and a unit test holds the densities (underground has more obstacles per metre than ground, roofs fewer; roofs have more guards).
 - **Zone doors (user):** the double doors that were the halfway marker now mark the move from one area to the next: at the start of every ground and underground area you enter straight on (8 m in, after the split, so the outer-lane steering never pulls you out of a side exit). Not on the rooftops, not into the helipad, and not where you arrive by stairs (the stairwell has its own door). Same clear zone as before (nothing 6 m before or 20 m after). The squad and the alarm runner squeeze into the middle lanes for them too.
 - **Chopper (scaled to match):** lands at 28 s, starts lifting off at 104 s, gone at 114 s. A clean ground run takes ~83 s (bots), so it still arrives ~20 s early.
 - **Looks (user):** every area gets its own look, done next in batches, after this layout is in. Until then new areas reuse their height's look (office, rooftop, tunnel).
+
+### PROPOSED — Searchlights raise the alert on the roofs (user decision, 2026-10-02)
+- **Why (user):** tripwires can't go on the open roofs, so nothing there could raise the alert. The roofs' sweeping searchlights become real.
+- **How it works:** a searchlight on the next building over sweeps its beam back and forth across all five lanes, with a visible pool of light on the road. Run into the pool and you're spotted: the light turns red and locks onto you for a moment, the "!" sting plays, and the alert goes up one level. Each light can catch you only once. You see the pool coming, so you time your lane change to slip past it. Jumping or taking cover in it doesn't hide you.
+- **Placement:** authored in `route.json` (`"searchlights": [{"at": ..., "side": "left"}]`), one or two per roof area, only on the roofs, not right outside a stairwell, at least 20 m apart, and not in the last 25 m before a split (you'd have to choose between your exit and dodging it) (route validation). They replace the decorative beams.
+- **Bot routes:** the bots read the sweep and dodge the pool; a new `roof_spotted` route runs straight through them and must end at a higher alert.
 
 ### PROPOSED — Mission layout: main, up and down (user direction, 2026-09-30; the test level's layout is now the one in "Longer level")
 - A mission has three tiers: the main level (the building), up (ROOFTOPS) and down (SERVICE TUNNEL). ROOF EDGE is removed as a separate area. It's just the far stretch of the ROOFTOPS and shows as ROOFTOPS on screen, because a stretch that ends in ladders can't also have a staircase in its outer lanes.

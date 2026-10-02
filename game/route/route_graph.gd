@@ -48,6 +48,10 @@ const MARKER_CLEAR_AFTER := 20.0
 ## Zone doors (the old halfway marker, "marker" in route.json): this far into an area, after the
 ## split behind you is decided.
 const ZONE_DOOR_AT := 8
+## Searchlights on the roofs: at least this far apart (m), so each one is its own moment.
+const SEARCHLIGHT_GAP := 20.0
+## ...and not in the last stretch before a split, where you're lining up for your exit.
+const SEARCHLIGHT_SPLIT_CLEAR := 25.0
 ## No cover wall on the inside of a corner (user rule): it blocks the view round it and looks
 ## wrong. Each bend is a jog: it turns toward its side, runs BEND_RUN m (Tuning.branch_out_length),
 ## then turns back, so it has two corners, the second with its inside on the other side. A corridor
@@ -330,6 +334,33 @@ func validate() -> PackedStringArray:
 				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
 			if float(e.get("at", -1)) < 0.0 or float(e.get("at", -1)) > length:
 				problems.append("node '%s': enemy at %s m is outside the segment" % [id, e.get("at")])
+		# Searchlights (user): only on the open roofs, not right outside a stairwell, 20 m apart.
+		var lights: Array = n.get("searchlights", [])
+		var entered_by_stairs := false
+		var has_side_exit := false
+		for edge in edges:
+			if side_of(edge) != "straight":
+				has_side_exit = true
+		for from: StringName in _nodes:
+			for edge in _nodes[from].get("next", []):
+				if StringName(edge.get("to", "")) == id and via_of(edge) == "stairs":
+					entered_by_stairs = true
+		for i in lights.size():
+			var s: Dictionary = lights[i]
+			var s_at := float(s.get("at", -1))
+			if String(n.get("tier", "ground")) != "roof":
+				problems.append("node '%s': searchlights only on the roofs (open sky)" % id)
+			if not String(s.get("side", "")) in ["left", "right"]:
+				problems.append("node '%s': a searchlight needs \"side\": \"left\" or \"right\"" % id)
+			if s_at <= 0.0 or s_at >= length:
+				problems.append("node '%s': searchlight at %s m is outside the area" % [id, s.get("at")])
+			if entered_by_stairs and s_at < STAIR_EXIT_CLEAR:
+				problems.append("node '%s': searchlight at %s m is too close to the stairs' exit door" % [id, s.get("at")])
+			if has_side_exit and s_at > length - SEARCHLIGHT_SPLIT_CLEAR:
+				problems.append("node '%s': searchlight at %s m is too near the split (you'd have to choose between your exit and dodging it)" % [id, s.get("at")])
+			for j in range(i + 1, lights.size()):
+				if absf(float(lights[j].get("at", 0)) - s_at) < SEARCHLIGHT_GAP:
+					problems.append("node '%s': searchlights at %s m and %s m are too close together" % [id, s.get("at"), lights[j].get("at")])
 		for a in n.get("alarms", []):
 			if not String(a.get("side", "")) in ["left", "right"]:
 				problems.append("node '%s': an alarm box needs \"side\": \"left\" or \"right\"" % id)

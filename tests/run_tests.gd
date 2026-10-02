@@ -24,6 +24,7 @@ func _run() -> void:
 	_test_trooper_tiers()
 	_test_squad_rules()
 	_test_corner_rule()
+	_test_searchlights()
 	_test_swipe_direction()
 	_test_sounds()
 	await _test_targeting_priority()
@@ -161,9 +162,18 @@ func _test_trooper_tiers() -> void:
 		density[tier][2] += counts[1]
 		if tier == "underground":
 			_check(counts == [0, 0, 0], "%s: no guards underground (%s)" % [id, counts])
+			# No lane is safe to stay in (user): every lane is blocked by a crate at least twice.
+			var blocked := [0, 0, 0, 0, 0]
+			for ob in node.get("obstacles", []):
+				if String(ob.get("kind", "")) in ["box", "wall"]:
+					for l in ob.get("lanes", []):
+						blocked[int(l)] += 1
+			_check(blocked.min() >= 2, "%s: every lane blocked by a crate at least twice, so you have to switch (%s)" % [id, blocked])
 			continue
-		_check(counts[0] <= 2 and counts[0] < counts[1] and counts[1] <= counts[2],
-				"%s: sparse at Alert 1, more at 2, no fewer at 3 (%s)" % [id, counts])
+		# Alert 1 is sparse on the ground; the roofs have a few more guards at every level (user).
+		var a1_ok: bool = counts[0] >= 3 and counts[0] <= 4 if tier == "roof" else counts[0] <= 2
+		_check(a1_ok and counts[0] < counts[1] and counts[1] <= counts[2],
+				"%s: Alert 1 %s, more at 2, no fewer at 3 (%s)" % [id, "3-4 on the roofs" if tier == "roof" else "sparse", counts])
 		if counts[0] == 0:
 			empty_at_1 += 1
 	_check(empty_at_1 >= 1, "some sections have no guards at Alert 1")
@@ -228,6 +238,30 @@ func _test_corner_rule() -> void:
 	_check("inside of the corner" in make.call([[60, [3, 4]]]), "the bend's second corner turns back: its inside is the right")
 	_check(not "inside of the corner" in make.call([[30, [0, 1]]]), "well before the corner it's fine")
 	_check(not "inside of the corner" in make.call([[90, [0, 1]]]), "well after it, too")
+
+## Roof searchlights (user): the pool sweeps over every lane, catches you only when you're in it,
+## and they go only on the roofs.
+func _test_searchlights() -> void:
+	var lo := INF
+	var hi := -INF
+	for i in 68:
+		var px := Searchlight.pool_x(i * Searchlight.PERIOD / 68.0, 0.0)
+		lo = minf(lo, px)
+		hi = maxf(hi, px)
+	_check(lo <= -2.7 and hi >= 2.7, "a searchlight's pool sweeps from the outer lane to the outer lane")
+	_check(Searchlight.in_pool(100.0, 1.4, 100.5, 1.0), "in the pool: spotted")
+	_check(not Searchlight.in_pool(100.0, -1.4, 100.5, 1.0), "a lane away from the pool: not spotted")
+	_check(not Searchlight.in_pool(95.0, 1.0, 100.5, 1.0), "the pool still ahead of you: not yet")
+	var g := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "length": 100, "searchlights": [{"at": 50, "side": "left"}], "next": [{"to": "b"}]},
+		{"id": "b", "tier": "ground", "end": "extract"}]})
+	_check("searchlights only on the roofs" in " ".join(g.validate()), "no searchlights indoors")
+	var real := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var lit := 0
+	for id in [&"rooftops", &"water_towers", &"gantry", &"skylights", &"antenna_farm", &"roof_edge"]:
+		if not real.node_data(id).get("searchlights", []).is_empty():
+			lit += 1
+	_check(lit == 6, "every roof area has a searchlight (%d of 6)" % lit)
 
 ## Dropping the alert never makes a trooper you've already seen vanish.
 func _test_seen_troopers_stay() -> void:

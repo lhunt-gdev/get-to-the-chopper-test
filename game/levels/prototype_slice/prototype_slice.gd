@@ -96,6 +96,8 @@ var _segments: Array[Dictionary] = []
 var _current: Dictionary = {}
 ## Troopers and alarm boxes: {node: RifleTrooper|AlarmBox, owner: segment node, seg: segment}.
 var _combatants: Array[Dictionary] = []
+## Roof searchlights: {node: Searchlight, owner: segment node, seg: segment}.
+var _lights: Array[Dictionary] = []
 var _fire_held := false
 var _fire_cooldown := 0.0
 ## HYBRID / TAP_TO_TARGET: the enemy the player last tapped.
@@ -357,6 +359,8 @@ func _physics_process(delta: float) -> void:
 		_update_combat(delta)
 		if GameState.run_active:
 			_update_squad(delta)
+		if GameState.run_active:
+			_update_searchlights(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
@@ -810,6 +814,17 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		t.knocked_down.connect(func() -> void: RunLog.record_event("trooper_down", {"node": id}))
 		_connect_trooper_sounds(t)
 		_combatants.append({"node": t, "owner": node, "seg": seg})
+	# Searchlights (roofs): on the next building over, sweeping a pool of light across the lanes.
+	for s: Dictionary in _graph.node_data(id).get("searchlights", []):
+		var light := Searchlight.new()
+		light.at = start + float(s["at"])
+		light.side = -1 if String(s.get("side", "left")) == "left" else 1
+		light.phase = fmod(float(s["at"]) * 0.137, 1.0)  # neighbouring lights out of step
+		node.add_child(light)
+		light.transform = _frame_at(seg, float(s["at"]))
+		_ambience.add_lamp(light.pool, Color(0.8, 0.88, 1.0) * 1.6, 4.5, {"alert": false})
+		light.spotted.connect(_on_searchlight_spotted.bind(light))
+		_lights.append({"node": light, "owner": node, "seg": seg})
 	for a: Dictionary in _graph.node_data(id).get("alarms", []):
 		var box := AlarmBox.new()
 		box.at = start + float(a["at"])
@@ -888,6 +903,7 @@ func _discard(branch: Dictionary) -> void:
 	var node: Node3D = branch["node"]
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
+	_lights = _lights.filter(func(l: Dictionary) -> bool: return l["owner"] != node)
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
 	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	node.queue_free()
@@ -922,6 +938,7 @@ func _retire(node: Node3D, gone_at: float) -> void:
 		if c["owner"] == node and (c["node"] is RifleTrooper or c["node"] is RusherDog or c["node"] is SecurityTrooper):
 			c["node"].visible = false  # nobody left standing on a road you didn't take
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
+	_lights = _lights.filter(func(l: Dictionary) -> bool: return l["owner"] != node)
 	_retired.append({"node": node, "gone_at": gone_at})
 
 
@@ -2067,7 +2084,6 @@ func _build_lamps(parent: Node3D, seg: Dictionary) -> void:
 					_lamp_post(parent, seg, z, side * (edge - 0.3), -side)
 				z += tuning.roof_lamp_spacing
 				n += 1
-			_searchlight(parent, seg, length * 0.45, 1 if hash(seg["id"]) % 2 == 0 else -1)
 		"helipad":
 			for side in [-1, 1]:
 				_lamp_post(parent, seg, length * 0.4, side * (edge - 0.3), -side)
@@ -2097,44 +2113,6 @@ func _lamp_post(parent: Node3D, seg: Dictionary, z: float, x: float, inward: int
 	parent.add_child(at)
 	at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(x + inward * 1.0, 2.8, 0))
 	_ambience.add_lamp(at, Color(1.0, 0.64, 0.3) * 1.3, 9.5)
-
-
-## From the top of a building off the roof's side, a searchlight beam sweeps back and forth
-## across the roof; its pool of light moves over the lanes (just for looks).
-func _searchlight(parent: Node3D, seg: Dictionary, z: float, side: int) -> void:
-	var src := Vector3(side * 13.0, 9.0, 0)
-	var target := Vector3(0, 0, -2.0)
-	var mount := Node3D.new()
-	parent.add_child(mount)
-	mount.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, src)
-	var swing := Node3D.new()  # turns on the mount, so the sweep is relative to the road
-	mount.add_child(swing)
-	var pivot := Node3D.new()
-	swing.add_child(pivot)
-	var down := (src - target).normalized()  # the pivot's +Y points back up the beam
-	pivot.basis = Basis(Quaternion(Vector3.UP, down))
-	var reach := src.distance_to(target)
-	var beam := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.2
-	cone.bottom_radius = 1.3
-	cone.height = reach
-	cone.radial_segments = 10
-	cone.rings = 1
-	cone.cap_top = false
-	cone.cap_bottom = false
-	beam.mesh = cone
-	beam.material_override = PsxMaterials.beam(Color(0.75, 0.82, 1.0, 0.13))
-	beam.position = Vector3(0, -reach / 2.0, 0)
-	pivot.add_child(beam)
-	_box(swing, Vector3(0.9, 0.7, 0.9), Vector3(0, -0.2, 0), Color("2a2d30"))  # the lamp housing
-	var pool := Node3D.new()
-	pivot.add_child(pool)
-	pool.position = Vector3(0, -reach + 1.5, 0)
-	_ambience.add_lamp(pool, Color(0.8, 0.88, 1.0) * 1.6, 4.5, {"alert": false})
-	var t := swing.create_tween().set_loops()
-	t.tween_property(swing, "rotation:y", 0.45, 2.6).from(-0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	t.tween_property(swing, "rotation:y", -0.45, 2.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 ## A zone door (the start of an area; it was the halfway marker): a wall right across, side wall to side wall and up
@@ -2785,6 +2763,27 @@ func _runner_segment(at: float) -> Dictionary:
 		if String(k).begins_with("straight:") and at <= b["end"]:
 			return b
 	return {}
+
+
+## The roof searchlights sweep; one only catches you on the road you're actually on (those on a
+## branch ahead sweep, but can't see you yet).
+func _update_searchlights(delta: float) -> void:
+	var d := _player.distance_run()
+	for l in _lights:
+		var light: Searchlight = l["node"]
+		if not is_instance_valid(light):
+			continue
+		var here: bool = l["seg"].get("promoted", false)
+		light.update(delta, d if here else -INF, _player.track_x)
+	_lights = _lights.filter(func(l: Dictionary) -> bool: return is_instance_valid(l["node"]) and l["node"].at > d - 20.0)
+
+
+## A searchlight's caught you: the "!" sting, and the alert goes up one level.
+func _on_searchlight_spotted(light: Searchlight) -> void:
+	RunLog.record_event("searchlight", {"node": _runner.current})
+	_audio.play_at("spotted", light.global_position + Vector3.UP * 1.5, -2.0)
+	_hud.show_chopper_message("SPOTTED", Color("ff4b3a"), 2.0, false)
+	GameState.raise_alert()
 
 
 ## Alert 3: a squad comes after you from behind, one guard in each lane.

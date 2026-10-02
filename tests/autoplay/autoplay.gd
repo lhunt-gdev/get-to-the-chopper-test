@@ -34,6 +34,7 @@ extends Node
 ##   dog_dodge    - as dog_bite, but swipes out of the dog's lane when it barks:
 ##                  it runs past
 ##   runner_escapes - main route, never shoots the alarm runner: he gets to his alarm (Alert 2)
+##   roof_spotted - roof route at Alert 1, never dodging the searchlights: spotted, the alert rises
 ##   squad_caught - trips both main-route wires (Alert 3, the squad comes after us), then takes
 ##                  the next cover and stays in it: the squad catches up, CAPTURED
 
@@ -77,6 +78,8 @@ func _ready() -> void:
 		"miss_ladder":
 			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 0}
 			_trip_in = [&"main_floor_lobby"]
+		"roof_spotted":
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
 		"warehouse_drop":
 			_prefer = {&"warehouse": -1, &"storm_drain": -1}
 		"late_switch":
@@ -136,6 +139,8 @@ func _physics_process(_delta: float) -> void:
 		var best_score := -INF
 		for lane in range(lane_count):
 			var score := -absf(lane - _player.lane) * 0.5
+			if _lit_ahead(lane, d):
+				score -= 60.0  # a searchlight's pool will be there when we get there
 			if _blocked_ahead(obstacles, lane, d):
 				score -= 100.0
 			if scenario in ["cover", "camper"] and d < COVER_AT and not _took_cover:
@@ -238,9 +243,9 @@ func _count(kind: String) -> int:
 
 
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d time=%.1f" % [scenario, reason,
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d lights=%d time=%.1f" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
-			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _level._clock.elapsed])
+			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed])
 	get_tree().quit()
 
 
@@ -263,3 +268,19 @@ func _rifleman_in_range() -> Node3D:
 				and n.at > d and n.at - d < _player.tuning.target_range:
 			return n
 	return null
+
+
+## Will a searchlight's pool be on this lane when we reach it? (roof_spotted doesn't care.)
+func _lit_ahead(lane: int, d: float) -> bool:
+	if scenario == "roof_spotted":
+		return false
+	for l in _level._lights:
+		var light: Searchlight = l["node"]
+		if not is_instance_valid(light) or light.caught or not l["seg"].get("promoted", false):
+			continue
+		var ahead: float = light.at - d
+		if ahead > -Searchlight.POOL_HALF_LENGTH and ahead < 14.0:
+			var px := light.x_in(maxf(ahead, 0.0) / _player.tuning.run_speed)
+			if absf(_player.lane_x(lane) - px) < Searchlight.POOL_RADIUS + 0.5:
+				return true
+	return false
