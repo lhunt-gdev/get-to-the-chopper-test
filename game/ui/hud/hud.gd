@@ -169,6 +169,12 @@ class RearMonitor extends Control:
 	## Tracking boxes over each guard still chasing: [x, y (0..1 in the picture), size px].
 	var marks: Array = []
 	var _overlay: Control
+	## Seconds since it switched on (the CRT warm-up runs over SWITCH_ON).
+	var _on_t := 0.0
+	const SWITCH_ON := 0.6
+	const SWITCH_OFF := 0.45
+	var _off := false
+	var _off_t := 0.0
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -189,6 +195,13 @@ class RearMonitor extends Control:
 		_overlay.draw.connect(_draw_marks)
 
 	func show_feed(tex: Texture2D) -> void:
+		if tex == null:
+			# Switched off: the screen collapses to a line, then a dot, then it goes (in _process).
+			if visible and not _off:
+				_off = true
+				_off_t = 0.0
+			return
+		_off = false
 		_picture.texture = tex
 		var w := get_viewport_rect().size.x
 		var pic := Vector2(128, 72) if tex == null else Vector2(tex.get_size())
@@ -196,6 +209,8 @@ class RearMonitor extends Control:
 		_picture.size = pic
 		_overlay.position = _picture.position
 		_overlay.size = pic
+		if tex != null and not visible:
+			_on_t = 0.0  # just switched on: warm up from a dot
 		visible = tex != null
 		queue_redraw()
 
@@ -203,6 +218,24 @@ class RearMonitor extends Control:
 		_t += delta
 		queue_redraw()  # REC blinks
 		_overlay.queue_redraw()
+		var mat := _picture.material as ShaderMaterial
+		if _off:
+			# Switching off: the picture flares and collapses to a line, the line to a dot, the dot
+			# fades: the warm-up run backwards, quicker. Then the monitor goes.
+			_off_t += delta
+			var k := clampf(_off_t / SWITCH_OFF, 0.0, 1.0)
+			mat.set_shader_parameter("power", 1.0 - k)
+			_overlay.modulate.a = 0.0
+			if k >= 1.0:
+				_off = false
+				_picture.texture = null
+				visible = false
+			return
+		if _on_t < SWITCH_ON:
+			_on_t += delta
+		var power := clampf(_on_t / SWITCH_ON, 0.0, 1.0)
+		mat.set_shader_parameter("power", power)
+		_overlay.modulate.a = smoothstep(0.75, 1.0, power)  # the boxes come up with the picture
 
 	func _draw() -> void:
 		var r := Rect2(_picture.position - Vector2(4, 13), _picture.size + Vector2(8, 17))

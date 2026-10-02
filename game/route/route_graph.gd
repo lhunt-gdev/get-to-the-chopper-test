@@ -45,6 +45,16 @@ const STAIR_EXIT_CLEAR := 20.0
 const ENEMY_KINDS := ["rifle_trooper", "rusher_dog", "security_trooper"]
 const MARKER_CLEAR_BEFORE := 6.0
 const MARKER_CLEAR_AFTER := 20.0
+## No cover wall on the inside of a corner (user rule): it blocks the view round it and looks
+## wrong. Each bend is a jog: it turns toward its side, runs BEND_RUN m (Tuning.branch_out_length),
+## then turns back, so it has two corners, the second with its inside on the other side. A corridor
+## turn-off does the same at its start. Walls must keep off the corner's inside lanes from
+## CORNER_CLEAR_BEFORE m before each corner to CORNER_CLEAR_AFTER m after it.
+const BEND_RUN := 14.0
+const CORNER_CLEAR_BEFORE := 12.0
+const CORNER_CLEAR_AFTER := 4.0
+## The lanes on the inside of a corner, by the side it turns to (authored for 5 lanes).
+const INSIDE_LANES := {"left": [0, 1], "right": [3, 4]}
 ## Areas with no walls to mount tripwire emitters on (user rule: no tripwires on the rooftops).
 const NO_TRIPWIRE_THEMES := ["rooftops"]
 const VIAS := ["corridor", "stairs", "ladder"]
@@ -297,6 +307,7 @@ func validate() -> PackedStringArray:
 				if gap > -MARKER_CLEAR_BEFORE and gap < MARKER_CLEAR_AFTER:
 					problems.append("node '%s': %s at %s m is too close to the halfway marker at %s m" % [id, thing.get("kind"), thing.get("at"), m_at])
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
+		problems.append_array(_corner_walls(id, n.get("obstacles", []), corners_of(id)))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
 		for e in n.get("enemies", []):
 			if not String(e.get("kind", "")) in ENEMY_KINDS:
@@ -369,3 +380,40 @@ func _shortest_after(id: StringName, seen: Dictionary) -> float:
 		var to := StringName(e["to"])
 		best = minf(best, length_of(to) + _shortest_after(to, seen.duplicate()))
 	return 0.0 if best == INF else best
+
+
+## The user's corner rule: no cover wall on the inside of a corner. corners: [{at, inside}].
+static func _corner_walls(id: StringName, obstacles: Array, corners: Array) -> PackedStringArray:
+	var problems := PackedStringArray()
+	for c in corners:
+		var inside: Array = INSIDE_LANES[c["inside"]]
+		for ob in obstacles:
+			if String(ob.get("kind", "")) != "wall":
+				continue
+			var gap := float(ob.get("at", 0)) - float(c["at"])
+			if gap < -CORNER_CLEAR_BEFORE or gap > CORNER_CLEAR_AFTER:
+				continue
+			for lane in ob.get("lanes", []):
+				if int(lane) in inside:
+					problems.append("node '%s': wall at %s m is on the inside of the corner at %s m (it blocks the view round it)" % [id, ob.get("at"), c["at"]])
+					break
+	return problems
+
+
+## Where a node's corners are: two per authored bend, and two at the start of a corridor
+## turn-off into it.
+func corners_of(id: StringName) -> Array:
+	var out: Array = []
+	var other := {"left": "right", "right": "left"}
+	for bend in node_data(id).get("bends", []):
+		var side := String(bend.get("side", "left"))
+		if not side in other:
+			continue
+		out.append({"at": float(bend.get("at", 0)), "inside": side})
+		out.append({"at": float(bend.get("at", 0)) + BEND_RUN, "inside": other[side]})
+	for from: StringName in _nodes:
+		for edge in _nodes[from].get("next", []):
+			if StringName(edge.get("to", "")) == id and side_of(edge) in other and via_of(edge) == "corridor":
+				out.append({"at": 0.0, "inside": side_of(edge)})
+				out.append({"at": BEND_RUN, "inside": other[side_of(edge)]})
+	return out

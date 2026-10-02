@@ -23,6 +23,7 @@ func _run() -> void:
 	_test_mission_layout()
 	_test_trooper_tiers()
 	_test_squad_rules()
+	_test_corner_rule()
 	_test_swipe_direction()
 	_test_sounds()
 	await _test_targeting_priority()
@@ -189,6 +190,24 @@ func _test_squad_rules() -> void:
 	_check(pg.spots("never", 0.0) == false and pg.spots("always", 1.0) == true, "timing chance 0 always fails, 1 always clears")
 	_check(tt.squad_timing_chance > 0.5 and tt.squad_timing_chance < 1.0, "they mostly time jumps and slides right, but not always")
 	pg.free()
+
+## The user's corner rule: no cover wall on the inside of a corner (a bend has two: it turns
+## toward its side, then back after RouteGraph.BEND_RUN m).
+func _test_corner_rule() -> void:
+	var make := func(walls: Array) -> String:
+		var obstacles: Array = []
+		for w in walls:
+			obstacles.append({"kind": "wall", "lanes": w[1], "at": w[0]})
+		var g := RouteGraph.from_dict({"start": "a", "nodes": [
+			{"id": "a", "tier": "ground", "length": 120, "bends": [{"at": 50, "side": "left"}], "obstacles": obstacles,
+				"next": [{"to": "b"}]},
+			{"id": "b", "tier": "ground", "end": "extract"}]})
+		return " ".join(g.validate())
+	_check("inside of the corner" in make.call([[44, [0, 1]]]), "a wall in the left lanes just before a left-hand corner is rejected")
+	_check(not "inside of the corner" in make.call([[44, [3, 4]]]), "on the outside of that corner it's fine")
+	_check("inside of the corner" in make.call([[60, [3, 4]]]), "the bend's second corner turns back: its inside is the right")
+	_check(not "inside of the corner" in make.call([[30, [0, 1]]]), "well before the corner it's fine")
+	_check(not "inside of the corner" in make.call([[90, [0, 1]]]), "well after it, too")
 
 ## Dropping the alert never makes a trooper you've already seen vanish.
 func _test_seen_troopers_stay() -> void:
