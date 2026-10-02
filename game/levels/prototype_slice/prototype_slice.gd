@@ -16,6 +16,13 @@ extends Node3D
 const ROUTE_PATH := "res://game/levels/prototype_slice/route.json"
 const START_ALERT := 1
 const CEILING_Y := 4.6
+## Scale (user: "doors should not be smaller than the player"). People here, the player and the
+## guards, are about 1.95 m tall, and the world is built round them: a door is half a metre taller
+## than a person, a zone door taller still. Every door uses these.
+const DOOR_H := 2.5
+const DOOR_W := 1.15
+## The zone doors (double doors, the barred checkpoint gates, the warehouse shutter).
+const GATE_H := 3.1
 ## A halfway marker's double doorway spans this many middle lanes.
 const MARKER_LANES := 3
 ## Height of a stairwell's ceiling above the stairs.
@@ -57,7 +64,7 @@ const THEMES := {
 	"office": {"wall": "office", "ambient": Color(0.19, 0.23, 0.26), "lamps": "ceiling", "fog_color": Color("10171a"),
 			"wall_tex": "office_wall", "ceiling_tex": "office_ceiling", "stair_wall": "office_wall", "stair_door": "door", "color": Color("6f7a82"),
 			"height": CEILING_Y, "ground": "office_floor", "ceiling": true, "wall_decor": true,
-			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_metal": "cabinet", "box_wood": "desk",
+			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_look": "office",
 					"wall": "office_wall"}},
 	# Open night sky: no walls or ceiling, a low lip at the roof edge, the city all around.
 	"rooftops": {"wall": "brick", "ambient": Color(0.2, 0.24, 0.36), "moon": Color(0.32, 0.38, 0.58), "lamps": "posts", "snow": true,
@@ -74,7 +81,7 @@ const THEMES := {
 			"lamps": "ceiling", "fog_color": Color("0d1315"), "stair_wall": "security_wall", "stair_door": "steel_door",
 			"marker_door": "bars", "marker_light": Color(1.0, 0.16, 0.1), "color": Color("3e4447"), "height": CEILING_Y,
 			"ground": "security_floor", "ceiling": true, "wall_decor": "security", "floor_stripes": true, "ceiling_vents": true,
-			"skins": {"barrier_looks": ["turnstile"], "pipe": "wires", "box_metal": "cabinet", "box_wood": "cabinet", "wall": "security_wall"}},
+			"skins": {"barrier_looks": ["turnstile"], "pipe": "wires", "box_look": "cabinets", "wall": "security_wall"}},
 	# STAFF CANTEEN (user reference): warm yellow light, beige walls over a dark band, big pale floor
 	# tiles; a kitchen alcove in the side wall (serving counter, sneeze guard, fridges, menu boards),
 	# snack machines, notice boards, plants and bins along the walls; tables for box cover, toppled
@@ -107,6 +114,15 @@ const THEMES := {
 			"wall_decor": "dock", "floor_stripes": true, "overhead": "pipes", "drum_color": Color("8a2418"),
 			"skins": {"barrier_looks": ["bumper"], "pipe": "girder", "box_look": "warehouse", "wall_looks": ["forklift", "crate_stack"],
 					"wall": "dock_wall"}},
+	# MAIN FLOOR LOBBY (user reference): a tall two-storey atrium (a 9 m ceiling) with a mezzanine and
+	# glass balustrades along both sides, a decorative grand staircase up one wall, dark granite,
+	# the company logo lit on its wall, lifts, plants, sofas and a polished checker floor; the
+	# reception desk across two lanes and planters / sofas for box cover, speed gates to jump,
+	# a hanging banner to duck under, stone columns for cover walls.
+	"lobby": {"wall": "office", "wall_tex": "lobby_wall", "ceiling_tex": "lobby_ceiling", "ceiling_y": 9.0, "ambient": Color(0.2, 0.2, 0.23),
+			"lamps": "atrium", "fog_color": Color("100f12"), "stair_wall": "lobby_wall", "stair_door": "door", "color": Color("2a2c30"),
+			"height": 9.0, "ground": "lobby_floor", "ceiling": true, "wall_decor": "lobby", "mezzanine": true,
+			"skins": {"barrier_looks": ["speedgate"], "pipe": "banner", "box_look": "lobby", "wall": "lobby_column"}},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
 	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "helipad", "snow": true,
 			"color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
@@ -768,7 +784,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		var span_look: String = ob.get("look", _skin(id, ob["kind"], ob["kind"]))
 		if ob["kind"] == "wall":
 			# Floor to ceiling: up to the ceiling indoors, a tall column outside.
-			size.y = CEILING_Y if _theme(id).get("ceiling", false) else kind["size"].y
+			size.y = _ceil(id) if _theme(id).get("ceiling", false) else kind["size"].y
 			y = size.y / 2.0
 		var one_piece: Node3D = null
 		if ob["kind"] in ["pipe", "tripwire"]:
@@ -820,12 +836,15 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 			# Solid: shots don't go through it, only round its edge (see Sightlines).
 			_blockers.append({"at": start + at, "x0": x0, "x1": x1, "seg": seg, "owner": node})
 		var box_look: String = ob.get("look", _skin(id, "box_look", "")) if ob["kind"] == "box" else ""
+		var reception: Node3D = null
 		for lane: int in lanes:
 			var x := _player.lane_x(lane)
 			var mesh: Node3D = one_piece
 			if jump_look == "cabinet":
 				_scatter_papers(node, seg, at, x, lane)
-			if jump_look == "bumper":
+			if jump_look == "speedgate":
+				mesh = _build_speedgate(node, seg, at, x, lane)
+			elif jump_look == "bumper":
 				mesh = _build_bumper(node, seg, at, x, lane)
 			elif jump_look == "pallets":
 				mesh = _build_pallet_stack(node, seg, at, x, lane)
@@ -837,6 +856,17 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				mesh = _build_blockade(node, seg, at, x, lane)
 			elif jump_look == "vent":
 				mesh = _build_vent_shaft(node, seg, at, x)
+			elif box_look == "reception":
+				# One desk across the whole run of lanes, built once (user: across two lanes).
+				if lane == lanes.keys().min():
+					var run: Array = lanes.keys()
+					reception = _build_reception(node, seg, at, _player.lane_x(run.min()) - tuning.lane_width / 2.0 + 0.05,
+							_player.lane_x(run.max()) + tuning.lane_width / 2.0 - 0.05)
+				mesh = reception
+			elif box_look in ["office", "cabinets"]:
+				mesh = _build_office_box(node, seg, at, x, lane, box_look == "cabinets" or String(ob.get("material", "wood")) == "metal")
+			elif box_look == "lobby":
+				mesh = _build_lobby_box(node, seg, at, x, lane, String(ob.get("material", "wood")) == "metal")
 			elif box_look == "warehouse":
 				mesh = _build_warehouse_box(node, seg, at, x, lane, String(ob.get("material", "wood")) == "metal")
 			elif box_look == "table":
@@ -1067,7 +1097,7 @@ func _update_footsteps(delta: float) -> void:
 		if _is_stairs(seg) and into < seg["ramp_len"]:
 			surface = "stairs"
 		else:
-			surface = {"office_floor": "office", "security_floor": "office", "canteen_floor": "office", "warehouse_floor": "concrete", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
+			surface = {"office_floor": "office", "security_floor": "office", "canteen_floor": "office", "warehouse_floor": "concrete", "lobby_floor": "office", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
 	_audio.play("step_%s_%d" % [surface, randi() % SoundBank.STEP_VARIANTS], -10.0, 0.06)
 
 
@@ -1286,11 +1316,11 @@ func _build_surfaces(parent: Node3D, seg: Dictionary, road_end: float, open_l: f
 				patch.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis.IDENTITY, Vector3(0, -0.02, shift))
 				if has_ceiling and not _is_outdoor(seg, j):
 					var cap := _plane(parent, Vector2(road_w + 2.0, plen), Vector3.ZERO, _ceiling_texture(theme), Vector2(road_w / 2.0, plen / 2.0))
-					cap.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis(Vector3.FORWARD, PI), Vector3(0, CEILING_Y + 0.02, shift))
+					cap.transform = _frame_in_leg(seg, k, j) * Transform3D(Basis(Vector3.FORWARD, PI), Vector3(0, _ceil(id) + 0.02, shift))
 	if theme.get("ceiling", false):
 		for span in _cut_spans([Vector2(ramp, length)], _outdoor(seg)):  # open sky over any outdoor stretch
 			for piece in _pieces(seg, span.x, span.y):
-				var roof := _strip(parent, seg, piece.x, piece.y, 0.0, road_w + 2.0, CEILING_Y,
+				var roof := _strip(parent, seg, piece.x, piece.y, 0.0, road_w + 2.0, _ceil(id),
 						_ceiling_texture(theme), road_w / 2.0, 2.0)
 				roof.rotate_object_local(Vector3.FORWARD, PI)  # face down
 	var walls := Node3D.new()
@@ -1400,7 +1430,8 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 		# Pillars every 5 m, alternating light and dark, give a sense of speed. Big ones hide bend corners.
 		var ph := maxf(h, 1.2)
 		for i in range(ceili(maxf(open, ramp) / 5.0) * 5, int(length), 5):
-			if (i > hole.x - 0.5 and i < hole.y + 0.5) or (i > alcove.x - 0.5 and i < alcove.y + 0.5) or _is_outdoor(seg, i):
+			if (i > hole.x - 0.5 and i < hole.y + 0.5) or (i > alcove.x - 0.5 and i < alcove.y + 0.5) or _is_outdoor(seg, i) \
+					or (theme.get("mezzanine", false) and side < 0 and i > 34 and i < 50):  # the lobby's grand staircase
 				continue
 			var c: Color = theme["color"].lightened(0.25) if (i / 5) % 2 == 0 else theme["color"].darkened(0.5)
 			_item_box(parent, seg, i, Vector3(side * (road_w / 2.0 + 0.8), ph / 2.0, 0), Vector3(0.35, ph, 0.35), c)
@@ -1417,6 +1448,8 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 				_build_kitchen(parent, seg, side, alcove)
 	if theme.get("floor_stripes", false):
 		_floor_stripes(parent, seg, ramp)
+	if theme.get("mezzanine", false):
+		_build_mezzanine(parent, seg, ramp)
 	if _outdoor(seg) != Vector2.ZERO:
 		_build_yard(parent, seg, _outdoor(seg))
 	if theme.get("floor_lines", false):
@@ -1513,7 +1546,7 @@ func _build_stairwell_parts(parent: Node3D, seg: Dictionary) -> void:
 	_ambience.add_lamp(lamp, Color(1.0, 0.85, 0.6), 5.0)
 	# A green exit sign over each door, on the side you run up to it from.
 	for into in [0.02, ramp - 0.38]:
-		_item_box(parent, seg, into, Vector3(x, 2.5, 0), Vector3(0.5, 0.15, 0.04), Color.WHITE).material_override = \
+		_item_box(parent, seg, into, Vector3(x, DOOR_H + 0.2, 0), Vector3(0.5, 0.15, 0.04), Color.WHITE).material_override = \
 				PsxMaterials.glow(Color("40d070"))
 	_build_door(parent, seg, 0.2, x, tops[0], themes[0])
 	_build_door(parent, seg, ramp - 0.2, x, tops[1], themes[1])
@@ -1623,7 +1656,7 @@ func _stair_wall_texture(theme: Dictionary) -> Texture2D:
 ## player bursts through (see _doors).
 func _build_door(parent: Node3D, seg: Dictionary, into: float, x: float, top: float, theme: Dictionary) -> void:
 	var dw := tuning.lane_width - 0.1
-	var dh := 2.3
+	var dh := DOOR_H
 	var h := _height(seg, into)
 	var frame := _frame_at(seg, into)
 	_item_box(parent, seg, into, Vector3(x, (dh + top - h) / 2.0, 0), Vector3(tuning.lane_width + 0.3, top - h - dh, 0.25), Color.WHITE) \
@@ -1679,6 +1712,9 @@ func _build_roof_edges(parent: Node3D, seg: Dictionary, open_l: float, open_r: f
 
 ## Office walls: now and then a door, a window or a notice board between the pillars.
 func _wall_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	if str(_theme(seg["id"]).get("wall_decor", "")) == "lobby":
+		_lobby_decor(parent, seg, side, from, to)
+		return
 	if str(_theme(seg["id"]).get("wall_decor", "")) == "dock":
 		_dock_decor(parent, seg, side, from, to)
 		return
@@ -1705,9 +1741,9 @@ func _wall_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: fl
 		var item: Array = []
 		match pick:
 			0, 1:
-				item = [1.0, 2.1, 1.05, PsxTextures.door()]
+				item = [DOOR_W, DOOR_H, DOOR_H / 2.0, PsxTextures.door()]
 			2, 3:
-				item = [1.6, 0.9, 1.65, PsxTextures.office_window()]
+				item = [1.6, 1.1, 1.8, PsxTextures.office_window()]
 			4:
 				item = [1.1, 0.75, 1.5, PsxTextures.notice_board()]
 		if item.is_empty():
@@ -1742,13 +1778,13 @@ func _security_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to
 		# A set rhythm (so the monitor banks and cameras turn up often), shifted per wall.
 		match (i / 5 + (2 if side > 0 else 0) + absi(hash(seg["id"])) % 3) % 6:
 			0, 1:  # a steel door in a frame, a red alarm light over it, a card reader beside
-				_box(holder, Vector3(0.06, 2.1, 1.0), Vector3(out * 0.03, 1.05, 0), Color.WHITE).material_override = \
+				_box(holder, Vector3(0.06, DOOR_H, DOOR_W), Vector3(out * 0.03, DOOR_H / 2.0, 0), Color.WHITE).material_override = \
 						PsxMaterials.textured(PsxTextures.steel_door(), Vector2(3, 2))
-				for dz in [-0.56, 0.56]:
-					_box(holder, Vector3(0.12, 2.2, 0.1), Vector3(out * 0.06, 1.1, dz), steel)
-				_box(holder, Vector3(0.12, 0.1, 1.22), Vector3(out * 0.06, 2.15, 0), steel)
-				_box(holder, Vector3(0.14, 0.16, 0.34), Vector3(out * 0.09, 2.36, 0), dark)
-				_box(holder, Vector3(0.06, 0.1, 0.26), Vector3(out * 0.17, 2.36, 0), Color.WHITE).material_override = red
+				for dz in [-(DOOR_W / 2.0 + 0.05), DOOR_W / 2.0 + 0.05]:
+					_box(holder, Vector3(0.12, DOOR_H + 0.1, 0.1), Vector3(out * 0.06, (DOOR_H + 0.1) / 2.0, dz), steel)
+				_box(holder, Vector3(0.12, 0.1, DOOR_W + 0.2), Vector3(out * 0.06, DOOR_H + 0.05, 0), steel)
+				_box(holder, Vector3(0.14, 0.16, 0.34), Vector3(out * 0.09, DOOR_H + 0.26, 0), dark)
+				_box(holder, Vector3(0.06, 0.1, 0.26), Vector3(out * 0.17, DOOR_H + 0.26, 0), Color.WHITE).material_override = red
 				_card_reader(holder, out, 0.85, red)
 			2:  # a bank of four CCTV monitors on a bracket, turned a little toward you
 				_box(holder, Vector3(0.06, 0.4, 0.06), Vector3(out * 0.62, CEILING_Y - 0.2, 0), dark)  # the rod from the ceiling
@@ -1892,8 +1928,8 @@ func _canteen_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to:
 		var out := -float(side)
 		match (i / 5 + (1 if side > 0 else 3)) % 5:
 			0:  # a snack machine against the wall
-				_box(holder, Vector3(0.75, 2.0, 1.0), Vector3(out * 0.38, 1.0, 0), Color("1e2430"))
-				var front := _box(holder, Vector3(0.03, 1.8, 0.86), Vector3(out * 0.76, 1.02, 0), Color.WHITE)
+				_box(holder, Vector3(0.75, 2.2, 1.0), Vector3(out * 0.38, 1.1, 0), Color("1e2430"))
+				var front := _box(holder, Vector3(0.03, 1.95, 0.86), Vector3(out * 0.76, 1.1, 0), Color.WHITE)
 				front.material_override = PsxMaterials.textured(PsxTextures.vending_front(1), Vector2(3, 2), true)
 			1:  # a notice board with papers and a poster
 				_box(holder, Vector3(0.05, 0.95, 1.5), Vector3(out * 0.03, 1.6, 0), Color("5a4a36"))
@@ -1915,9 +1951,9 @@ func _canteen_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to:
 				holder.add_child(bin)
 				bin.position = Vector3(out * 0.3, 0.35, 0.45)
 			3:  # a door with a card reader
-				_box(holder, Vector3(0.06, 2.1, 1.0), Vector3(out * 0.03, 1.05, 0), Color.WHITE).material_override = \
+				_box(holder, Vector3(0.06, DOOR_H, DOOR_W), Vector3(out * 0.03, DOOR_H / 2.0, 0), Color.WHITE).material_override = \
 						PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
-				_box(holder, Vector3(0.12, 2.2, 1.2), Vector3(out * 0.0, 1.1, 0), Color("3a3c3e"))
+				_box(holder, Vector3(0.12, DOOR_H + 0.1, DOOR_W + 0.2), Vector3(out * 0.0, (DOOR_H + 0.1) / 2.0, 0), Color("3a3c3e"))
 				_card_reader(holder, out, 0.85, red)
 
 
@@ -2154,10 +2190,10 @@ func _dock_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: fl
 		var out := -float(side)
 		match (i / 5 + (2 if side > 0 else 0)) % 5:
 			0:  # a steel door, a card reader, a warm lamp over it
-				_box(holder, Vector3(0.06, 2.2, 1.1), Vector3(out * 0.03, 1.1, 0), Color.WHITE).material_override = \
+				_box(holder, Vector3(0.06, DOOR_H, DOOR_W), Vector3(out * 0.03, DOOR_H / 2.0, 0), Color.WHITE).material_override = \
 						PsxMaterials.textured(PsxTextures.steel_door(), Vector2(3, 2))
 				_card_reader(holder, out, 0.9, red)
-				var lamp := _box(holder, Vector3(0.14, 0.2, 0.2), Vector3(out * 0.08, 2.65, 0), Color.WHITE)
+				var lamp := _box(holder, Vector3(0.14, 0.2, 0.2), Vector3(out * 0.08, DOOR_H + 0.4, 0), Color.WHITE)
 				lamp.material_override = PsxMaterials.glow(Color("ffd890"))
 				if lamps < 2:
 					_ambience.add_lamp(lamp, Color(1.0, 0.8, 0.5) * 0.9, 3.5, {"alert": false})
@@ -2400,6 +2436,263 @@ func _build_gantry(parent: Node3D, seg: Dictionary, at: float, ends: Array) -> N
 	return bar
 
 
+## MAIN FLOOR LOBBY jump obstacle (user: "the walk through barrier can be a full lane jump
+## blocker"): a speed gate in each lane, a steel post with a red light either side and glass
+## flaps closed across the lane.
+func _build_speedgate(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var steel := Color("8a8e94")
+	var red := PsxMaterials.glow(Color(1.0, 0.16, 0.12))
+	var hw := tuning.lane_width / 2.0 - 0.1
+	for s in [-1.0, 1.0]:
+		if s < 0 or lane == tuning.lane_count - 1 or true:
+			_box(holder, Vector3(0.16, 0.95, 0.5), Vector3(s * hw, 0.47, 0), steel)  # the gate posts
+			_box(holder, Vector3(0.18, 0.04, 0.52), Vector3(s * hw, 0.96, 0), Color("4a4e52"))  # top
+			_box(holder, Vector3(0.1, 0.08, 0.12), Vector3(s * hw, 0.85, 0.22), Color.WHITE).material_override = red
+		# A glass flap from each post, meeting in the middle.
+		_box(holder, Vector3(hw - 0.12, 0.42, 0.03), Vector3(s * (hw / 2.0), 0.5, 0), Color.WHITE).material_override = \
+				PsxMaterials.glass(Color(0.7, 0.82, 0.86, 0.3))
+		_box(holder, Vector3(hw - 0.12, 0.03, 0.04), Vector3(s * (hw / 2.0), 0.72, 0), steel)  # its top edge
+	return holder
+
+
+## The MAIN FLOOR LOBBY's reception desk (user: across two lanes, as cover): a long granite-fronted
+## counter with a pale top, monitors and a keyboard, a desk lamp and a phone. You crouch behind it.
+func _build_reception(parent: Node3D, seg: Dictionary, at: float, x0: float, x1: float) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at)
+	var w := x1 - x0
+	var cx := (x0 + x1) / 2.0
+	_box(holder, Vector3(w, 1.05, 0.9), Vector3(cx, 0.52, 0), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.lobby_wall(), Vector2(w / 1.4, 1))
+	_box(holder, Vector3(w + 0.1, 0.06, 1.0), Vector3(cx, 1.08, 0), Color("c8c4b8"))  # the counter top
+	_box(holder, Vector3(w - 0.2, 0.05, 0.5), Vector3(cx, 0.78, -0.55), Color("6a5a48"))  # the desk behind it
+	for k in 2:
+		var mx := x0 + w * (0.28 + 0.44 * k)
+		_box(holder, Vector3(0.5, 0.34, 0.05), Vector3(mx, 1.32, -0.2), Color("141618"))  # monitors
+		_box(holder, Vector3(0.44, 0.28, 0.02), Vector3(mx, 1.32, -0.17), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.cctv_screen(k + 2), Vector2(3, 2), true)
+		_box(holder, Vector3(0.08, 0.14, 0.08), Vector3(mx, 1.15, -0.22), Color("141618"))
+	_box(holder, Vector3(0.4, 0.03, 0.15), Vector3(cx, 1.12, -0.05), Color("2a2c2e"))  # keyboard
+	_box(holder, Vector3(0.2, 0.08, 0.16), Vector3(x1 - 0.4, 1.15, -0.1), Color("1e2022"))  # phone
+	_box(holder, Vector3(0.04, 0.4, 0.04), Vector3(x0 + 0.35, 1.3, -0.25), Color("8a8e94"))  # desk lamp
+	var shade := _box(holder, Vector3(0.22, 0.1, 0.18), Vector3(x0 + 0.35, 1.5, -0.2), Color.WHITE)
+	shade.material_override = PsxMaterials.glow(Color("ffe0a0"))
+	return holder
+
+
+## MAIN FLOOR LOBBY box cover: a concrete planter with a shrub (wood), or a black leather sofa (metal).
+func _build_lobby_box(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int, metal: bool) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	if not metal:
+		_box(holder, Vector3(1.0, 0.75, 0.9), Vector3(0, 0.37, 0), Color("6a6c6e"))
+		_box(holder, Vector3(0.9, 0.05, 0.8), Vector3(0, 0.74, 0), Color("2a2018"))  # soil
+		for k in 7:
+			var leaf := _box(holder, Vector3(0.12, 0.6, 0.3), Vector3(0.22 * cos(k * 0.9), 1.05, 0.18 * sin(k * 0.9)), Color("2e5a26").lightened(0.06 * (k % 3)))
+			leaf.rotation = Vector3(0.5 * sin(k * 1.7), k * 0.9, 0.5 * cos(k * 1.3))
+	else:
+		var black := Color("1a1a1c")
+		_box(holder, Vector3(1.2, 0.42, 0.8), Vector3(0, 0.25, 0), black)  # seat
+		_box(holder, Vector3(1.2, 0.5, 0.18), Vector3(0, 0.72, -0.31), black)  # back
+		for s in [-1.0, 1.0]:
+			_box(holder, Vector3(0.16, 0.62, 0.8), Vector3(s * 0.6, 0.31, 0), black.lightened(0.05))  # arms
+		_box(holder, Vector3(1.0, 0.04, 0.6), Vector3(0, 0.47, 0.05), Color("26262a"))  # cushion seams
+	return holder
+
+
+## MAIN FLOOR LOBBY duck-under: a corporate banner hung on cables from the high ceiling, its bottom
+## edge at head height across the blocked lanes.
+func _build_banner(parent: Node3D, seg: Dictionary, at: float, ends: Array) -> Node3D:
+	var frame := _frame_at(seg, at)
+	var e0: float = ends[0]["x"]
+	var e1: float = ends[1]["x"]
+	var bottom := WIRE_LOW - 0.15
+	var h := 1.3
+	var banner := _box(parent, Vector3(e1 - e0, h, 0.04), Vector3.ZERO, Color.WHITE)
+	banner.transform = frame * Transform3D(Basis.IDENTITY, Vector3((e0 + e1) / 2.0, bottom + h / 2.0, 0))
+	banner.material_override = PsxMaterials.textured(PsxTextures.company_logo(), Vector2(maxf(1.0, (e1 - e0) / 2.5), 1))
+	_box(parent, Vector3(e1 - e0 + 0.1, 0.06, 0.08), Vector3.ZERO, Color("8a8e94")).transform = \
+			frame * Transform3D(Basis.IDENTITY, Vector3((e0 + e1) / 2.0, bottom + h + 0.03, 0))  # the top bar
+	var top := _ceil(seg["id"])
+	for cx in [e0 + 0.2, e1 - 0.2]:
+		var len := top - (bottom + h)
+		_box(parent, Vector3(0.03, len, 0.03), Vector3.ZERO, Color("2a2c2e")).transform = \
+				frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h + len / 2.0, 0))  # its cables
+	return banner
+
+
+## A MAIN FLOOR LOBBY ceiling light: a big recessed panel glowing high up in the coffered ceiling,
+## its light reaching the floor.
+func _atrium_lamp(parent: Node3D, seg: Dictionary, z: float, failing: bool) -> void:
+	var top := _ceil(seg["id"])
+	var on := PsxMaterials.glow(Color("f4ecd8"))
+	var panel := _item_box(parent, seg, z, Vector3(0, top - 0.05, 0), Vector3(1.6, 0.06, 2.4), Color.WHITE)
+	panel.material_override = on
+	_item_box(parent, seg, z, Vector3(0, top - 0.02, 0), Vector3(1.9, 0.04, 2.7), Color("1a1c1e"))  # the coffer
+	var at := Node3D.new()
+	parent.add_child(at)
+	at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, 4.5, 0))
+	_ambience.add_lamp(at, Color(1.0, 0.94, 0.82) * 2.1, 9.0, {"flicker": 0.3 if failing else 0.0,
+			"fixture": panel, "on_mat": on, "off_mat": PsxMaterials.flat(Color("6a6a66"))})
+
+
+## The MAIN FLOOR LOBBY's mezzanine (user: "a bit more open and 2 storied"): a first-floor balcony
+## along both side walls at 4.6 m over the strip beside the road, with a glass balustrade and a
+## steel rail, downlights underneath, lit office windows on the upper wall; and a decorative grand
+## staircase up the left wall to it (environmental storytelling only: you can't take it).
+func _build_mezzanine(parent: Node3D, seg: Dictionary, from: float) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var floor_y := CEILING_Y
+	var length: float = seg["length"]
+	var glass := PsxMaterials.glass(Color(0.62, 0.78, 0.84, 0.25))
+	var stairs := Vector2(36.0, 48.0)  # where the grand staircase climbs the left wall
+	for piece in _pieces(seg, maxf(from, 10.0), length - 1.0):
+		var mid := (piece.x + piece.y) / 2.0
+		var l := piece.y - piece.x
+		for s in [-1.0, 1.0]:
+			var mx: float = s * (road_half + 0.5)
+			_item_box(parent, seg, mid, Vector3(mx, floor_y - 0.2, 0), Vector3(1.0, 0.4, l), Color("3a3c40"))  # the slab
+			_item_box(parent, seg, mid, Vector3(s * (road_half + 0.02), floor_y + 0.52, 0), Vector3(0.03, 0.95, l), Color.WHITE).material_override = glass
+			_item_box(parent, seg, mid, Vector3(s * (road_half + 0.02), floor_y + 1.02, 0), Vector3(0.08, 0.06, l), Color("6a5040"))  # the handrail
+	# Downlights under the balcony, office windows on the upper wall, the odd plant up there.
+	var z := maxf(from, 10.0) + 2.5
+	var n := 0
+	while z < length - 2.0:
+		var on_bend := false
+		for leg in seg["legs"]:
+			if absf(leg["start"] - z) < 1.5:
+				on_bend = true
+		if not on_bend:
+			for s in [-1.0, 1.0]:
+				_item_box(parent, seg, z, Vector3(s * (road_half + 0.5), floor_y - 0.42, 0), Vector3(0.2, 0.03, 0.2), Color.WHITE).material_override = \
+						PsxMaterials.glow(Color("ffe0a0"))
+				var win := _item_box(parent, seg, z, Vector3(s * (road_half + 0.96), floor_y + 1.9, 0), Vector3(0.05, 1.4, 2.4), Color.WHITE)
+				win.material_override = PsxMaterials.textured(PsxTextures.office_window(), Vector2(3, 2), n % 3 == 0)
+				if n % 4 == 1:
+					_item_box(parent, seg, z + 1.6, Vector3(s * (road_half + 0.7), floor_y + 0.25, 0), Vector3(0.4, 0.5, 0.4), Color("5a5c5e"))
+					_item_box(parent, seg, z + 1.6, Vector3(s * (road_half + 0.7), floor_y + 0.75, 0), Vector3(0.5, 0.6, 0.5), Color("2e5a26"))
+		z += 5.0
+		n += 1
+	# The grand staircase up the left wall: steps rising along the strip to the balcony.
+	var steps := 18
+	var run := stairs.y - stairs.x
+	for k in steps:
+		var sz := stairs.x + run * (k + 0.5) / steps
+		var sy := floor_y * (k + 1) / float(steps)
+		_item_box(parent, seg, sz, Vector3(-(road_half + 0.55), sy / 2.0, 0), Vector3(0.9, sy, run / steps + 0.02), Color("4a4c50"))
+		_item_box(parent, seg, sz, Vector3(-(road_half + 0.55), sy, 0), Vector3(0.92, 0.04, run / steps + 0.04), Color("8a8c90"))  # tread
+	# Its glass balustrade, stepped, and a sloping handrail.
+	for k in range(0, steps, 3):
+		var sz := stairs.x + run * (k + 1.5) / steps
+		var sy := floor_y * (k + 1.5) / float(steps)
+		_item_box(parent, seg, sz, Vector3(-(road_half + 0.08), sy + 0.5, 0), Vector3(0.03, 0.9, run * 3.0 / steps), Color.WHITE).material_override = glass
+	var hand := _item_box(parent, seg, (stairs.x + stairs.y) / 2.0, Vector3(-(road_half + 0.08), floor_y / 2.0 + 1.0, 0), Vector3(0.07, 0.06, sqrt(run * run + floor_y * floor_y)), Color("6a5040"))
+	hand.rotate_object_local(Vector3.RIGHT, atan2(floor_y, run))
+
+
+## The MAIN FLOOR LOBBY's ground-floor walls (user reference): the company logo lit by uplights,
+## lift doors with call buttons, warm wall lights, tall plants, black sofas and bins; never on the
+## grand staircase.
+func _lobby_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	var face := side * (tuning.lane_count * tuning.lane_width / 2.0 + 1.0 - 0.03)
+	var stairs := Vector2(34.0, 50.0)
+	var lamps := 0
+	for i in range(ceili(from / 5.0) * 5, int(to) - 3, 5):
+		var at := i + 2.5
+		if side < 0 and at > stairs.x and at < stairs.y:
+			continue
+		var near_bend := false
+		for leg in seg["legs"]:
+			if absf(leg["start"] - at) < 1.3:
+				near_bend = true
+		if near_bend:
+			continue
+		var holder := Node3D.new()
+		parent.add_child(holder)
+		holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(face, 0, 0))
+		var out := -float(side)
+		match (i / 5 + (1 if side > 0 else 3)) % 5:
+			0:  # the company logo, lit from below
+				_box(holder, Vector3(0.05, 2.0, 3.0), Vector3(out * 0.03, 2.4, 0), Color.WHITE).material_override = \
+						PsxMaterials.textured(PsxTextures.company_logo(), Vector2(3, 2), true)
+				for dz in [-1.0, 1.0]:
+					var up := _box(holder, Vector3(0.12, 0.08, 0.2), Vector3(out * 0.12, 1.2, dz), Color.WHITE)
+					up.material_override = PsxMaterials.glow(Color("ffe0a0"))
+				if lamps < 2:
+					var glow := Node3D.new()
+					holder.add_child(glow)
+					glow.position = Vector3(out * 0.6, 2.2, 0)
+					_ambience.add_lamp(glow, Color(1.0, 0.82, 0.55) * 1.2, 4.0, {"alert": false})
+					lamps += 1
+			1:  # lift doors with a call panel and a floor indicator
+				for dz in [-0.45, 0.45]:
+					_box(holder, Vector3(0.05, DOOR_H, 0.88), Vector3(out * 0.03, DOOR_H / 2.0, dz), Color("6a6e74"))
+				_box(holder, Vector3(0.08, DOOR_H + 0.2, 2.1), Vector3(out * 0.0, (DOOR_H + 0.2) / 2.0, 0), Color("3a3c40"))  # its frame
+				_box(holder, Vector3(0.04, 0.16, 0.5), Vector3(out * 0.06, DOOR_H + 0.4, 0), Color.WHITE).material_override = PsxMaterials.glow(Color("ff8a3a"))
+				_box(holder, Vector3(0.04, 0.3, 0.14), Vector3(out * 0.06, 1.2, 1.25), Color("8a8e94"))  # call buttons
+			2:  # a warm wall light and a tall plant
+				var sconce := _box(holder, Vector3(0.12, 0.35, 0.2), Vector3(out * 0.08, 2.6, 0), Color.WHITE)
+				sconce.material_override = PsxMaterials.glow(Color("ffd890"))
+				_box(holder, Vector3(0.5, 0.7, 0.5), Vector3(out * 0.32, 0.35, 0.8), Color("5a5c5e"))
+				for k in 6:
+					var leaf := _box(holder, Vector3(0.1, 0.8, 0.26), Vector3(out * 0.32, 1.2, 0.8), Color("2e5a26").lightened(0.05 * (k % 3)))
+					leaf.rotation = Vector3(0.45 * sin(k * 1.3), k * 1.05, 0.45 * cos(k * 1.3))
+			3:  # a black sofa against the wall and a bin
+				var black := Color("1a1a1c")
+				_box(holder, Vector3(0.7, 0.42, 1.8), Vector3(out * 0.4, 0.25, 0), black)
+				_box(holder, Vector3(0.18, 0.5, 1.8), Vector3(out * 0.08, 0.7, 0), black)
+				_box(holder, Vector3(0.3, 0.6, 0.3), Vector3(out * 0.25, 0.3, 1.3), Color("5a6064"))
+
+
+## Office box cover, built to the player's scale (it used to be a 1.2 m cube with a desk or
+## cabinet painted on). Wood: a desk at desk height, its modesty panel toward you, a chunky CRT
+## monitor and a tray of papers on top (the monitor makes it tall enough to crouch behind), the
+## chair pushed in behind. Metal: two four-drawer filing cabinets side by side, a box file on top.
+func _build_office_box(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int, metal: bool) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var flip := 1.0 if lane % 2 == 0 else -1.0
+	if metal:
+		var grey := Color("6a7076")
+		for dx in [-0.24, 0.24]:
+			_box(holder, Vector3(0.46, 1.32, 0.62), Vector3(dx, 0.66, 0), grey)
+			for k in 4:  # the drawer fronts and their handles, toward you
+				_box(holder, Vector3(0.4, 0.28, 0.02), Vector3(dx, 0.18 + k * 0.32, 0.315), grey.lightened(0.12))
+				_box(holder, Vector3(0.12, 0.03, 0.03), Vector3(dx, 0.26 + k * 0.32, 0.33), Color("2a2c2e"))
+		_box(holder, Vector3(0.3, 0.22, 0.36), Vector3(-0.2 * flip, 1.43, 0.02), Color("2a4a7a"))  # a box file
+		return holder
+	var wood := Color("6a5038")
+	_box(holder, Vector3(1.2, 0.05, 0.72), Vector3(0, 0.76, 0), wood)  # the top
+	_box(holder, Vector3(1.16, 0.6, 0.03), Vector3(0, 0.44, 0.3), wood.darkened(0.2))  # modesty panel, toward you
+	for dx in [-0.57, 0.57]:
+		_box(holder, Vector3(0.05, 0.74, 0.7), Vector3(dx, 0.37, 0), wood.darkened(0.3))  # the ends
+	_box(holder, Vector3(0.4, 0.66, 0.62), Vector3(0.38 * flip, 0.37, 0), wood.darkened(0.1))  # drawer pedestal
+	# A beige CRT monitor turned a little, its screen away from you (you're looking at its back).
+	var crt := Node3D.new()
+	holder.add_child(crt)
+	crt.position = Vector3(-0.18 * flip, 0.78, -0.05)
+	crt.rotation.y = 0.25 * flip
+	_box(crt, Vector3(0.42, 0.38, 0.4), Vector3(0, 0.21, 0), Color("c8c0a8"))
+	_box(crt, Vector3(0.3, 0.26, 0.2), Vector3(0, 0.2, 0.28), Color("b8b098"))  # the tube's back
+	_box(crt, Vector3(0.3, 0.04, 0.26), Vector3(0, 0.02, 0), Color("a8a088"))  # its stand
+	_box(holder, Vector3(0.45, 0.03, 0.16), Vector3(-0.15 * flip, 0.8, -0.25), Color("d0c8b0"))  # keyboard
+	for k in 3:  # a tray of papers
+		_box(holder, Vector3(0.3, 0.02, 0.22), Vector3(0.35 * flip, 0.8 + k * 0.025, 0.05), Color("e8e4d8"))
+	# The chair, pushed in on the far side.
+	var chair := Color("2e3a4a")
+	_box(holder, Vector3(0.46, 0.08, 0.44), Vector3(-0.1 * flip, 0.48, -0.62), chair)
+	_box(holder, Vector3(0.44, 0.5, 0.07), Vector3(-0.1 * flip, 0.82, -0.86), chair)
+	_box(holder, Vector3(0.06, 0.44, 0.06), Vector3(-0.1 * flip, 0.22, -0.62), Color("1e1e1e"))
+	_box(holder, Vector3(0.5, 0.04, 0.5), Vector3(-0.1 * flip, 0.03, -0.62), Color("1e1e1e"))
+	return holder
+
+
 ## A keycard reader on the wall: a dark box with a slot and a red LED, `dz` along the road.
 func _card_reader(holder: Node3D, out: float, dz: float, red: Material) -> void:
 	_box(holder, Vector3(0.08, 0.3, 0.18), Vector3(out * 0.04, 1.25, dz), Color("1e2022"))
@@ -2558,6 +2851,8 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 				for dz in [-0.14, 0.14]:
 					_item_box(parent, seg, at, Vector3(ex, (y + 0.2) / 2.0, dz), Vector3(0.07, y + 0.2, 0.07), metal)  # legs
 				_item_box(parent, seg, at, Vector3(ex, 0.03, 0), Vector3(0.3, 0.06, 0.5), metal)  # foot
+		elif kind == "banner":
+			beam = _build_banner(parent, seg, at, ends)
 		elif kind == "girder":
 			beam = _build_gantry(parent, seg, at, ends) if _is_outdoor(seg, at) else _build_girder(parent, seg, at, y, ends)
 		elif kind == "bunting":
@@ -2808,9 +3103,9 @@ func _build_roof_wall(parent: Node3D, seg: Dictionary, at: float, x0: float, x1:
 	var cx := (x0 + x1) / 2.0
 	var dark := Color("3a3a36")
 	_box(holder, Vector3(w, 0.14, 1.25), Vector3(cx, 0.07, 0), dark)  # base frame
-	var body := _box(holder, Vector3(w - 0.08, 1.5, 1.15), Vector3(cx, 0.14 + 0.75, 0), Color.WHITE)
+	var body := _box(holder, Vector3(w - 0.08, 2.2, 1.15), Vector3(cx, 0.14 + 1.1, 0), Color.WHITE)  # taller than you: you stand behind it
 	body.material_override = PsxMaterials.textured(PsxTextures.hvac(), Vector2(3, 2))
-	_box(holder, Vector3(w, 0.06, 1.2), Vector3(cx, 1.67, 0), Color("7e7e74"))  # top panel
+	_box(holder, Vector3(w, 0.06, 1.2), Vector3(cx, 2.37, 0), Color("7e7e74"))  # top panel
 	var fans := maxi(1, roundi(w / 1.3))
 	for i in fans:
 		var fx := x0 + w * (i + 0.5) / fans
@@ -2823,9 +3118,9 @@ func _build_roof_wall(parent: Node3D, seg: Dictionary, at: float, x0: float, x1:
 		fan.mesh = cyl
 		fan.material_override = PsxMaterials.flat(Color("2e2e2a"))
 		holder.add_child(fan)
-		fan.position = Vector3(fx, 1.8, 0)
+		fan.position = Vector3(fx, 2.5, 0)
 		for r in 2:  # the grille over the fan
-			var bar := _box(holder, Vector3(0.86, 0.03, 0.05), Vector3(fx, 1.91, 0), Color("8a8a80"))
+			var bar := _box(holder, Vector3(0.86, 0.03, 0.05), Vector3(fx, 2.61, 0), Color("8a8a80"))
 			bar.rotation.y = r * PI / 2.0
 	# Refrigerant pipes from the unit down into the roof.
 	for dz in [-0.2, 0.0]:
@@ -2978,8 +3273,8 @@ func _build_booth(parent: Node3D, seg: Dictionary, at: float, x0: float, x1: flo
 
 
 ## The SECURITY WING's checkpoint turnstile, one per lane (a jump obstacle, user reference): a
-## low steel housing with a hazard band, a post, and a three-armed rotor with one arm across the
-## lane at knee height.
+## waist-high steel housing with a hazard band, a card post, and a three-armed rotor with one arm
+## across the lane at hip height (built to the player's scale, like the lobby's speed gates).
 func _build_turnstile(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
 	var holder := Node3D.new()
 	parent.add_child(holder)
@@ -2987,16 +3282,16 @@ func _build_turnstile(parent: Node3D, seg: Dictionary, at: float, x: float, lane
 	var side := -1.0 if lane % 2 == 0 else 1.0
 	var hx := side * (tuning.lane_width * 0.5 - 0.22)
 	var steel := Color("3e4447")
-	_box(holder, Vector3(0.34, 0.5, 0.62), Vector3(hx, 0.25, 0), steel)  # housing
+	_box(holder, Vector3(0.34, 0.92, 0.62), Vector3(hx, 0.46, 0), steel)  # housing
 	_box(holder, Vector3(0.36, 0.14, 0.64), Vector3(hx, 0.1, 0), Color.WHITE).material_override = \
 			PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 1))
-	_box(holder, Vector3(0.36, 0.04, 0.64), Vector3(hx, 0.52, 0), Color("8a9094"))  # top plate
-	_box(holder, Vector3(0.08, 0.32, 0.08), Vector3(hx, 0.68, -0.18), Color("8a9094"))  # card post
-	_box(holder, Vector3(0.1, 0.06, 0.1), Vector3(hx, 0.86, -0.18), Color.WHITE).material_override = PsxMaterials.glow(Color(1.0, 0.2, 0.12))
-	var arm := _box(holder, Vector3(tuning.lane_width - 0.45, 0.05, 0.05), Vector3(-side * 0.2, 0.42, 0), Color("c8ccce"))  # the arm across
+	_box(holder, Vector3(0.36, 0.04, 0.64), Vector3(hx, 0.94, 0), Color("8a9094"))  # top plate
+	_box(holder, Vector3(0.08, 0.3, 0.08), Vector3(hx, 1.1, -0.18), Color("8a9094"))  # card post
+	_box(holder, Vector3(0.1, 0.06, 0.1), Vector3(hx, 1.27, -0.18), Color.WHITE).material_override = PsxMaterials.glow(Color(1.0, 0.2, 0.12))
+	var arm := _box(holder, Vector3(tuning.lane_width - 0.45, 0.05, 0.05), Vector3(-side * 0.2, 0.8, 0), Color("c8ccce"))  # the arm across
 	arm.rotation.z = 0.0
 	for a in [-1.0, 1.0]:  # the rotor's other two arms, angled down and away
-		var other := _box(holder, Vector3(0.45, 0.05, 0.05), Vector3(hx - side * 0.2, 0.32, a * 0.08), Color("c8ccce"))
+		var other := _box(holder, Vector3(0.45, 0.05, 0.05), Vector3(hx - side * 0.2, 0.68, a * 0.08), Color("c8ccce"))
 		other.rotation = Vector3(a * 0.9, 0, side * 0.6)
 	return holder
 
@@ -3264,8 +3559,8 @@ func _build_start_room(seg: Dictionary) -> void:
 	_item_box(room, seg, -L, Vector3(0, CEILING_Y / 2.0, 0.15), Vector3(half * 2.0, CEILING_Y, 0.3), Color.WHITE).material_override = office
 	# The front wall, with a doorway in the player's lane.
 	var dx := _player.lane_x(tuning.lane_count / 2)
-	var dw := 1.2
-	var dh := 2.3
+	var dw := DOOR_W + 0.05
+	var dh := DOOR_H
 	var front := -0.15
 	var left_w := dx - dw / 2.0 + half
 	var right_w := half - (dx + dw / 2.0)
@@ -3304,6 +3599,12 @@ func _build_lamps(parent: Node3D, seg: Dictionary) -> void:
 	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
 	var n := 0
 	match theme.get("lamps", ""):
+		"atrium":
+			var z := ramp + 4.0
+			while z < length - 1.0:
+				_atrium_lamp(parent, seg, z, n % tuning.flicker_every == 3)
+				z += tuning.office_lamp_spacing * 1.2
+				n += 1
 		"pendant":
 			var z := ramp + 4.0
 			while z < length - 1.0:
@@ -3390,9 +3691,9 @@ func _build_marker(outer: Node3D, seg: Dictionary, at: float) -> void:
 	outer.add_child(parent)
 	var theme := _theme(seg["id"])
 	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
-	var top: float = CEILING_Y if theme.get("ceiling", false) else maxf(theme["height"], 3.0)
+	var top: float = _ceil(seg["id"]) if theme.get("ceiling", false) else maxf(theme["height"], GATE_H + 0.5)
 	var ow := MARKER_LANES * tuning.lane_width - 0.1  # the doorway
-	var dh := 2.5
+	var dh := GATE_H
 	var wall := PsxMaterials.textured(_stair_wall_texture(theme), Vector2(3, 2))
 	for s in [-1, 1]:
 		var w := edge - ow / 2.0 - 0.08
@@ -3488,7 +3789,7 @@ func _build_shutter(parent: Node3D, seg: Dictionary, at: float, ow: float, dh: f
 func _raise_shutter(shutter: Node3D) -> void:
 	RunLog.record_event("door_bash", {})
 	var tween := shutter.create_tween()
-	tween.tween_property(shutter, "position:y", shutter.position.y + 2.45, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(shutter, "position:y", shutter.position.y + GATE_H - 0.05, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
 ## Forced movement. The outer lanes can't get through a halfway marker's doorway: just before one,
@@ -3607,7 +3908,7 @@ func _build_locked_stub(seg: Dictionary, edge: Dictionary, slam: bool) -> Node3D
 	var stairs := _is_stairs(stub)
 	var width := tuning.lane_width + 0.4 if stairs else tuning.lane_count * tuning.lane_width + 2.2
 	var cx := _player.lane_x(_stair_lane(stub)) if stairs else 0.0
-	var h := 2.6 if stairs else maxf(_theme(stub["id"])["height"], 3.0)
+	var h := DOOR_H + 0.1 if stairs else maxf(_theme(stub["id"])["height"], 3.0)
 	var door := Node3D.new()
 	door.name = "LockdownDoor"
 	node.add_child(door)
@@ -3717,12 +4018,19 @@ func _sign_label(text: String, color: Color, width: float, pos: Vector3) -> Labe
 	return label
 
 
+## How high this area's ceiling is (the MAIN FLOOR LOBBY is a two-storey atrium).
+func _ceil(id: StringName) -> float:
+	return float(_theme(id).get("ceiling_y", CEILING_Y))
+
+
 func _theme(id: StringName) -> Dictionary:
 	return THEMES.get(_graph.node_data(id).get("theme", ""), THEMES["compound"])
 
 
 func _ground(id: StringName) -> Texture2D:
 	match _theme(id)["ground"]:
+		"lobby_floor":
+			return PsxTextures.lobby_floor()
 		"warehouse_floor":
 			return PsxTextures.warehouse_floor()
 		"canteen_floor":
@@ -3740,7 +4048,7 @@ func _ground(id: StringName) -> Texture2D:
 
 ## How long one floor tile is along the road (office tiles and roofing are square, one lane wide).
 func _ground_tile(id: StringName) -> float:
-	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "gravel"] else 4.0
+	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "gravel"] else 4.0
 
 
 func _wall_texture(theme: Dictionary) -> Texture2D:
@@ -3792,6 +4100,12 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.cover_wall()
 		"canteen_wall":
 			return PsxTextures.canteen_wall()
+		"lobby_wall":
+			return PsxTextures.lobby_wall()
+		"lobby_column":
+			return PsxTextures.lobby_column()
+		"lobby_ceiling":
+			return PsxTextures.lobby_ceiling()
 		"dock_wall":
 			return PsxTextures.dock_wall()
 		"concrete":

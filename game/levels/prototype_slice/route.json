@@ -7,12 +7,12 @@
   "nodes": [
     {
       "id": "main_floor_lobby",
-      "theme": "office",
+      "theme": "lobby",
       "tier": "ground",
       "length": 150,
       "bends": [{"at": 6, "side": "right"}, {"at": 76, "side": "left"}],
       "obstacles": [
-        {"kind": "box", "lanes": [3], "at": 20},
+        {"kind": "box", "lanes": [3, 4], "at": 20, "look": "reception"},
         {"kind": "box", "lanes": [1], "at": 22, "material": "metal"},
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 30},
         {"kind": "wall", "lanes": [3, 4], "at": 38},

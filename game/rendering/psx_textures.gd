@@ -1119,6 +1119,86 @@ static func olive_crate() -> Texture2D:
 	return _finish("olive_crate", img)
 
 
+## MAIN FLOOR LOBBY wall (user reference): dark polished granite in big panels, flecked, with
+## fine joints and a faint sheen.
+static func lobby_wall() -> Texture2D:
+	if _cache.has("lobby_wall"):
+		return _cache["lobby_wall"]
+	var img := _start("lobby_wall", Color("2e3034"), 0.03)
+	_aggregate(img, "lobby_wall_flecks", 220, 0.12)
+	for i in SIZE:
+		_put(img, i, 0, Color("1a1c1e"))
+		_put(img, 0, i, Color("1a1c1e"))
+		_put(img, 32, i, Color("1e2022"))
+	for i in 40:
+		_blend(img, 10 + i, 50 - i, Color("5a5e64"), 0.18)  # sheen
+	return _finish("lobby_wall", img)
+
+
+## MAIN FLOOR LOBBY column: pale grey stone blocks with vertical seams.
+static func lobby_column() -> Texture2D:
+	if _cache.has("lobby_column"):
+		return _cache["lobby_column"]
+	var img := _start("lobby_column", Color("5e6064"), 0.035)
+	_aggregate(img, "lobby_column_flecks", 160, 0.08)
+	for i in SIZE:
+		for x in [0, 21, 42]:
+			_put(img, x, i, Color("3a3c40"))
+	for x in SIZE:
+		_put(img, x, 0, Color("3a3c40"))
+		_put(img, x, 32, Color("44464a"))
+	return _finish("lobby_column", img)
+
+
+## MAIN FLOOR LOBBY floor (user reference): big polished tiles, dark and light in a checker, with a
+## glossy reflection streak. One tile per lane: alternate lanes come out dark and light.
+static func lobby_floor() -> Texture2D:
+	if _cache.has("lobby_floor"):
+		return _cache["lobby_floor"]
+	var img := _start("lobby_floor", Color("7c7e80"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if (x < 32) == (y < 32):
+				_put(img, x, y, Color("2e3034"))
+	_aggregate(img, "lobby_floor_flecks", 140, 0.08)
+	for i in SIZE:
+		_put(img, i, 0, Color("1e2022"))
+		_put(img, 0, i, Color("1e2022"))
+		_put(img, i, 32, Color("26282a"))
+		_put(img, 32, i, Color("26282a"))
+	for i in 28:
+		_blend(img, 18 + i / 2, 4 + i, Color("c8ccd0"), 0.22)  # a glossy reflection
+	return _finish("lobby_floor", img)
+
+
+## MAIN FLOOR LOBBY ceiling, high up: dark coffered panels.
+static func lobby_ceiling() -> Texture2D:
+	if _cache.has("lobby_ceiling"):
+		return _cache["lobby_ceiling"]
+	var img := _start("lobby_ceiling", Color("2a2c30"), 0.03)
+	_bevel(img, Rect2i(4, 4, 56, 56), 0.7, 1.2)
+	_bevel(img, Rect2i(10, 10, 44, 44), 1.15, 0.8)
+	return _finish("lobby_ceiling", img)
+
+
+## The company's logo (ARGUS) for the lobby's logo wall: a pale emblem of three blades and the name
+## in stencil letters, on dark granite.
+static func company_logo() -> Texture2D:
+	if _cache.has("company_logo"):
+		return _cache["company_logo"]
+	var img := _start("company_logo", Color("26282c"), 0.03)
+	var pale := Color("d8d0b8")
+	for b in 3:  # the emblem: three rising blades
+		var bx := 18 + b * 9
+		var h := 14 + b * 6
+		for y in range(40 - h, 40):
+			for x in range(bx, bx + 6):
+				if x - bx <= (y - (40 - h)) / 2 + 1:
+					_put(img, x, y, pale)
+	_stencil(img, "ARGUS", 14, 46, pale, 1.0)
+	return _finish("company_logo", img)
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
