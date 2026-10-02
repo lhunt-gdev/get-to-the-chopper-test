@@ -1199,6 +1199,98 @@ static func company_logo() -> Texture2D:
 	return _finish("company_logo", img)
 
 
+## MAIN FLOOR EXIT pillar (user reference): speckled grey granite blocks, a dark band round it.
+static func exit_granite() -> Texture2D:
+	if _cache.has("exit_granite"):
+		return _cache["exit_granite"]
+	var img := _start("exit_granite", Color("6e7270"), 0.04)
+	_aggregate(img, "exit_granite_flecks", 420, 0.2)
+	for x in SIZE:
+		_put(img, x, 0, Color("3e4240"))
+		_put(img, x, 32, Color("4a4e4c"))
+		for y in range(44, 50):  # the dark band
+			_put(img, x, y, Color("2a2c2c").lightened(0.04 * ((x * 7 + y * 3) % 3)))
+	for y in SIZE:
+		_put(img, 0, y, Color("4a4e4c"))
+	return _finish("exit_granite", img)
+
+
+## MAIN FLOOR EXIT floor (user reference): big polished dark granite tiles, speckled, with the odd
+## paler tile and a glossy sheen. One tile per lane.
+static func exit_floor() -> Texture2D:
+	if _cache.has("exit_floor"):
+		return _cache["exit_floor"]
+	var img := _start("exit_floor", Color("3a3e40"), 0.03)
+	for y in SIZE:
+		for x in SIZE:
+			if x >= 32 and y < 32:
+				_put(img, x, y, Color("4c5052"))  # a paler tile
+	_aggregate(img, "exit_floor_flecks", 260, 0.14)
+	for i in SIZE:
+		_put(img, i, 0, Color("1e2224"))
+		_put(img, 0, i, Color("1e2224"))
+		_put(img, i, 32, Color("24282a"))
+		_put(img, 32, i, Color("24282a"))
+	for i in 30:
+		_blend(img, 40 + i / 3, 34 + i / 2 * 2 % 28, Color("aab4b8"), 0.16)  # a glossy sheen
+	return _finish("exit_floor", img)
+
+
+## MAIN FLOOR EXIT ceiling (user reference): dark slabs between darker beams.
+static func exit_ceiling() -> Texture2D:
+	if _cache.has("exit_ceiling"):
+		return _cache["exit_ceiling"]
+	var img := _start("exit_ceiling", Color("34383a"), 0.04)
+	for i in SIZE:
+		for w in 5:
+			_put(img, i, w, Color("1a1c1e"))
+			_put(img, w, i, Color("1a1c1e"))
+	_bevel(img, Rect2i(5, 5, 59, 59), 1.12, 0.85)
+	return _finish("exit_ceiling", img)
+
+
+## The night city seen through the MAIN FLOOR EXIT's glass (user reference): blocks of dark
+## buildings of mixed heights with lit windows in rows, against the night sky (deep blue going
+## purple at the horizon, a few stars). Opaque: one backdrop, nothing needs to show through it.
+static func city_backdrop() -> Texture2D:
+	if _cache.has("city_backdrop"):
+		return _cache["city_backdrop"]
+	var w := 128
+	var h := 64
+	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
+	var rng := _rng("city_backdrop_blocks")
+	for y in h:
+		var sky := Color("0a1024").lerp(Color("2c1c38"), pow(float(y) / h, 1.5))
+		for x in w:
+			img.set_pixel(x, y, sky)
+	for k in 40:
+		img.set_pixel(rng.randi_range(0, w - 1), rng.randi_range(0, 20), Color("c8d0e0").darkened(rng.randf_range(0.0, 0.5)))
+	# Two rows of buildings: tall ones behind, lower ones in front, both with lit windows.
+	for layer in 2:
+		var x := -rng.randi_range(0, 6)
+		while x < w:
+			var bw := rng.randi_range(10, 22)
+			var top := rng.randi_range(6, 30) if layer == 0 else rng.randi_range(28, 44)
+			var base := Color("0c1018").lightened(0.03 * layer + rng.randf_range(0.0, 0.04))
+			var lit := rng.randf_range(0.25, 0.6)
+			for bx in range(maxi(x, 0), mini(x + bw, w)):
+				for y in range(top, h):
+					var c := base
+					if (bx - x) % 4 in [1, 2] and (y - top) % 4 in [2, 3] and bx - x > 0 and bx - x < bw - 1 and y > top + 1:
+						if rng.randf() < lit:
+							c = Color("e0c070").darkened(rng.randf_range(0.0, 0.35))
+						else:
+							c = base.lightened(0.06)
+					img.set_pixel(bx, y, c)
+			if layer == 0 and rng.randf() < 0.3 and x + bw / 2 < w and x + bw / 2 >= 0:
+				img.set_pixel(x + bw / 2, top - 1, Color("ff3020"))  # an aviation light
+			x += bw + rng.randi_range(0, 3)
+	var tex := ImageTexture.create_from_image(img)
+	_cache["city_backdrop"] = tex
+	return tex
+
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)

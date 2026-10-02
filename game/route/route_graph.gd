@@ -30,7 +30,7 @@ const CROSSING_WINDOW := 4.0
 const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "booth": 3.5, "trooper": 0.5}
 const MIN_GAP := 1.0
 ## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
-const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe", "bunting", "girder", "banner"], "box": ["crate", "desk", "cabinet", "roof_vent", "reception"],
+const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe", "bunting", "girder", "banner", "exit_sign"], "box": ["crate", "desk", "cabinet", "roof_vent", "reception"],
 		"barrier": ["cabinet", "blockade", "vent"]}
 ## Themes whose slide obstacles are live wires (unless "look" says otherwise).
 const WIRE_THEMES := ["office", "security", "canteen"]

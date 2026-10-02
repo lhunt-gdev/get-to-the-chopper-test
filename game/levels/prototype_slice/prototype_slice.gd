@@ -21,8 +21,9 @@ const CEILING_Y := 4.6
 ## than a person, a zone door taller still. Every door uses these.
 const DOOR_H := 2.5
 const DOOR_W := 1.15
-## The zone doors (double doors, the barred checkpoint gates, the warehouse shutter).
-const GATE_H := 3.1
+## The zone doors (double doors, the barred checkpoint gates, the warehouse shutter): tall enough
+## that the camera (3.4 m up behind you) passes under the lintel instead of through it.
+const GATE_H := 3.5
 ## A halfway marker's double doorway spans this many middle lanes.
 const MARKER_LANES := 3
 ## Height of a stairwell's ceiling above the stairs.
@@ -123,6 +124,16 @@ const THEMES := {
 			"lamps": "atrium", "fog_color": Color("100f12"), "stair_wall": "lobby_wall", "stair_door": "door", "color": Color("2a2c30"),
 			"height": 9.0, "ground": "lobby_floor", "ceiling": true, "wall_decor": "lobby", "mezzanine": true,
 			"skins": {"barrier_looks": ["speedgate"], "pipe": "banner", "box_look": "lobby", "wall": "lobby_column"}},
+	# MAIN FLOOR EXIT (user reference): the way out at night. Glass walls between big granite pillars
+	# with the night city outside, warm cube lamps on the pillars, a polished dark granite floor, a dark
+	# beamed ceiling, planters and benches along the glass; speed gates to jump, planters for box
+	# cover, a hanging green EXIT sign to duck under, granite pillars for cover walls; a glass front
+	# with sliding doors at the end.
+	"exit": {"wall": "office", "wall_tex": "exit_granite", "ceiling_tex": "exit_ceiling", "ambient": Color(0.15, 0.16, 0.2),
+			"lamps": "ceiling", "lamp_color": Color(0.82, 1.0, 0.9), "fog_color": Color("0c0e16"), "stair_wall": "exit_granite",
+			"stair_door": "door", "color": Color("3a3e40"), "height": CEILING_Y, "ground": "exit_floor", "ceiling": true,
+			"wall_decor": "exit", "glass_walls": true, "pillar_every": 10, "pillar_tex": "exit_granite", "glass_front": true,
+			"skins": {"barrier_looks": ["speedgate"], "pipe": "exit_sign", "box_look": "planter", "wall": "exit_granite"}},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
 	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "helipad", "snow": true,
 			"color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
@@ -865,6 +876,8 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				mesh = reception
 			elif box_look in ["office", "cabinets"]:
 				mesh = _build_office_box(node, seg, at, x, lane, box_look == "cabinets" or String(ob.get("material", "wood")) == "metal")
+			elif box_look == "planter":
+				mesh = _build_exit_box(node, seg, at, x, lane)
 			elif box_look == "lobby":
 				mesh = _build_lobby_box(node, seg, at, x, lane, String(ob.get("material", "wood")) == "metal")
 			elif box_look == "warehouse":
@@ -965,6 +978,9 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 	# its own door).
 	if _graph.node_data(id).has("marker") and RouteGraph.via_of(edge) != "stairs":
 		_build_marker(node, seg, float(_graph.node_data(id)["marker"].get("at", length / 2.0)))
+	# The MAIN FLOOR EXIT's glass front with its sliding doors (not with the walls: they can be rebuilt).
+	if _theme(id).get("glass_front", false) and _graph.all_next(id).size() == 1:
+		_build_exit_front(node, seg)
 	if not _has_straight(id) and _graph.end_type(id) == "":
 		_build_dead_end(node, seg)
 	if RouteGraph.via_of(edge) == "ladder":
@@ -1429,14 +1445,22 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 				if on_ramp:
 					continue  # a ladder has none (you see the drop); stairs have their own stairwell
 				_strip(parent, seg, piece.x, piece.y, side * (road_w / 2.0 + 0.5), 1.0, 0.02, PsxTextures.concrete(), 1.0, 2.0)
-				_wall(parent, seg, piece.x, piece.y, wx, side, h, wall_tex)
+				if theme.get("glass_walls", false):
+					_glass_wall(parent, seg, piece.x, piece.y, wx, side, h)
+				else:
+					_wall(parent, seg, piece.x, piece.y, wx, side, h, wall_tex)
 		# At every bend, a short wall joins the two legs' walls, so no gap shows the outside.
 		_join_bends(parent, seg, side, wx, maxf(open, ramp), h, PsxMaterials.textured(wall_tex, Vector2(1, h / 2.0)))
 		# Pillars every 5 m, alternating light and dark, give a sense of speed. Big ones hide bend corners.
 		var ph := maxf(h, 1.2)
-		for i in range(ceili(maxf(open, ramp) / 5.0) * 5, int(length), 5):
+		var every: int = int(theme.get("pillar_every", 5))
+		for i in range(ceili(maxf(open, ramp) / float(every)) * every, int(length), every):
 			if (i > hole.x - 0.5 and i < hole.y + 0.5) or (i > alcove.x - 0.5 and i < alcove.y + 0.5) or _is_outdoor(seg, i) \
 					or (theme.get("mezzanine", false) and side < 0 and i > 34 and i < 50):  # the lobby's grand staircase
+				continue
+			if theme.has("pillar_tex"):  # big textured pillars (the MAIN FLOOR EXIT's granite)
+				_item_box(parent, seg, i, Vector3(side * (road_w / 2.0 + 0.6), ph / 2.0, 0), Vector3(0.8, ph, 0.8), Color.WHITE).material_override = \
+						PsxMaterials.textured(_obstacle_texture(theme["pillar_tex"]), Vector2(1, ph / 2.0))
 				continue
 			var c: Color = theme["color"].lightened(0.25) if (i / 5) % 2 == 0 else theme["color"].darkened(0.5)
 			_item_box(parent, seg, i, Vector3(side * (road_w / 2.0 + 0.8), ph / 2.0, 0), Vector3(0.35, ph, 0.35), c)
@@ -1717,6 +1741,9 @@ func _build_roof_edges(parent: Node3D, seg: Dictionary, open_l: float, open_r: f
 
 ## Office walls: now and then a door, a window or a notice board between the pillars.
 func _wall_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	if str(_theme(seg["id"]).get("wall_decor", "")) == "exit":
+		_exit_decor(parent, seg, side, from, to)
+		return
 	if str(_theme(seg["id"]).get("wall_decor", "")) == "lobby":
 		_lobby_decor(parent, seg, side, from, to)
 		return
@@ -2708,6 +2735,180 @@ func _build_office_box(parent: Node3D, seg: Dictionary, at: float, x: float, lan
 	return holder
 
 
+## MAIN FLOOR EXIT (user reference): a glass wall along one piece of the hall instead of a solid
+## one: a granite skirting, tall panes of glass in dark mullions, a dark header under the ceiling.
+## Outside, the night city: a dark plaza out to a backdrop of lit buildings against the night sky,
+## close enough that nothing else in the mission shows through the glass.
+func _glass_wall(parent: Node3D, seg: Dictionary, a: float, b: float, wx: float, side: int, h: float) -> void:
+	var l := b - a
+	var mid := (a + b) / 2.0
+	var frame := Color("1e2224")
+	_item_box(parent, seg, mid, Vector3(wx, 0.12, 0), Vector3(0.14, 0.24, l), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.exit_granite(), Vector2(l / 2.0, 1))  # skirting
+	_item_box(parent, seg, mid, Vector3(wx, (0.24 + h - 0.3) / 2.0, 0), Vector3(0.04, h - 0.54, l), Color.WHITE).material_override = \
+			PsxMaterials.glass(Color(0.5, 0.62, 0.78, 0.14))
+	_item_box(parent, seg, mid, Vector3(wx, h - 0.15, 0), Vector3(0.16, 0.3, l), frame)  # header
+	_item_box(parent, seg, mid, Vector3(wx, 0.27, 0), Vector3(0.1, 0.06, l), frame)  # sill rail
+	var z := ceilf(a / 2.5) * 2.5
+	while z < b:
+		_item_box(parent, seg, z, Vector3(wx, h / 2.0, 0), Vector3(0.08, h, 0.08), frame)  # mullions
+		z += 2.5
+	# Outside: the plaza, then the city against the sky (one opaque, unlit backdrop).
+	var out := 10.0
+	_strip(parent, seg, a, b, wx + side * out / 2.0, out, -0.03, PsxTextures.yard_asphalt(), out / 4.0, 4.0)
+	var i := _leg_index(seg, mid)
+	var leg: Dictionary = seg["legs"][i]
+	var y0 := -0.5
+	var bh := 7.5  # sized so the sky shows over the skyline through the top of the glass
+	var city := _plane(parent, Vector2(l, bh), Vector3.ZERO, PsxTextures.city_backdrop(), Vector2(l / 15.0, 1.0), PlaneMesh.FACE_Z)
+	city.material_override = PsxMaterials.textured(PsxTextures.city_backdrop(), Vector2(l / 15.0, 1.0), true, Vector2(a / 15.0, 0))
+	city.transform = Transform3D(leg["xf"].basis * Basis(Vector3.UP, -side * PI / 2.0),
+			leg["xf"] * Vector3(wx + side * out, y0 + bh / 2.0, -(mid - leg["start"])))
+	# A row of lamp posts out on the plaza, their light on the paving.
+	var p := ceilf(a / 15.0) * 15.0 + 7.0
+	while p < b - 1.0:
+		_item_box(parent, seg, p, Vector3(wx + side * 5.5, 1.8, 0), Vector3(0.1, 3.6, 0.1), Color("2a2e32"))
+		_item_box(parent, seg, p, Vector3(wx + side * 5.5, 3.65, 0), Vector3(0.3, 0.14, 0.3), Color.WHITE).material_override = \
+				PsxMaterials.glow(Color("ffc880"))
+		_item_box(parent, seg, p, Vector3(wx + side * 5.5, 0.0, 0), Vector3(2.4, 0.01, 2.4), Color.WHITE).material_override = \
+				PsxMaterials.glass(Color(1.0, 0.75, 0.4, 0.12))  # its pool of light
+		p += 15.0
+
+
+## MAIN FLOOR EXIT walls (user reference), between the big granite pillars: a warm cube lamp on each
+## pillar facing the road (its reflection on the polished floor), and against the glass a concrete
+## planter of bushes or a wooden bench, in turn. Dark beams across the ceiling at the pillars.
+func _exit_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var every: int = int(_theme(seg["id"]).get("pillar_every", 10))
+	var lamps := 0
+	for i in range(ceili(from / float(every)) * every, int(to), every):
+		var near_bend := false
+		for leg in seg["legs"]:
+			if absf(leg["start"] - i) < 1.3:
+				near_bend = true
+		if near_bend:
+			continue
+		var sconce := _item_box(parent, seg, i, Vector3(side * (road_half + 0.16), 2.7, 0), Vector3(0.3, 0.3, 0.3), Color.WHITE)
+		sconce.material_override = PsxMaterials.glow(Color("ffd890"))
+		if lamps < 4:
+			_ambience.add_lamp(sconce, Color(1.0, 0.8, 0.5) * 1.1, 4.5, {"alert": false})
+			lamps += 1
+		# Its reflection in the polished floor: a faint warm streak running out toward you.
+		_item_box(parent, seg, i + 0.9, Vector3(side * (road_half - 0.35), 0.012, 0), Vector3(0.32, 0.004, 1.6), Color.WHITE).material_override = \
+				PsxMaterials.glass(Color(1.0, 0.82, 0.5, 0.16))
+		if side < 0:  # one dark beam across the ceiling per pillar pair
+			_item_box(parent, seg, i, Vector3(0, CEILING_Y - 0.2, 0), Vector3(road_half * 2.0 + 2.0, 0.4, 0.45), Color("1a1c1e"))
+		var at := float(i) + every / 2.0
+		if at > to - 2.0:
+			continue
+		var holder := Node3D.new()
+		parent.add_child(holder)
+		holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(side * (road_half + 0.55), 0, 0))
+		if (i / every + (1 if side > 0 else 0)) % 2 == 0:
+			_exit_planter(holder, 2.6, 0.7, absi(hash([seg["id"], i, side])))
+		else:  # a granite bench with a wooden seat
+			_box(holder, Vector3(0.6, 0.38, 1.9), Vector3(0, 0.19, 0), Color.WHITE).material_override = \
+					PsxMaterials.textured(PsxTextures.exit_granite(), Vector2(3, 1))
+			_box(holder, Vector3(0.66, 0.07, 2.0), Vector3(0, 0.42, 0), Color("8a6234"))
+
+
+## A concrete planter trough of `length` along z (local), bushes heaped in it to about `height`
+## above its rim. Used along the walls and as box cover.
+func _exit_planter(holder: Node3D, length: float, depth: float, seed_v: int) -> void:
+	var rim := 0.72
+	_box(holder, Vector3(depth, rim, length), Vector3(0, rim / 2.0, 0), Color("7a7c78"))
+	_box(holder, Vector3(depth - 0.12, 0.04, length - 0.12), Vector3(0, rim, 0), Color("2a2018"))  # soil
+	var n := maxi(4, int(length * 3.0))
+	for k in n:
+		var t := (k + 0.5) / n
+		var r := float((seed_v + k * 37) % 7) / 7.0
+		var bush := _box(holder, Vector3(depth * 0.6, 0.42 + 0.2 * r, length / n * 1.8), Vector3((r - 0.5) * depth * 0.3, rim + 0.22 + 0.1 * r,
+				-length / 2.0 + t * length), Color("2a4a22").lightened(0.06 * ((seed_v + k) % 3)))
+		bush.rotation = Vector3(0.3 * (r - 0.5), 0.5 * r, 0.25 * (0.5 - r))
+
+
+## MAIN FLOOR EXIT box cover: a big concrete planter heaped with bushes, tall enough to hide behind.
+func _build_exit_box(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(x, 0, 0))
+	_exit_planter(holder, 1.15, 0.9, absi(hash([seg["id"], at, lane])))
+	return holder
+
+
+## MAIN FLOOR EXIT duck-under: a big green EXIT sign hanging on rods from the ceiling across the
+## blocked lanes, its bottom edge at head height.
+func _build_exit_sign(parent: Node3D, seg: Dictionary, at: float, ends: Array) -> Node3D:
+	var frame := _frame_at(seg, at)
+	var e0: float = ends[0]["x"]
+	var e1: float = ends[1]["x"]
+	var w := e1 - e0
+	var bottom := WIRE_LOW - 0.15
+	var h := 0.6
+	var cx := (e0 + e1) / 2.0
+	var sign := _box(parent, Vector3(w, h, 0.14), Vector3.ZERO, Color("1a1e1c"))
+	sign.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h / 2.0, 0))
+	var face := _box(parent, Vector3(w - 0.1, h - 0.1, 0.02), Vector3.ZERO, Color.WHITE)
+	face.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h / 2.0, 0.08))
+	face.material_override = PsxMaterials.glow(Color("1f9a4a"))
+	var label := _sign_label("EXIT  >>", Color("e8fff0"), w * 0.7, Vector3(0, 0, 0.1))
+	sign.add_child(label)
+	label.modulate = Color("f4fff8")
+	var top := _ceil(seg["id"])
+	for rx in [e0 + 0.3, e1 - 0.3]:
+		var rod := top - (bottom + h)
+		_box(parent, Vector3(0.04, rod, 0.04), Vector3.ZERO, Color("2a2c2e")).transform = \
+				frame * Transform3D(Basis.IDENTITY, Vector3(rx, bottom + h + rod / 2.0, 0))
+	var glow := Node3D.new()
+	parent.add_child(glow)
+	glow.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom - 0.4, 0.6))
+	_ambience.add_lamp(glow, Color(0.4, 1.0, 0.6) * 0.8, 3.5, {"alert": false})
+	return sign
+
+
+## The MAIN FLOOR EXIT's way out (user reference): a glass front across the end of the hall, granite
+## pillars at its ends, a glass transom over three big glass doors across the whole road that you
+## burst through, swinging out (user), and a green EXIT sign over the middle.
+func _build_exit_front(parent: Node3D, seg: Dictionary) -> void:
+	var z: float = float(seg["length"]) - 0.3
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var frame := Color("1e2224")
+	var granite := PsxMaterials.textured(PsxTextures.exit_granite(), Vector2(1, 2))
+	for s in [-1.0, 1.0]:
+		_item_box(parent, seg, z, Vector3(s * (road_half + 0.5), CEILING_Y / 2.0, 0), Vector3(1.0, CEILING_Y, 0.8), Color.WHITE).material_override = granite
+	var dh := GATE_H
+	_item_box(parent, seg, z, Vector3(0, dh + 0.08, 0), Vector3(road_half * 2.0, 0.16, 0.2), frame)  # the door head
+	_item_box(parent, seg, z, Vector3(0, (dh + 0.16 + CEILING_Y) / 2.0, 0), Vector3(road_half * 2.0, CEILING_Y - dh - 0.16, 0.04), Color.WHITE) \
+			.material_override = PsxMaterials.glass(Color(0.5, 0.62, 0.78, 0.16))  # transom
+	_item_box(parent, seg, z, Vector3(0, CEILING_Y - 0.12, 0), Vector3(road_half * 2.0, 0.24, 0.2), frame)
+	var exit := _item_box(parent, seg, z + 0.15, Vector3(0, dh + 0.42, 0), Vector3(0.8, 0.3, 0.06), Color.WHITE)
+	exit.material_override = PsxMaterials.glow(Color("30c060"))
+	exit.add_child(_sign_label("EXIT", Color("e8fff0"), 0.6, Vector3(0, 0, 0.04)))
+	# Three big glass doors across the whole road (user): the left and middle ones hinged on their
+	# left edge, the right one on its right edge. You burst through, and they swing out ahead of you.
+	var dw := road_half * 2.0 / 3.0
+	for k in 3:
+		var hinge_x := -road_half + dw * k if k < 2 else road_half
+		var reach := 1.0 if k < 2 else -1.0  # which way the door runs from its hinge
+		var hinge := Node3D.new()
+		parent.add_child(hinge)
+		hinge.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(hinge_x, 0, 0))
+		var cx := reach * dw / 2.0
+		_box(hinge, Vector3(dw - 0.08, dh - 0.12, 0.03), Vector3(cx, dh / 2.0, 0), Color.WHITE).material_override = \
+				PsxMaterials.glass(Color(0.55, 0.68, 0.82, 0.22))
+		for ex in [0.04, dw - 0.04]:  # the frame round it
+			_box(hinge, Vector3(0.08, dh - 0.04, 0.07), Vector3(reach * ex, dh / 2.0, 0), frame)
+		for ey in [0.06, dh - 0.06]:
+			_box(hinge, Vector3(dw - 0.04, 0.12, 0.07), Vector3(cx, ey, 0), frame)
+		_box(hinge, Vector3(dw - 0.5, 0.06, 0.08), Vector3(cx, 1.05, 0.06), Color("b8b8b0"))  # push bar
+		if not seg.get("no_doors", false):
+			var door := {"node": hinge, "at": seg["start"] + z, "owner": seg["node"], "seg": seg, "swing": reach}
+			if k == 0:  # one crash for the three
+				door["sound"] = "door_steel"
+			_doors.append(door)
+
+
 ## A keycard reader on the wall: a dark box with a slot and a red LED, `dz` along the road.
 func _card_reader(holder: Node3D, out: float, dz: float, red: Material) -> void:
 	_box(holder, Vector3(0.08, 0.3, 0.18), Vector3(out * 0.04, 1.25, dz), Color("1e2022"))
@@ -2866,6 +3067,8 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 				for dz in [-0.14, 0.14]:
 					_item_box(parent, seg, at, Vector3(ex, (y + 0.2) / 2.0, dz), Vector3(0.07, y + 0.2, 0.07), metal)  # legs
 				_item_box(parent, seg, at, Vector3(ex, 0.03, 0), Vector3(0.3, 0.06, 0.5), metal)  # foot
+		elif kind == "exit_sign":
+			beam = _build_exit_sign(parent, seg, at, ends)
 		elif kind == "banner":
 			beam = _build_banner(parent, seg, at, ends)
 		elif kind == "girder":
@@ -4071,6 +4274,8 @@ func _ground(id: StringName) -> Texture2D:
 	match _theme(id)["ground"]:
 		"lobby_floor":
 			return PsxTextures.lobby_floor()
+		"exit_floor":
+			return PsxTextures.exit_floor()
 		"warehouse_floor":
 			return PsxTextures.warehouse_floor()
 		"canteen_floor":
@@ -4088,7 +4293,7 @@ func _ground(id: StringName) -> Texture2D:
 
 ## How long one floor tile is along the road (office tiles and roofing are square, one lane wide).
 func _ground_tile(id: StringName) -> float:
-	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "gravel"] else 4.0
+	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "exit_floor", "gravel"] else 4.0
 
 
 func _wall_texture(theme: Dictionary) -> Texture2D:
@@ -4142,6 +4347,10 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.canteen_wall()
 		"lobby_wall":
 			return PsxTextures.lobby_wall()
+		"exit_granite":
+			return PsxTextures.exit_granite()
+		"exit_ceiling":
+			return PsxTextures.exit_ceiling()
 		"lobby_column":
 			return PsxTextures.lobby_column()
 		"lobby_ceiling":

@@ -208,7 +208,7 @@
     },
     {
       "id": "main_floor_exit",
-      "theme": "office",
+      "theme": "exit",
       "tier": "ground",
       "length": 110,
       "marker": {"at": 8},
