@@ -35,7 +35,8 @@ expect cover       "reason=extracted alert=2 route=$G | covers=1 hits=0 missed=1
 # camper never leaves cover, so the alarm runner gets away too.
 expect camper      "reason=chopper_left alert=2 route=MAIN FLOOR LOBBY | covers=1"
 expect ground_loud "reason=extracted alert=3 route=$G | covers=0"
-expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=2"
+# The dock's alarm box is out in the yard, in plain view: the bot shoots all three.
+expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=3"
 expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1"
 expect dog_bite    "reason=extracted alert=2 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1 doors=12 dogs=1/0/"
 expect dog_dodge   "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 dogs=0/1/"

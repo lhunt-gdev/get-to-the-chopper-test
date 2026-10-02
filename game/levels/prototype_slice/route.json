@@ -172,7 +172,8 @@
     },
     {
       "id": "loading_dock",
-      "theme": "office",
+      "theme": "dock",
+      "outdoor": {"at": 50, "length": 40},
       "tier": "ground",
       "length": 120,
       "bends": [{"at": 70, "side": "left"}],
@@ -182,7 +183,7 @@
         {"kind": "box", "lanes": [4], "at": 34},
         {"kind": "barrier", "lanes": [0, 1, 2], "at": 40},
         {"kind": "wall", "lanes": [3, 4], "at": 48},
-        {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 54},
+        {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 38},
         {"kind": "pipe", "lanes": [1, 2, 3], "at": 60},
         {"kind": "box", "lanes": [1], "at": 66},
         {"kind": "barrier", "lanes": [2, 3], "at": 74},

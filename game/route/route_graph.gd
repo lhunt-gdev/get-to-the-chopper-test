@@ -337,8 +337,8 @@ func validate() -> PackedStringArray:
 			if float(e.get("at", -1)) < 0.0 or float(e.get("at", -1)) > length:
 				problems.append("node '%s': enemy at %s m is outside the segment" % [id, e.get("at")])
 		# A room built into a side wall (the canteen's kitchen) needs a straight stretch of wall.
-		if n.has("alcove"):
-			var al: Dictionary = n["alcove"]
+		var alcoves: Array = n.get("alcove", []) if n.get("alcove", []) is Array else [n["alcove"]]
+		for al: Dictionary in alcoves:
 			var a0 := float(al.get("at", -1))
 			var a1 := a0 + float(al.get("length", 16.0))
 			if a0 < MARKER_CLEAR_AFTER + ZONE_DOOR_AT or a1 > length - 2.0:
@@ -347,6 +347,20 @@ func validate() -> PackedStringArray:
 				var b := float(bend.get("at", 0))
 				if a1 > b - 2.0 and a0 < b + BEND_RUN + 2.0:
 					problems.append("node '%s': the alcove at %s m runs into the bend at %s m" % [id, al.get("at"), b])
+		# An outdoor stretch (the dock's yard): its doors need straight wall, clear of the zone door.
+		if n.has("outdoor"):
+			var o0 := float(n["outdoor"].get("at", -1))
+			var o1 := o0 + float(n["outdoor"].get("length", 40.0))
+			if o0 < MARKER_CLEAR_AFTER + ZONE_DOOR_AT or o1 > length - 6.0:
+				problems.append("node '%s': the outdoor stretch at %s m must sit clear of the zone door and the end" % [id, o0])
+			for bend in n.get("bends", []):
+				var b := float(bend.get("at", 0))
+				for door in [o0, o1]:
+					if door > b - 3.0 and door < b + BEND_RUN + 3.0:
+						problems.append("node '%s': the outdoor stretch's door at %s m is on the bend at %s m" % [id, door, b])
+			for ob in n.get("obstacles", []):
+				if String(ob.get("kind", "")) == "tripwire" and float(ob.get("at", 0)) > o0 - 1.0 and float(ob.get("at", 0)) < o1 + 1.0:
+					problems.append("node '%s': no tripwires in the outdoor stretch (nothing to mount them on)" % id)
 		# Searchlights (user): only on the open roofs, not right outside a stairwell, 20 m apart.
 		var lights: Array = n.get("searchlights", [])
 		var entered_by_stairs := false

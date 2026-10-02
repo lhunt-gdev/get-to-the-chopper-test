@@ -54,6 +54,17 @@ static func asphalt() -> Texture2D:
 	return _finish("asphalt", img)
 
 
+## Asphalt with no lane line (the LOADING DOCK's yard, user): worn stones, oil stains, cracks.
+static func yard_asphalt() -> Texture2D:
+	if _cache.has("yard_asphalt"):
+		return _cache["yard_asphalt"]
+	var img := _start("yard_asphalt", ROAD, 0.05)
+	_aggregate(img, "yard_asphalt_stones", 260, 0.07)
+	_blotches(img, "yard_asphalt_oil", 3, 4, 8, Color("1e1e1c"), 0.35)
+	_cracks(img, "yard_asphalt_cracks", 3, 22, 0.6)
+	return _finish("yard_asphalt", img)
+
+
 ## Concrete slabs (the helipad, kerbs, slabs): stained, with recessed joints.
 static func concrete() -> Texture2D:
 	if _cache.has("concrete"):
@@ -966,6 +977,28 @@ static func fridge() -> Texture2D:
 		for x in range(6, 58):
 			_put(img, x, y, Color("3a3e40"))
 	return _finish("fridge", img)
+
+
+## LOADING DOCK wall (user reference): big grey precast concrete blocks, two courses a tile, with
+## a darker band at the bottom, chips, damp and grime.
+static func dock_wall() -> Texture2D:
+	if _cache.has("dock_wall"):
+		return _cache["dock_wall"]
+	var img := _start("dock_wall", Color("6e7270"), 0.04)
+	_noise(img, "dock_wall_mottle", 4, 0.05)
+	for r in 2:
+		var off := 0 if r == 0 else 32
+		_bevel(img, Rect2i(0, r * 26, 32, 26), 1.1, 0.8)
+		_bevel(img, Rect2i(32, r * 26, 32, 26), 1.1, 0.8)
+		for y in range(r * 26, r * 26 + 26):
+			_put(img, (off + 16) % SIZE, y, Color("4a4e4c"))
+	for y in range(52, SIZE):
+		for x in SIZE:
+			_put(img, x, y, img.get_pixel(x, y).darkened(0.45))
+	_streaks(img, "dock_wall_damp", 3, Color("4a4e4a"), 0.22)
+	_blotches(img, "dock_wall_chips", 4, 1, 2, Color("8a8e8a"), 0.4)
+	_grime_bottom(img, "dock_wall", 50, 0.3)
+	return _finish("dock_wall", img)
 
 
 ## WAREHOUSE wall (user reference): dark grey corrugated steel cladding, vertical ribs, streaks.
