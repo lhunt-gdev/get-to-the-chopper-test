@@ -138,7 +138,7 @@
     },
     {
       "id": "warehouse",
-      "theme": "office",
+      "theme": "warehouse",
       "tier": "ground",
       "length": 130,
       "marker": {"at": 8},

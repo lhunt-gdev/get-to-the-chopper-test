@@ -968,6 +968,124 @@ static func fridge() -> Texture2D:
 	return _finish("fridge", img)
 
 
+## WAREHOUSE wall (user reference): dark grey corrugated steel cladding, vertical ribs, streaks.
+static func warehouse_wall() -> Texture2D:
+	if _cache.has("warehouse_wall"):
+		return _cache["warehouse_wall"]
+	var img := _start("warehouse_wall", Color("3e4448"), 0.03)
+	for x in SIZE:
+		var k := 1.0 + 0.16 * sin(x * TAU / 8.0)
+		for y in SIZE:
+			_shade(img, x, y, k)
+	_streaks(img, "warehouse_wall_rust", 3, Color("4a3a2a"), 0.2)
+	_grime_bottom(img, "warehouse_wall", 48, 0.35)
+	return _finish("warehouse_wall", img)
+
+
+## WAREHOUSE roof seen from below: dark corrugated sheets between steel purlins, almost black.
+static func warehouse_ceiling() -> Texture2D:
+	if _cache.has("warehouse_ceiling"):
+		return _cache["warehouse_ceiling"]
+	var img := _start("warehouse_ceiling", Color("1e2226"), 0.03)
+	for y in SIZE:
+		var k := 1.0 + 0.12 * sin(y * TAU / 8.0)
+		for x in SIZE:
+			_shade(img, x, y, k)
+	for x in SIZE:
+		for y in [0, 1, 32, 33]:
+			_put(img, x, y, Color("33393e"))
+	return _finish("warehouse_ceiling", img)
+
+
+## WAREHOUSE floor: grey power-floated concrete in big panels, one lane wide, saw cuts and tyre marks.
+static func warehouse_floor() -> Texture2D:
+	if _cache.has("warehouse_floor"):
+		return _cache["warehouse_floor"]
+	var img := _start("warehouse_floor", Color("5a5e5e"), 0.04)
+	_noise(img, "warehouse_floor_mottle", 4, 0.06)
+	for i in SIZE:
+		for g in 2:
+			_put(img, g, i, Color("343838"))
+			_put(img, i, g, Color("3a3e3e"))
+	for i in 30:  # a tyre mark
+		_blend(img, 20 + i, 10 + i / 2, Color("2a2c2c"), 0.25)
+		_blend(img, 24 + i, 10 + i / 2, Color("2a2c2c"), 0.25)
+	_blotches(img, "warehouse_floor_oil", 3, 2, 4, Color("2e302e"), 0.3)
+	return _finish("warehouse_floor", img)
+
+
+## A steel roller shutter (the WAREHOUSE's exit, user reference): horizontal slats, each with a
+## bright top edge and a dark seam, a hazard-striped bottom bar, and grime.
+static func roller_shutter() -> Texture2D:
+	if _cache.has("roller_shutter"):
+		return _cache["roller_shutter"]
+	var img := _start("roller_shutter", Color("5c6266"), 0.03)
+	for y in SIZE:
+		var r := y % 6
+		for x in SIZE:
+			if r == 0:
+				_put(img, x, y, Color("8a9094"))
+			elif r == 5:
+				_put(img, x, y, Color("2e3236"))
+	for y in range(58, SIZE):
+		for x in SIZE:
+			_put(img, x, y, Color("c9a227") if ((x + y) / 4) % 2 == 0 else Color("1c1c1a"))
+	_streaks(img, "roller_shutter", 3, Color("3a3226"), 0.2)
+	return _finish("roller_shutter", img)
+
+
+## A steel flight case: grey ribbed sides, corner caps, two latches and a label.
+static func steel_case() -> Texture2D:
+	if _cache.has("steel_case"):
+		return _cache["steel_case"]
+	var img := _start("steel_case", Color("8a9094"), 0.03)
+	for y in range(6, 58, 10):
+		for x in SIZE:
+			_put(img, x, y, Color("a4aaae"))
+			_put(img, x, y + 1, Color("62686c"))
+	for c in [Vector2i(0, 0), Vector2i(54, 0), Vector2i(0, 54), Vector2i(54, 54)]:
+		_fill(img, Rect2i(c.x, c.y, 10, 10), Color("4a4e52"))
+	for lx in [14, 44]:
+		_fill(img, Rect2i(lx, 28, 6, 8), Color("2a2c2e"))
+		_fill(img, Rect2i(lx + 1, 29, 4, 3), Color("c8ccce"))
+	_fill(img, Rect2i(24, 12, 16, 8), Color("e8e4d8"))  # label
+	for x in range(26, 38, 2):
+		_put(img, x, 15, Color("3a3a3a"))
+	_frame(img, 1, Color("4a4e52"))
+	return _finish("steel_case", img)
+
+
+## A cardboard box: brown board, a strip of tape across, a printed arrow and a shipping label.
+static func cardboard_box() -> Texture2D:
+	if _cache.has("cardboard_box"):
+		return _cache["cardboard_box"]
+	var img := _start("cardboard_box", Color("b08a54"), 0.04)
+	for y in range(28, 36):
+		for x in SIZE:
+			_put(img, x, y, Color("c8a870"))  # tape
+	_fill(img, Rect2i(8, 44, 14, 10), Color("e8e4d8"))
+	_stencil(img, "UP", 42, 44, Color("4a3820"), 0.7)
+	_frame(img, 1, Color("8a6a3c"))
+	return _finish("cardboard_box", img)
+
+
+## An olive military crate: painted planks, darker battens, a stencilled serial and a white label.
+static func olive_crate() -> Texture2D:
+	if _cache.has("olive_crate"):
+		return _cache["olive_crate"]
+	var img := _start("olive_crate", Color("4e5a36"), 0.04)
+	for y in range(0, SIZE, 12):
+		for x in SIZE:
+			_put(img, x, y, Color("3a4428"))
+	for x in [0, 1, 2, 61, 62, 63]:
+		for y in SIZE:
+			_put(img, x, y, Color("38422a"))
+	_stencil(img, "A-7", 20, 20, Color("d8d4b8"), 0.8)
+	_fill(img, Rect2i(36, 38, 16, 10), Color("e0dcc8"))
+	_scratches(img, "olive_crate", 6)
+	return _finish("olive_crate", img)
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)

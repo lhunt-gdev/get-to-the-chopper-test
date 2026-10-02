@@ -24,6 +24,8 @@ const STAIR_HEADROOM := 2.9
 const WIRE_LOW := 1.85
 ## How far before a halfway marker the outer lanes are steered into its doorway.
 const MARKER_FUNNEL := 8.0
+## A roller shutter starts rolling up when you're this far (m) from it, so you run in underneath.
+const SHUTTER_OPEN_AHEAD := 11.0
 ## Over the last this-many metres of the extraction area you're steered into the centre lane, so you
 ## always run straight into the chopper.
 const CHOPPER_FUNNEL := 15.0
@@ -81,8 +83,19 @@ const THEMES := {
 			"lamps": "ceiling", "lamp_color": Color(1.0, 0.88, 0.6), "fog_color": Color("17140c"), "stair_wall": "canteen_wall",
 			"stair_door": "door", "color": Color("3a3c3e"), "height": CEILING_Y, "ground": "canteen_floor", "ceiling": true,
 			"wall_decor": "canteen", "ceiling_vents": true, "litter": true,
-			"skins": {"barrier_looks": ["pizza", "chairs"], "pipe": "bunting", "box_look": "table", "wall_looks": ["vending", "pillar"],
+			"skins": {"barrier_looks": ["pizza"], "pipe": "bunting", "box_look": "table", "wall_looks": ["vending", "pillar"],
 					"pillar": "canteen_pillar", "wall": "canteen_wall"}},
+	# WAREHOUSE (user reference): a dark open roof with red cross beams and a hazard-striped crane
+	# rail, dome lamps hanging on cables, tall pallet racking full of crates along both walls, a
+	# concrete floor with yellow lines; crates, steel cases and drums on pallets for box cover,
+	# stacked pallets to jump, a girder hanging on chains to duck under, crate stacks and
+	# forklifts for cover walls.
+	"warehouse": {"wall": "office", "wall_tex": "warehouse_wall", "ceiling_tex": "warehouse_ceiling", "ambient": Color(0.14, 0.16, 0.18),
+			"lamps": "pendant", "fog_color": Color("0b0d0f"), "stair_wall": "warehouse_wall", "stair_door": "steel_door",
+			"color": Color("2e3640"), "height": CEILING_Y, "ground": "warehouse_floor", "ceiling": true, "wall_decor": "warehouse",
+			"floor_lines": true, "overhead": "crane", "exit_door": "shutter",
+			"skins": {"barrier_looks": ["pallets"], "pipe": "girder", "box_look": "warehouse", "wall_looks": ["crate_stack", "forklift"],
+					"wall": "warehouse_wall"}},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
 	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "helipad", "snow": true,
 			"color": Color("5c5c55"), "height": 0.6, "ground": "concrete"},
@@ -365,9 +378,13 @@ func _physics_process(delta: float) -> void:
 			start_run()  # the pan has ended behind the player: go
 	if GameState.run_active:
 		for door in _doors:
-			if not door.get("done", false) and _player.distance_run() >= door["at"] - 0.9 and door["seg"].get("promoted", false):
+			var reach := SHUTTER_OPEN_AHEAD if door.get("shutter", false) else 0.9
+			if not door.get("done", false) and _player.distance_run() >= door["at"] - reach and door["seg"].get("promoted", false):
 				door["done"] = true
-				_bash_door(door["node"], door.get("swing", 1.0))
+				if door.get("shutter", false):
+					_raise_shutter(door["node"])
+				else:
+					_bash_door(door["node"], door.get("swing", 1.0))
 				if door.has("sound"):
 					_audio.play(door["sound"], 0.0, 0.05)
 		_funnel_to_markers()
@@ -759,6 +776,12 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				one_piece = _build_booth(node, seg, at, x0, x1)
 				_solid_box(node, _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3((x0 + x1) / 2.0, CEILING_Y / 2.0, -1.0)),
 						Vector3(x1 - x0, CEILING_Y, 3.0))  # you can't see or shoot through it
+			elif not wall_looks.is_empty() and String(wall_looks[walls_seen % wall_looks.size()]) in ["crate_stack", "forklift"]:
+				# The WAREHOUSE: a stack of crates, or a forklift with its load up.
+				one_piece = _build_warehouse_wall(node, seg, at, x0, x1, wall_looks[walls_seen % wall_looks.size()])
+				walls_seen += 1
+				_solid_box(node, _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3((x0 + x1) / 2.0, 1.5, 0)),
+						Vector3(x1 - x0, 3.0, 1.0))  # you can't see or shoot through it
 			elif not wall_looks.is_empty() and String(wall_looks[walls_seen % wall_looks.size()]) == "vending":
 				# The STAFF CANTEEN: a row of drinks machines (user).
 				one_piece = _build_vending_wall(node, seg, at, x0, x1)
@@ -787,7 +810,9 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 			var mesh: Node3D = one_piece
 			if jump_look == "cabinet":
 				_scatter_papers(node, seg, at, x, lane)
-			if jump_look in ["pizza", "chairs"]:
+			if jump_look == "pallets":
+				mesh = _build_pallet_stack(node, seg, at, x, lane)
+			elif jump_look in ["pizza", "chairs"]:
 				mesh = _build_canteen_jump(node, seg, at, x, lane, jump_look)
 			elif jump_look == "turnstile":
 				mesh = _build_turnstile(node, seg, at, x, lane)
@@ -795,6 +820,8 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				mesh = _build_blockade(node, seg, at, x, lane)
 			elif jump_look == "vent":
 				mesh = _build_vent_shaft(node, seg, at, x)
+			elif box_look == "warehouse":
+				mesh = _build_warehouse_box(node, seg, at, x, lane, String(ob.get("material", "wood")) == "metal")
 			elif box_look == "table":
 				mesh = _build_canteen_table(node, seg, at, x, lane)
 			elif box_look == "roof_vent":
@@ -1023,7 +1050,7 @@ func _update_footsteps(delta: float) -> void:
 		if _is_stairs(seg) and into < seg["ramp_len"]:
 			surface = "stairs"
 		else:
-			surface = {"office_floor": "office", "security_floor": "office", "canteen_floor": "office", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
+			surface = {"office_floor": "office", "security_floor": "office", "canteen_floor": "office", "warehouse_floor": "concrete", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
 	_audio.play("step_%s_%d" % [surface, randi() % SoundBank.STEP_VARIANTS], -10.0, 0.06)
 
 
@@ -1329,6 +1356,10 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 			_build_kitchen(parent, seg, side, alcove)
 	if theme.get("floor_stripes", false):
 		_floor_stripes(parent, seg, ramp)
+	if theme.get("floor_lines", false):
+		_floor_lines(parent, seg, ramp)
+	if theme.get("overhead", "") == "crane":
+		_warehouse_overhead(parent, seg, ramp)
 	if theme.get("ceiling_vents", false):
 		_ceiling_vents(parent, seg, ramp)
 	if theme.get("litter", false):
@@ -1583,6 +1614,9 @@ func _build_roof_edges(parent: Node3D, seg: Dictionary, open_l: float, open_r: f
 
 ## Office walls: now and then a door, a window or a notice board between the pillars.
 func _wall_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	if str(_theme(seg["id"]).get("wall_decor", "")) == "warehouse":
+		_warehouse_racks(parent, seg, side, from, to)
+		return
 	if str(_theme(seg["id"]).get("wall_decor", "")) == "canteen":
 		_canteen_decor(parent, seg, side, from, to)
 		return
@@ -1832,6 +1866,125 @@ func _canteen_litter(parent: Node3D, seg: Dictionary, from: float) -> void:
 		at += rng.randf_range(4.0, 8.0)
 
 
+## A WAREHOUSE dome lamp hanging on its cable over the road: a dark shade, a bright bulb, and a
+## cone of cold light down through the haze.
+func _pendant_lamp(parent: Node3D, seg: Dictionary, z: float, failing: bool) -> void:
+	var y := CEILING_Y - 1.0
+	_item_box(parent, seg, z, Vector3(0, (y + CEILING_Y) / 2.0, 0), Vector3(0.03, CEILING_Y - y, 0.03), Color("1a1a1a"))  # cable
+	var shade := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.12
+	cone.bottom_radius = 0.42
+	cone.height = 0.32
+	cone.radial_segments = 10
+	cone.cap_bottom = false
+	shade.mesh = cone
+	shade.material_override = PsxMaterials.flat(Color("2a2e30"))
+	parent.add_child(shade)
+	shade.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y, 0))
+	var on := PsxMaterials.glow(Color("eef4ee"))
+	var bulb := _item_box(parent, seg, z, Vector3(0, y - 0.14, 0), Vector3(0.26, 0.06, 0.26), Color.WHITE)
+	bulb.material_override = on
+	var haze := MeshInstance3D.new()
+	var beam := CylinderMesh.new()
+	beam.top_radius = 0.35
+	beam.bottom_radius = 1.6
+	beam.height = 2.6
+	beam.radial_segments = 10
+	beam.cap_top = false
+	beam.cap_bottom = false
+	haze.mesh = beam
+	haze.material_override = PsxMaterials.beam(Color(0.85, 0.92, 1.0, 0.07))
+	parent.add_child(haze)
+	haze.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y - 1.45, 0))
+	var at := Node3D.new()
+	parent.add_child(at)
+	at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y - 1.0, 0))
+	_ambience.add_lamp(at, Color(0.85, 0.95, 1.0) * 2.0, 8.0, {"flicker": 0.3 if failing else 0.0,
+			"fixture": bulb, "on_mat": on, "off_mat": PsxMaterials.flat(Color("6a6e70"))})
+
+
+## The WAREHOUSE's walls (user reference): tall pallet racking in the strip beside the road, the
+## pillars as its uprights (with yellow-and-black guards at their feet), three shelf levels of
+## beams, and on every shelf crates, cases and boxes on pallets.
+func _warehouse_racks(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var front := side * (road_half + 0.12)
+	var back := side * (road_half + 0.95)
+	var mid := (front + back) / 2.0
+	var beam := Color("3a4450")
+	var guard := PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 1))
+	for i in range(ceili(from / 5.0) * 5, int(to) - 4, 5):
+		var near_bend := false
+		for leg in seg["legs"]:
+			if leg["start"] > i - 1.0 and leg["start"] < i + 6.0:
+				near_bend = true
+		if near_bend:
+			continue
+		var at := i + 2.5
+		_item_box(parent, seg, i, Vector3(side * (road_half + 0.8), 0.3, 0.0), Vector3(0.42, 0.6, 0.42), Color.WHITE).material_override = guard
+		for level in 3:
+			var y := 0.0 if level == 0 else 1.45 * level
+			if level > 0:
+				for bx in [front, back]:
+					_item_box(parent, seg, at, Vector3(bx, y, 0), Vector3(0.1, 0.12, 4.9), beam)
+				_item_box(parent, seg, at, Vector3(mid, y + 0.07, 0), Vector3(0.84, 0.03, 4.8), Color("2a2e32"))  # the shelf deck
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash([seg["id"], i, side, level])
+			var z := -2.2
+			while z < 2.0:
+				var w := rng.randf_range(1.0, 1.5)
+				if z + w > 2.3:
+					break
+				var slot := Node3D.new()
+				parent.add_child(slot)
+				slot.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(mid, y + (0.13 if level > 0 else 0.0), z + w / 2.0))
+				slot.rotation.y = PI / 2.0  # pallets face the road
+				if rng.randf() < 0.85:
+					_pallet(slot, Vector3.ZERO, w - 0.08, 0.8)
+					var h := rng.randf_range(0.6, 1.1)
+					_stock(slot, Vector3(0, 0.14, 0), Vector3(w - 0.15, h, 0.72), rng.randi() % 4)
+				z += w + 0.05
+
+
+## The WAREHOUSE roof structure (user reference): red steel cross beams every 10 m, and a
+## yellow-and-black crane rail down one side of the road with a trolley and a hook.
+func _warehouse_overhead(parent: Node3D, seg: Dictionary, from: float) -> void:
+	var road_w := tuning.lane_count * tuning.lane_width
+	var length: float = seg["length"]
+	var z := maxf(from, 12.0)
+	while z < length - 2.0:
+		_item_box(parent, seg, z, Vector3(0, CEILING_Y - 0.25, 0), Vector3(road_w + 2.0, 0.34, 0.3), Color("6a2a22"))
+		z += 10.0
+	var rail := PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 6))
+	for piece in _pieces(seg, maxf(from, 12.0), length - 2.0):
+		var mid := (piece.x + piece.y) / 2.0
+		_item_box(parent, seg, mid, Vector3(1.6, CEILING_Y - 0.55, 0), Vector3(0.36, 0.3, piece.y - piece.x), Color.WHITE).material_override = rail
+	var hz := minf(length * 0.6, length - 6.0)
+	_item_box(parent, seg, hz, Vector3(1.6, CEILING_Y - 0.85, 0), Vector3(0.7, 0.36, 0.9), Color("d8a020"))  # trolley
+	_item_box(parent, seg, hz, Vector3(1.6, CEILING_Y - 1.55, 0), Vector3(0.04, 1.1, 0.04), Color("2a2a2a"))  # cable
+	_item_box(parent, seg, hz, Vector3(1.6, CEILING_Y - 2.2, 0), Vector3(0.22, 0.26, 0.12), Color("2a2a2a"))  # hook block
+	_item_box(parent, seg, hz, Vector3(1.6, CEILING_Y - 2.42, 0.06), Vector3(0.06, 0.2, 0.18), Color("8a8a84"))  # the hook
+
+
+## Yellow lines painted along the edges of the road, and across it now and then (the WAREHOUSE).
+func _floor_lines(parent: Node3D, seg: Dictionary, from: float) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var yellow := PsxTextures.wall("blocks", Color("c9a227"))
+	for piece in _pieces(seg, from, float(seg["length"])):
+		for s in [-1.0, 1.0]:
+			_strip(parent, seg, piece.x, piece.y, s * (road_half - 0.15), 0.12, 0.013, yellow, 1.0, 4.0)
+	var at := maxf(from, 14.0) + 4.0
+	while at < float(seg["length"]) - 4.0:
+		var ok := true
+		for leg in seg["legs"]:
+			if absf(leg["start"] - at) < 1.5:
+				ok = false
+		if ok:
+			_strip(parent, seg, at, at + 0.12, 0.0, road_half * 2.0, 0.013, yellow, 1.0, 4.0)
+		at += 18.0
+
+
 ## A keycard reader on the wall: a dark box with a slot and a red LED, `dz` along the road.
 func _card_reader(holder: Node3D, out: float, dz: float, red: Material) -> void:
 	_box(holder, Vector3(0.08, 0.3, 0.18), Vector3(out * 0.04, 1.25, dz), Color("1e2022"))
@@ -1990,6 +2143,8 @@ func _build_spans(parent: Node3D, seg: Dictionary, kind: String, lanes: Array, a
 				for dz in [-0.14, 0.14]:
 					_item_box(parent, seg, at, Vector3(ex, (y + 0.2) / 2.0, dz), Vector3(0.07, y + 0.2, 0.07), metal)  # legs
 				_item_box(parent, seg, at, Vector3(ex, 0.03, 0), Vector3(0.3, 0.06, 0.5), metal)  # foot
+		elif kind == "girder":
+			beam = _build_girder(parent, seg, at, y, ends)
 		elif kind == "bunting":
 			beam = _build_bunting(parent, seg, at, ends)
 		elif kind == "wires":
@@ -2531,6 +2686,147 @@ func _build_canteen_jump(parent: Node3D, seg: Dictionary, at: float, x: float, l
 	return holder
 
 
+## A wooden pallet at `pos` (its top at pos.y + 0.14), `w` x `d`.
+func _pallet(parent: Node3D, pos: Vector3, w: float, d: float) -> void:
+	var wood := Color("9a7444")
+	for k in 5:  # deck boards
+		_box(parent, Vector3(w, 0.03, d / 5.0 - 0.03), pos + Vector3(0, 0.125, -d / 2.0 + d / 5.0 * (k + 0.5)), wood)
+	for bx in [-w / 2.0 + 0.08, 0.0, w / 2.0 - 0.08]:  # blocks and stringers
+		_box(parent, Vector3(0.12, 0.08, d), pos + Vector3(bx, 0.06, 0), wood.darkened(0.3))
+	_box(parent, Vector3(w, 0.02, d), pos + Vector3(0, 0.01, 0), wood.darkened(0.2))
+
+
+## A box of the warehouse's stock at `pos` (sitting on it): wood crate, olive crate, cardboard
+## or steel case, picked by `kind`.
+func _stock(parent: Node3D, pos: Vector3, size: Vector3, kind: int) -> MeshInstance3D:
+	var tex: Texture2D = [PsxTextures.crate_wood(), PsxTextures.olive_crate(), PsxTextures.cardboard_box(), PsxTextures.steel_case()][kind % 4]
+	var m := _box(parent, size, pos + Vector3(0, size.y / 2.0, 0), Color.WHITE)
+	m.material_override = PsxMaterials.textured(tex, Vector2(3, 2))
+	return m
+
+
+## An oil drum standing at `pos`, in `colour`, with two rolled ribs and a lid.
+func _drum(parent: Node3D, pos: Vector3, colour: Color) -> void:
+	var drum := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.24
+	cyl.bottom_radius = 0.24
+	cyl.height = 0.88
+	cyl.radial_segments = 10
+	drum.mesh = cyl
+	drum.material_override = PsxMaterials.flat(colour)
+	parent.add_child(drum)
+	drum.position = pos + Vector3(0, 0.44, 0)
+	for ry in [0.3, 0.6]:
+		var rib := MeshInstance3D.new()
+		var r := CylinderMesh.new()
+		r.top_radius = 0.25
+		r.bottom_radius = 0.25
+		r.height = 0.03
+		r.radial_segments = 10
+		rib.mesh = r
+		rib.material_override = PsxMaterials.flat(colour.darkened(0.35))
+		parent.add_child(rib)
+		rib.position = pos + Vector3(0, ry, 0)
+
+
+## WAREHOUSE box cover: a wooden crate on a pallet (wood), or a steel case or a cluster of blue
+## drums on a pallet (metal).
+func _build_warehouse_box(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int, metal: bool) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	_pallet(holder, Vector3.ZERO, 1.2, 1.0)
+	if not metal:
+		_stock(holder, Vector3(0, 0.14, 0), Vector3(1.0, 0.95, 0.9), 0)
+	elif lane % 2 == 0:
+		_stock(holder, Vector3(0, 0.14, 0), Vector3(1.05, 0.9, 0.85), 3)
+	else:
+		for dx in [-0.27, 0.27]:
+			for dz in [-0.24, 0.24]:
+				_drum(holder, Vector3(dx, 0.14, dz), Color("26365a"))
+	return holder
+
+
+## WAREHOUSE jump obstacle: a stack of four empty pallets.
+func _build_pallet_stack(parent: Node3D, seg: Dictionary, at: float, x: float, lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	for k in 3:
+		var p := Node3D.new()
+		holder.add_child(p)
+		p.position = Vector3(0.03 * ((k + lane) % 3 - 1), k * 0.15, 0)
+		p.rotation.y = 0.04 * ((k + lane) % 3 - 1)
+		_pallet(p, Vector3.ZERO, 1.2, 0.95)
+	return holder
+
+
+## WAREHOUSE cover wall across x0..x1: a stack of crates three high on pallets, or a forklift with
+## its load raised (any width left over gets a crate stack). You can't see or shoot through it.
+func _build_warehouse_wall(parent: Node3D, seg: Dictionary, at: float, x0: float, x1: float, look: String) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at)
+	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 0.9
+	x0 = maxf(x0, -edge)
+	x1 = minf(x1, edge)
+	var stack_from := x0
+	if look == "forklift":
+		var fw := 1.3
+		var fx := x0 + fw / 2.0 + 0.05
+		stack_from = x0 + fw + 0.15
+		var yellow := Color("d8a020")
+		_box(holder, Vector3(fw, 0.7, 1.8), Vector3(fx, 0.55, -0.4), yellow)  # body
+		_box(holder, Vector3(fw, 0.5, 0.5), Vector3(fx, 0.75, -1.2), Color("2a2a2a"))  # counterweight
+		for wz in [0.3, -1.1]:
+			for s in [-1.0, 1.0]:
+				_box(holder, Vector3(0.2, 0.45, 0.45), Vector3(fx + s * (fw / 2.0 - 0.05), 0.23, wz), Color("1a1a1a"))  # wheels
+		for s in [-1.0, 1.0]:  # the cage over the seat
+			_box(holder, Vector3(0.06, 1.3, 0.06), Vector3(fx + s * 0.55, 1.55, -0.2), Color("2a2a2a"))
+			_box(holder, Vector3(0.06, 1.3, 0.06), Vector3(fx + s * 0.55, 1.55, -1.0), Color("2a2a2a"))
+		_box(holder, Vector3(1.16, 0.06, 0.9), Vector3(fx, 2.2, -0.6), Color("2a2a2a"))
+		_box(holder, Vector3(0.5, 0.5, 0.5), Vector3(fx, 1.1, -0.7), Color("303030"))  # seat
+		for s in [-1.0, 1.0]:  # the mast, toward you
+			_box(holder, Vector3(0.1, 2.6, 0.12), Vector3(fx + s * 0.42, 1.3, 0.55), Color("3a3a3a"))
+			_box(holder, Vector3(0.12, 0.06, 1.0), Vector3(fx + s * 0.25, 1.45, 1.05), Color("2a2a2a"))  # forks
+		_pallet(holder, Vector3(fx, 1.48, 1.05), 1.15, 0.95)
+		_stock(holder, Vector3(fx, 1.62, 1.05), Vector3(1.05, 0.8, 0.85), 1)  # the load, raised
+	if x1 - stack_from > 0.6:
+		var n := maxi(1, roundi((x1 - stack_from) / 1.25))
+		var cw := (x1 - stack_from) / n
+		for i in n:
+			var cx := stack_from + cw * (i + 0.5)
+			_pallet(holder, Vector3(cx, 0, 0), cw - 0.05, 1.0)
+			var y := 0.14
+			for k in 3:
+				var sz := Vector3(cw - 0.12 - 0.05 * k, 1.0 - 0.08 * k, 0.95 - 0.05 * k)
+				_stock(holder, Vector3(cx, y, 0), sz, absi(hash([seg["id"], at, i, k])) % 4)
+				y += sz.y
+	return holder
+
+
+## WAREHOUSE duck-under (user reference): a hazard-striped steel girder hanging from chains at head
+## height across the blocked lanes, the chains running up to the crane.
+func _build_girder(parent: Node3D, seg: Dictionary, at: float, y: float, ends: Array) -> Node3D:
+	var frame := _frame_at(seg, at)
+	var e0: float = ends[0]["x"]
+	var e1: float = ends[1]["x"]
+	var gy := WIRE_LOW - 0.1  # head height, like the live wires (user: it hung too low at pipe height)
+	var beam := _box(parent, Vector3(e1 - e0, 0.32, 0.26), Vector3.ZERO, Color.WHITE)
+	beam.transform = frame * Transform3D(Basis.IDENTITY, Vector3((e0 + e1) / 2.0, gy, 0))
+	beam.material_override = PsxMaterials.textured(PsxTextures.hazard(), Vector2((e1 - e0) / 0.8, 1))
+	for flange in [-0.16, 0.16]:
+		_box(parent, Vector3(e1 - e0, 0.04, 0.34), Vector3.ZERO, Color("2a2a2a")).transform = \
+				frame * Transform3D(Basis.IDENTITY, Vector3((e0 + e1) / 2.0, gy + flange, 0))
+	for cx in [e0 + 0.3, e1 - 0.3]:
+		var links := int((CEILING_Y - gy - 0.2) / 0.16)
+		for k in links:  # a chain: alternate links turned 90 degrees
+			var link := _box(parent, Vector3(0.05, 0.14, 0.02 if k % 2 == 0 else 0.05), Vector3.ZERO, Color("6a6a64"))
+			link.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, gy + 0.22 + k * 0.16, 0))
+	return beam
+
+
 ## The office room the mission starts in, behind the first segment (negative distances), with a
 ## closed door into it: side and back walls, floor, ceiling, a desk, a chair, a filing cabinet,
 ## and the odd window / notice board. The door is bashed open at the start of the run.
@@ -2593,6 +2889,12 @@ func _build_lamps(parent: Node3D, seg: Dictionary) -> void:
 	var edge := tuning.lane_count * tuning.lane_width / 2.0 + 1.0
 	var n := 0
 	match theme.get("lamps", ""):
+		"pendant":
+			var z := ramp + 4.0
+			while z < length - 1.0:
+				_pendant_lamp(parent, seg, z, n % tuning.flicker_every == 3)
+				z += tuning.office_lamp_spacing * 1.25
+				n += 1
 		"ceiling":
 			var z := ramp + 3.0
 			while z < length - 1.0:
@@ -2691,6 +2993,12 @@ func _build_marker(outer: Node3D, seg: Dictionary, at: float) -> void:
 		for s in [-1, 1]:  # hazard stripes on the posts
 			_item_box(parent, seg, at, Vector3(s * (ow / 2.0 + 0.04), 0.35, 0.18), Vector3(0.1, 0.7, 0.02), Color.WHITE).material_override = \
 					PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 2))
+	# Leaving the WAREHOUSE (user): a roller shutter that rolls up as you come, not doors.
+	if String(_theme(seg.get("from_id", seg["id"])).get("exit_door", "")) == "shutter":
+		_build_shutter(parent, seg, at, ow, dh)
+		_make_solid(parent)
+		_markers.append({"at": seg["start"] + at, "seg": seg})
+		return
 	var leaf_w := ow / 2.0
 	var door_mat := PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
 	var bar := Color("2c3034")
@@ -2735,6 +3043,36 @@ func _build_marker(outer: Node3D, seg: Dictionary, at: float) -> void:
 	_ambience.add_lamp(glow_at, sign_col * (1.2 if barred else 0.7), 5.0 if barred else 3.5, {"alert": false})
 	_make_solid(parent)  # the wall either side and over the doorway
 	_markers.append({"at": seg["start"] + at, "seg": seg})
+
+
+## The WAREHOUSE's exit (user reference): a steel roller shutter across the doorway, its roll
+## housing above, guide rails, hazard posts and an amber warning light. It rolls up as you come.
+func _build_shutter(parent: Node3D, seg: Dictionary, at: float, ow: float, dh: float) -> void:
+	var shutter := Node3D.new()
+	parent.add_child(shutter)
+	shutter.transform = _frame_at(seg, at)
+	var curtain := _box(shutter, Vector3(ow, dh, 0.08), Vector3(0, dh / 2.0, 0), Color.WHITE)
+	curtain.material_override = PsxMaterials.textured(PsxTextures.roller_shutter(), Vector2(ow / 1.6, dh / 1.0))
+	_solid_box(shutter, Transform3D(Basis.IDENTITY, Vector3(0, dh / 2.0, 0)), Vector3(ow, dh, 0.1))
+	_item_box(parent, seg, at, Vector3(0, dh + 0.2, 0.1), Vector3(ow + 0.3, 0.42, 0.45), Color("3e4448"))  # roll housing
+	for s in [-1.0, 1.0]:
+		_item_box(parent, seg, at, Vector3(s * (ow / 2.0 + 0.06), dh / 2.0, 0), Vector3(0.12, dh, 0.16), Color("2a2e30"))  # guide rail
+		_item_box(parent, seg, at, Vector3(s * (ow / 2.0 + 0.25), 0.5, 0.25), Vector3(0.16, 1.0, 0.16), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 2))  # hazard post
+	var amber := Color(1.0, 0.6, 0.12)
+	var lamp := _item_box(parent, seg, at, Vector3(ow / 2.0 + 0.3, dh + 0.25, 0.35), Vector3(0.22, 0.22, 0.22), Color.WHITE)
+	lamp.material_override = PsxMaterials.glow(amber)
+	_ambience.add_lamp(lamp, amber * 1.2, 4.0, {"alert": false, "blink": 0.8})
+	if not seg.get("no_doors", false):
+		_doors.append({"node": shutter, "at": seg["start"] + at, "owner": seg["node"], "seg": seg, "shutter": true,
+				"sound": "door_steel"})
+
+
+## Up it goes: the shutter rolls up into its housing.
+func _raise_shutter(shutter: Node3D) -> void:
+	RunLog.record_event("door_bash", {})
+	var tween := shutter.create_tween()
+	tween.tween_property(shutter, "position:y", shutter.position.y + 2.45, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
 ## Forced movement. The outer lanes can't get through a halfway marker's doorway: just before one,
@@ -2969,6 +3307,8 @@ func _theme(id: StringName) -> Dictionary:
 
 func _ground(id: StringName) -> Texture2D:
 	match _theme(id)["ground"]:
+		"warehouse_floor":
+			return PsxTextures.warehouse_floor()
 		"canteen_floor":
 			return PsxTextures.canteen_floor()
 		"security_floor":
@@ -2984,7 +3324,7 @@ func _ground(id: StringName) -> Texture2D:
 
 ## How long one floor tile is along the road (office tiles and roofing are square, one lane wide).
 func _ground_tile(id: StringName) -> float:
-	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "gravel"] else 4.0
+	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "gravel"] else 4.0
 
 
 func _wall_texture(theme: Dictionary) -> Texture2D:
@@ -3036,6 +3376,10 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.cover_wall()
 		"canteen_wall":
 			return PsxTextures.canteen_wall()
+		"warehouse_wall":
+			return PsxTextures.warehouse_wall()
+		"warehouse_ceiling":
+			return PsxTextures.warehouse_ceiling()
 		"canteen_pillar":
 			return PsxTextures.canteen_pillar()
 		"kitchen_tile":
