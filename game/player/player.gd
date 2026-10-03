@@ -24,46 +24,28 @@ var _invulnerable: float = 0.0
 ## Stumbling: stunned (no swipes) for a moment, then back up to speed.
 var _stun_left: float = 0.0
 var _speed_mul: float = 1.0
-var _skin: ShaderMaterial
 var _y_velocity: float = 0.0
 var _slide_left: float = 0.0
 var _shadow: MeshInstance3D
-var _arms: Array[MeshInstance3D] = []
-
-@onready var _body: MeshInstance3D = $Body
+## The operative (user reference sheet): the rigged PS1-style model, posed from this state.
+var _rig: SoldierRig
+var _surrendered := false
+## FIRE held: his right arm comes up and aims ahead (user). Set by the level.
+var aiming := false
 
 
 func _ready() -> void:
 	lane = tuning.lane_count / 2
 	track_x = lane_x(lane)
 	hits_left = tuning.player_hits
-	var skin := PsxMaterials.flat(Color("5b6b3a"))
-	_skin = skin
-	_body.material_override = skin
-	# A head with a face on the front and a backpack on the back, so front and back read (the
-	# opening camera pan goes round the player). Children of the body, so they duck and stumble with it.
-	_part(_body, Vector3(0.34, 0.34, 0.34), Vector3(0, 0.98, 0), Color("4a5a30"))           # head / balaclava
-	_part(_body, Vector3(0.24, 0.12, 0.03), Vector3(0, 1.0, -0.17), Color("d4a482"))        # face
-	_part(_body, Vector3(0.2, 0.04, 0.035), Vector3(0, 1.02, -0.18), Color("1c1c1a"))        # eyes
-	_part(_body, Vector3(0.44, 0.52, 0.2), Vector3(0, 0.2, 0.28), Color("3a4426"))          # backpack
-	_part(_body, Vector3(0.62, 0.08, 0.42), Vector3(0, -0.2, 0.0), Color("2a2e22"))         # belt
+	_rig = SoldierRig.new()
+	add_child(_rig)
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Shadow"
 	_shadow.mesh = PsxMaterials.shadow_mesh(Vector2(tuning.player_shadow_size, tuning.player_shadow_size * 0.8))
 	_shadow.material_override = PsxMaterials.shadow(false, tuning)
 	_shadow.position.y = 0.03
 	add_child(_shadow)
-	# Raised arms for the hands-up pose, hidden until captured.
-	for side in [-1, 1]:
-		var arm := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.14, 0.6, 0.14)
-		arm.mesh = mesh
-		arm.material_override = skin
-		arm.position = Vector3(side * 0.32, 1.85, 0)
-		arm.visible = false
-		add_child(arm)
-		_arms.append(arm)
 	_update_visuals()
 
 
@@ -87,14 +69,23 @@ func _physics_process(delta: float) -> void:
 
 	if _slide_left > 0.0:
 		_slide_left -= delta
-	var target_scale := 0.45 if is_sliding() else (0.65 if in_cover and cover_crouch else 1.0)
-	_body.scale.y = move_toward(_body.scale.y, target_scale, delta * 10.0)
-	# Stumbling: pitch forward and wobble, then straighten up.
-	var pitch := 0.0
-	if _stun_left > 0.0:
-		pitch = -0.45 * (_stun_left / tuning.obstacle_stun_time) + 0.12 * sin(_stun_left * 40.0)
-	_body.rotation.x = lerpf(_body.rotation.x, pitch, clampf(delta * 18.0, 0.0, 1.0))
 	_update_visuals()
+
+
+## The model's pose every frame (also before the run starts and after it ends, standing).
+func _process(delta: float) -> void:
+	var running := GameState.run_active and not halted and not in_cover
+	_rig.animate(delta, {
+		"run": _speed_mul if running else 0.0,
+		"airborne": is_airborne(),
+		"rising": _y_velocity > 0.0,
+		"sliding": is_sliding(),
+		"cover": ("crouch" if cover_crouch else "stand") if in_cover else "",
+		"stun": _stun_left / tuning.obstacle_stun_time if _stun_left > 0.0 else 0.0,
+		"lean": clampf((lane_x(lane) - track_x) / tuning.lane_width, -1.0, 1.0),
+		"surrender": _surrendered,
+		"aim": aiming and not _surrendered,
+	})
 
 
 func handle_swipe(dir: Vector2i) -> void:
@@ -152,8 +143,7 @@ func take_hit() -> bool:
 		return false
 	hits_left -= 1
 	_invulnerable = tuning.hit_invulnerable_time
-	_body.material_override = PsxMaterials.flat(Color("d83a2a"))
-	get_tree().create_timer(0.15).timeout.connect(func() -> void: _body.material_override = _skin)
+	_rig.flash()
 	return true
 
 
@@ -163,20 +153,23 @@ func surrender() -> void:
 	jump_y = 0.0
 	_y_velocity = 0.0
 	_slide_left = 0.0
-	_body.scale.y = 1.0
-	for arm in _arms:
-		arm.visible = true
+	_surrendered = true
 	_update_visuals()
 
 
-func _part(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
-	var m := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	m.mesh = mesh
-	m.material_override = PsxMaterials.flat(color)
-	m.position = pos
-	parent.add_child(m)
+## A shot: the pistol kicks.
+func fire_recoil() -> void:
+	_rig.recoil()
+
+
+## Where shots leave his pistol (world space).
+func muzzle_position() -> Vector3:
+	return _rig.muzzle_position()
+
+
+## The muzzle flash's light point (lit only while it shows), for the level's lighting.
+func muzzle_light() -> Node3D:
+	return _rig.muzzle_light()
 
 
 ## Entering a side branch renumbers the lanes under you (you stay where you are in the world).
@@ -207,6 +200,6 @@ func distance_run() -> float:
 
 ## The body rises with the jump; the shadow stays on the ground and shrinks, so jump height is readable.
 func _update_visuals() -> void:
-	_body.position.y = 0.8 * _body.scale.y + jump_y
+	_rig.position.y = jump_y
 	var t := clampf(jump_y / tuning.player_shadow_fade_height, 0.0, 1.0)
 	_shadow.scale = Vector3.ONE * lerpf(1.0, tuning.player_shadow_min_scale, t)

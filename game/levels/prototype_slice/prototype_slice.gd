@@ -365,6 +365,8 @@ func _ready() -> void:
 	_camera.add_child(fill)
 	fill.position = Vector3(0, 0.3, -1.5)
 	_ambience.add_lamp(fill, Color(0.5, 0.58, 0.68) * 0.55, 6.5, {"alert": false})
+	# His muzzle flash lights him and what's round him for a moment (user: a cool looking flash).
+	_ambience.add_lamp(_player.muzzle_light(), SoldierRig.FLASH_LIGHT, SoldierRig.FLASH_LIGHT_RANGE, {"alert": false})
 	_clock = ExtractionClock.new()
 	_clock.name = "ExtractionClock"
 	_clock.tuning = tuning
@@ -6808,6 +6810,7 @@ func _update_combat(delta: float) -> void:
 
 	_fire_cooldown -= delta
 	_hud.set_firing(_fire_held)
+	_player.aiming = _fire_held  # CROSS raises his pistol
 	if _fire_held and _fire_cooldown <= 0.0 and not _player.halted:
 		_fire_cooldown = tuning.fire_interval
 		_shoot()
@@ -7190,6 +7193,7 @@ func _shoot() -> void:
 		return  # no shooting from behind a wall: not even into it
 	_audio.play("gun", -3.0, 0.05)
 	_hud.fire_kick()
+	_player.fire_recoil()
 	var from := _player.global_transform * Vector3(0.25, 1.2, -0.4)
 	var target := fire_target()
 	var to := from + (-_player.global_transform.basis.z) * 20.0
@@ -7201,7 +7205,8 @@ func _shoot() -> void:
 		var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, SIGHT_LAYER))
 		if not hit.is_empty():
 			to = hit["position"]
-	_shot_tracer.global_transform = Transform3D(Basis.looking_at(to - from) * Basis.from_scale(Vector3(1, 1, from.distance_to(to))), (from + to) / 2.0)
+	var muzzle := _player.muzzle_position()  # the tracer leaves his pistol
+	_shot_tracer.global_transform = Transform3D(Basis.looking_at(to - muzzle) * Basis.from_scale(Vector3(1, 1, muzzle.distance_to(to))), (muzzle + to) / 2.0)
 	_shot_tracer.visible = true
 	get_tree().create_timer(0.05).timeout.connect(func() -> void: _shot_tracer.visible = false)
 
@@ -7264,6 +7269,7 @@ func _on_run_ended(reason: StringName) -> void:
 	Engine.time_scale = 1.0
 	_clock.stop()
 	_fire_held = false
+	_player.aiming = false  # he lowers the pistol, however the run ended
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())

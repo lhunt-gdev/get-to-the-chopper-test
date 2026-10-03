@@ -18,3 +18,11 @@ Thumbs.db
 .idea/
 # Written by CI at export time (the build number on the main menu)
 game/build_info.json
+
+# CROSS source art: the 46 MB Meshy model and the pipeline's working files stay out of git (they're
+# rebuilt by art_source/operative/tools/build_cross.sh); the scripts, README and reference sheet go in.
+art_source/operative/ernest-cross.glb
+art_source/operative/work/
+# Blender backups and Python bytecode.
+*.blend1
+__pycache__/
