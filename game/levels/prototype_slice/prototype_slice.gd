@@ -113,6 +113,47 @@ const THEMES := {
 			"lip": 0.85, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "parapet": true, "wide_roof": 6.0, "wide_side": 1,
 			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "equip",
 					"wall_looks": ["hvac"]}},
+	# SERVICE TUNNEL (user reference): pale concrete panels and pillars, caged warm bulkhead lamps,
+	# a rusty pipe and cable trays along the walls, an air duct down the ceiling, drainage grates,
+	# lockers, crates and tool carts; crates on pallets, low pipe runs, rusty pipes to duck.
+	"service": {"wall": "tile", "wall_tex": "service_wall", "ceiling_tex": "concrete", "ambient": Color(0.13, 0.126, 0.11), "lamps": "none",
+			"fog_color": Color("0d0c0a"), "stair_wall": "service_wall", "stair_door": "steel_door", "marker_door": "bars",
+			"color": Color("5a5850"), "height": CEILING_Y, "ground": "service_floor", "ceiling": true, "wall_decor": "service",
+			"pillar_every": 6, "pillar_tex": "service_wall", "overhead": "service", "floor_stripes": true,
+			"skins": {"barrier_looks": ["floor_pipe"], "box_look": "warehouse"}},
+	# BOILER ROOM (user reference): a high plant hall with boiler bays off both sides (glowing
+	# fireboxes, gauges, valve wheels, pipes and steam, catwalks), steel plate floor, hall lamps;
+	# crates, cases and drums for box cover, safety rails to jump, rusty pipes to duck.
+	"boiler": {"wall": "tile", "wall_tex": "boiler_wall", "ceiling_tex": "boiler_wall", "ceiling_y": 7.5, "ambient": Color(0.31, 0.29, 0.26),
+			"lamps": "hall", "fog_color": Color("0e0b09"), "stair_wall": "boiler_wall", "stair_door": "steel_door", "marker_door": "steel",
+			"color": Color("3e3c3a"), "height": 7.5, "ground": "steel_plate", "ceiling": true, "pillar_every": 10, "pillar_tex": "boiler_wall",
+			"floor_stripes": true,
+			"skins": {"barrier_looks": ["safety_rail"], "box_look": "warehouse"}},
+	# SEWER (user reference): a walkway along an open sewage channel under greenish light: mossy brick,
+	# stone pillars, yellow wall lamps, rusty pipes, water pouring into the channel, hanging tubes;
+	# crates, cases and drums for box cover, low pipe runs to jump, rusty pipes to duck.
+	"sewer": {"wall": "tile", "wall_tex": "sewer_wall", "ceiling_tex": "concrete", "ambient": Color(0.2, 0.24, 0.18), "lamps": "tubes",
+			"fog_color": Color("0b0f09"), "stair_wall": "sewer_wall", "stair_door": "steel_door", "marker_door": "bars",
+			"color": Color("4a4e44"), "height": CEILING_Y, "ground": "sewer_floor", "ceiling": true, "wall_decor": "sewer",
+			"pillar_every": 8, "pillar_tex": "sewer_wall",
+			"skins": {"barrier_looks": ["floor_pipe"], "box_look": "warehouse"}},
+	# PUMP STATION (user reference): like the BOILER ROOM and SEWER (user: keep the lower zones
+	# consistent): a high hall with pump bays on the left (blue pumps on plinths, big blue pipes to the
+	# ceiling, red valve wheels, panels, a catwalk) and a teal water basin on the right (sluice gates,
+	# yellow railings), blue pipes across overhead, cool hanging lamps.
+	"pump": {"wall": "tile", "wall_tex": "service_wall", "ceiling_tex": "boiler_wall", "ceiling_y": 7.5, "ambient": Color(0.12, 0.135, 0.145),
+			"lamps": "hall", "lamp_color": Color(0.85, 0.95, 1.0), "fog_color": Color("0a0d0f"), "stair_wall": "service_wall", "stair_door": "steel_door",
+			"marker_door": "steel", "color": Color("4a4e52"), "height": 7.5, "ground": "service_floor", "ceiling": true,
+			"pillar_every": 10, "pillar_tex": "service_wall", "overhead": "pump", "floor_stripes": true,
+			"skins": {"barrier_looks": ["safety_rail"], "box_look": "warehouse"}},
+	# STORM DRAIN (user reference): running along the bottom of a wide drainage channel in shallow
+	# water: stained concrete walls up to raised ledges with hazard lips and railings, yellow ladders,
+	# outfalls pouring water, buttresses, warm wall lamps, a big pipe up high; weirs to jump.
+	"drain": {"wall": "tile", "wall_tex": "drain_wall", "ceiling_tex": "concrete", "ceiling_y": 6.0, "ambient": Color(0.2, 0.21, 0.18),
+			"lamps": "hall", "fog_color": Color("0b0c0a"), "stair_wall": "drain_wall", "stair_door": "steel_door", "marker_door": "bars",
+			"color": Color("5a5c54"), "height": 6.0, "ground": "sewer_floor", "ceiling": true, "pillar_every": 8, "pillar_tex": "drain_wall",
+			"drain_water": true,
+			"skins": {"barrier_looks": ["weir"], "box_look": "warehouse"}},
 	"tunnel": {"wall": "tile", "wall_tex": "tunnel_wall", "ceiling_tex": "tunnel_ceiling", "ambient": Color(0.19, 0.23, 0.2), "lamps": "bulbs", "fog_color": Color("0b100d"),
 			"stair_wall": "tunnel_wall", "stair_door": "steel_door", "marker_door": "bars", "color": Color("4d5c52"), "height": CEILING_Y, "ground": "asphalt", "ceiling": true},
 	# SECURITY WING (user reference): cold grey steel panels, big grey-green floor tiles with hazard
@@ -819,6 +860,14 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		_far_masts(node, seg, 12)
 		_roof_hut(node, seg, length - 8.0, -(tuning.lane_count * tuning.lane_width / 2.0 + 3.6), 1)
 	_build_lamps(node, seg)
+	# A high-ceilinged area (the LOBBY, the BOILER ROOM) meets lower ones at its ends: wall over the
+	# join, from the usual ceiling up to its own, so no sky shows through the gap above.
+	if _theme(id).get("ceiling", false) and _ceil(id) > CEILING_Y + 0.1:
+		var head_h := _ceil(id) - CEILING_Y + 0.1
+		var head_w := tuning.lane_count * tuning.lane_width + 2.6
+		for hz in [0.0, length]:
+			_item_box(node, seg, hz, Vector3(0, CEILING_Y - 0.05 + head_h / 2.0, 0), Vector3(head_w, head_h, 0.3), Color.WHITE).material_override = \
+					PsxMaterials.textured(_wall_texture(_theme(id)), Vector2(head_w / 2.0, head_h / 2.0))
 
 	var authored_lanes := 5
 	var jumps_seen := 0  # jump obstacles alternate through the area's looks
@@ -912,6 +961,10 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 				_scatter_papers(node, seg, at, x, lane)
 			if jump_look == "speedgate":
 				mesh = _build_speedgate(node, seg, at, x, lane)
+			elif jump_look == "weir":
+				mesh = _build_weir(node, seg, at, x, lane)
+			elif jump_look == "safety_rail":
+				mesh = _build_safety_rail(node, seg, at, x, lane)
 			elif jump_look == "cable_tray":
 				mesh = _build_cable_tray(node, seg, at, x, lane)
 			elif jump_look == "ibeam":
@@ -1187,7 +1240,7 @@ func _update_footsteps(delta: float) -> void:
 		if _is_stairs(seg) and into < seg["ramp_len"]:
 			surface = "stairs"
 		else:
-			surface = {"office_floor": "office", "security_floor": "office", "canteen_floor": "office", "warehouse_floor": "concrete", "lobby_floor": "office", "asphalt": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
+			surface = {"office_floor": "office", "security_floor": "office", "canteen_floor": "office", "warehouse_floor": "concrete", "lobby_floor": "office", "asphalt": "tunnel", "service_floor": "tunnel", "steel_plate": "concrete", "sewer_floor": "tunnel", "gravel": "gravel"}.get(_theme(seg["id"])["ground"], "concrete")
 	_audio.play("step_%s_%d" % [surface, randi() % SoundBank.STEP_VARIANTS], -10.0, 0.06)
 
 
@@ -1511,10 +1564,15 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 		var hole: Vector2 = seg.get("holes", {}).get(side, Vector2.ZERO)
 		# An opening in this wall with a room behind it (the canteen's kitchen, the dock's bays), as
 		# well as any stairwell hole.
-		var alcove := _alcove(seg, side)
-		if alcove != Vector2.ZERO and alcove.x < hole.y + 1.0 and alcove.y > hole.x - 1.0:
-			alcove = Vector2.ZERO  # it would run into the stairwell: leave the wall whole there
-		for span in _cut_spans(_cut_spans(_wall_spans(open, length, hole), alcove), _outdoor(seg)):
+		var alcoves: Array[Dictionary] = []
+		for a in _alcoves(seg, side):
+			var sp: Vector2 = a["span"]
+			if not (sp.x < hole.y + 1.0 and sp.y > hole.x - 1.0):  # one running into a stairwell: leave the wall whole there
+				alcoves.append(a)
+		var spans := _wall_spans(open, length, hole)
+		for a in alcoves:
+			spans = _cut_spans(spans, a["span"])
+		for span in _cut_spans(spans, _outdoor(seg)):
 			for piece in _pieces(seg, span.x, span.y):
 				var on_ramp: bool = piece.y <= ramp + 0.001 and ramp > 0.0
 				if on_ramp:
@@ -1530,7 +1588,11 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 		var ph := maxf(h, 1.2)
 		var every: int = int(theme.get("pillar_every", 5))
 		for i in range(ceili(maxf(open, ramp) / float(every)) * every, int(length), every):
-			if (i > hole.x - 0.5 and i < hole.y + 0.5) or (i > alcove.x - 0.5 and i < alcove.y + 0.5) or _is_outdoor(seg, i) \
+			var in_alcove := false
+			for a in alcoves:
+				if i > a["span"].x - 0.5 and i < a["span"].y + 0.5:
+					in_alcove = true
+			if (i > hole.x - 0.5 and i < hole.y + 0.5) or in_alcove or _is_outdoor(seg, i) \
 					or (theme.get("mezzanine", false) and side < 0 and i > 34 and i < 50):  # the lobby's grand staircase
 				continue
 			if theme.has("pillar_tex"):  # big textured pillars (the MAIN FLOOR EXIT's granite)
@@ -1545,11 +1607,28 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 				_item_box(parent, seg, j, Vector3(side * (road_w / 2.0 + 1.0), ph / 2.0, 0), Vector3(1.0, ph, 1.0), theme["color"].darkened(0.5))
 		if theme.get("wall_decor", false):
 			_wall_decor(parent, seg, side, maxf(open, ramp), length)
-		if alcove != Vector2.ZERO:
-			if String(_alcove_data(seg, side).get("kind", "kitchen")) == "bay":
-				_build_bay(parent, seg, side, alcove)
-			else:
-				_build_kitchen(parent, seg, side, alcove)
+		# Each room is built a straight piece at a time: the road can turn under one (an authored bend is
+		# kept clear of rooms, but an area heading for the end angles back to the centre line).
+		var rooms: Array[Dictionary] = []
+		for a in alcoves:
+			for pc in _pieces(seg, a["span"].x, a["span"].y):
+				rooms.append({"span": pc, "kind": a["kind"]})
+		for a in rooms:
+			match String(a["kind"]):
+				"bay":
+					_build_bay(parent, seg, side, a["span"])
+				"boiler":
+					_build_boiler_bay(parent, seg, side, a["span"])
+				"channel":
+					_build_sewer_channel(parent, seg, side, a["span"])
+				"pumps":
+					_build_boiler_bay(parent, seg, side, a["span"], true)
+				"basin":
+					_build_sewer_channel(parent, seg, side, a["span"], true)
+				"ledge":
+					_build_drain_side(parent, seg, side, a["span"])
+				_:
+					_build_kitchen(parent, seg, side, a["span"])
 	if theme.get("floor_stripes", false):
 		_floor_stripes(parent, seg, ramp)
 	if theme.get("mezzanine", false):
@@ -1562,6 +1641,12 @@ func _build_walls(parent: Node3D, seg: Dictionary, open_l: float, open_r: float)
 		_warehouse_overhead(parent, seg, ramp)
 	if theme.get("overhead", "") == "pipes":
 		_dock_overhead(parent, seg, ramp)
+	if theme.get("drain_water", false):
+		_drain_water(parent, seg)
+	if theme.get("overhead", "") == "pump":
+		_pump_overhead(parent, seg, ramp)
+	if theme.get("overhead", "") == "service":
+		_service_overhead(parent, seg, ramp)
 	if theme.get("ceiling_vents", false):
 		_ceiling_vents(parent, seg, ramp)
 	if theme.get("litter", false):
@@ -1846,6 +1931,12 @@ func _roof_railing(parent: Node3D, seg: Dictionary, span: Vector2, x: float, lip
 
 ## Office walls: now and then a door, a window or a notice board between the pillars.
 func _wall_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	if str(_theme(seg["id"]).get("wall_decor", "")) == "sewer":
+		_sewer_decor(parent, seg, side, from, to)
+		return
+	if str(_theme(seg["id"]).get("wall_decor", "")) == "service":
+		_service_decor(parent, seg, side, from, to)
+		return
 	if str(_theme(seg["id"]).get("wall_decor", "")) == "exit":
 		_exit_decor(parent, seg, side, from, to)
 		return
@@ -4235,6 +4326,788 @@ func _office_roof_decor(parent: Node3D, seg: Dictionary) -> void:
 	_roof_hut(parent, seg, until - 2.0, road_half + 3.4, -1)
 
 
+## A cylinder lying along the road (a pipe down a wall), `length` long, centred on `xf`.
+func _pipe_z(parent: Node3D, xf: Transform3D, length: float, radius: float, mat: Material) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = radius
+	cyl.bottom_radius = radius
+	cyl.height = length
+	cyl.radial_segments = 10
+	m.mesh = cyl
+	m.material_override = mat
+	parent.add_child(m)
+	m.transform = xf * Transform3D(Basis(Vector3.RIGHT, PI / 2.0), Vector3.ZERO)
+	return m
+
+
+## The SERVICE TUNNEL overhead and floor (user reference): concrete beams across at the pillars and a
+## central air duct with grilles (both above the camera), a big rusty-red pipe on brackets along the
+## left wall, a cable tray with red and black cables along the right, drainage grates along both
+## edges of the floor.
+func _service_overhead(parent: Node3D, seg: Dictionary, from: float) -> void:
+	var length: float = seg["length"]
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var wall := road_half + 1.0
+	var rust := PsxMaterials.flat(Color("7a3420"))  # rusty red
+	var duct := Color("6a6e70")
+	var dark := Color("2a2c2e")
+	for piece in _pieces(seg, from, length):
+		var mid := (piece.x + piece.y) / 2.0
+		var l: float = piece.y - piece.x
+		var f := _frame_at(seg, mid)
+		_pipe_z(parent, f * Transform3D(Basis.IDENTITY, Vector3(-(wall - 0.38), CEILING_Y - 0.7, 0)), l, 0.3, rust)
+		_item_box(parent, seg, mid, Vector3(wall - 0.4, CEILING_Y - 0.85, 0), Vector3(0.5, 0.06, l), dark)  # cable tray
+		for k in 3:
+			var c := Color("8a2018") if k % 2 == 0 else Color("1a1a1a")
+			_item_box(parent, seg, mid, Vector3(wall - 0.55 + k * 0.14, CEILING_Y - 0.78, 0), Vector3(0.08, 0.08, l), c)
+		_item_box(parent, seg, mid, Vector3(wall - 0.25, CEILING_Y - 1.35, 0), Vector3(0.1, 0.1, l), dark)  # a lower conduit
+		_item_box(parent, seg, mid, Vector3(-1.4, CEILING_Y - 0.56, 0), Vector3(1.0, 0.34, l), duct)  # the air duct, up out of the camera's way
+		for s in [-1.0, 1.0]:  # drainage grates along the floor's edges
+			_strip(parent, seg, piece.x, piece.y, s * (road_half + 0.18), 0.36, 0.008, PsxTextures.grating(), 1.0, 0.5)
+	var b := ceilf(from / 3.0) * 3.0
+	while b < length:  # pipe brackets
+		_item_box(parent, seg, b, Vector3(-(wall - 0.3), CEILING_Y - 0.38, 0), Vector3(0.6, 0.06, 0.08), dark)
+		_item_box(parent, seg, b, Vector3(-(wall - 0.62), CEILING_Y - 0.7, 0), Vector3(0.06, 0.7, 0.08), dark)
+		b += 3.0
+	var every: int = int(_theme(seg["id"]).get("pillar_every", 6))
+	var z := ceilf(from / float(every)) * every
+	while z < length:
+		_item_box(parent, seg, z, Vector3(0, CEILING_Y - 0.18, 0), Vector3(wall * 2.0, 0.36, 0.5), Color("5a5850"))  # beam across
+		var grille := _item_box(parent, seg, z + every / 2.0, Vector3(-1.4, CEILING_Y - 0.74, 0), Vector3(0.7, 0.02, 0.6), Color.WHITE)
+		grille.material_override = PsxMaterials.textured(PsxTextures.vent(), Vector2(3, 2))
+		z += every
+
+
+## The SERVICE TUNNEL's walls (user reference): a caged warm bulkhead lamp on every pillar, both
+## sides, with its glow and pool; between the pillars lockers, electrical boxes,
+## crates, a tool cart, in turn.
+func _service_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var face := side * (road_half + 0.2)  # the pillars' road face
+	var every: int = int(_theme(seg["id"]).get("pillar_every", 6))
+	var start := ceili(from / float(every)) * every
+	var lit := 0
+	for i in range(start, int(to), every):
+		var near_bend := false
+		for leg in seg["legs"]:
+			if absf(float(leg["start"]) - i) < 1.3:
+				near_bend = true
+		if near_bend:
+			continue
+		var k := i / every
+		if true:  # a lamp on every pillar (user: too dark to see the obstacles)
+			var lamp := _item_box(parent, seg, i, Vector3(face - side * 0.1, 2.6, 0), Vector3(0.2, 0.36, 0.24), Color.WHITE)
+			lamp.material_override = PsxMaterials.glow(Color("ffcf80"))
+			for dy in [-0.1, 0.1]:  # its cage
+				_item_box(parent, seg, i, Vector3(face - side * 0.21, 2.6 + dy, 0), Vector3(0.03, 0.03, 0.28), Color("2a2c2e"))
+			_halo_at(parent, seg, i, Vector3(face - side * 0.25, 2.6, 0), Color(1.0, 0.72, 0.38, 0.55), 1.5)
+			_pool_at(parent, seg, i, face - side * 1.4, Color(1.0, 0.7, 0.35, 0.3), 2.6)
+			_ambience.add_lamp(lamp, Color(1.0, 0.8, 0.5) * 1.45, 7.5, {"flicker": 0.4 if lit % 6 == 5 else 0.0})
+			lit += 1
+		var at := float(i) + every / 2.0
+		if at > to - 1.5:
+			continue
+		var holder := Node3D.new()
+		parent.add_child(holder)
+		holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(side * (road_half + 0.7), 0, 0))
+		var out := -float(side)
+		match (k + absi(hash([seg["id"], side]))) % 4:
+			0:  # a pair of grey-green lockers
+				for dz in [-0.45, 0.45]:
+					_box(holder, Vector3(0.5, 2.0, 0.86), Vector3(0, 1.0, dz), Color("4e5a50"))
+					for vy in [1.75, 0.35]:
+						_box(holder, Vector3(0.02, 0.1, 0.4), Vector3(out * 0.26, vy, dz), Color("2a302a"))  # vents
+					_box(holder, Vector3(0.02, 0.2, 0.06), Vector3(out * 0.26, 1.0, dz + 0.3), Color("1a1e1a"))  # handle
+			1:  # crates, wooden and olive
+				_box(holder, Vector3(0.6, 0.7, 0.9), Vector3(0, 0.35, -0.3), Color.WHITE).material_override = \
+						PsxMaterials.textured(PsxTextures.crate_wood(), Vector2(3, 2))
+				_box(holder, Vector3(0.55, 0.6, 0.8), Vector3(0, 0.3, 0.6), Color.WHITE).material_override = \
+						PsxMaterials.textured(PsxTextures.olive_crate(), Vector2(3, 2))
+			2:  # an electrical box on the wall, conduit up from it
+				_box(holder, Vector3(0.25, 1.2, 0.8), Vector3(side * 0.18, 1.5, 0), Color("6a6e6a"))
+				_box(holder, Vector3(0.02, 1.0, 0.04), Vector3(side * 0.05, 1.5, 0), Color("2a2c2a"))
+				_box(holder, Vector3(0.08, 2.0, 0.08), Vector3(side * 0.2, 3.1, 0.2), Color("2a2c2e"))
+			3:  # a steel tool cart with toolboxes
+				for cz in [-0.45, 0.45]:
+					for cx in [-0.2, 0.2]:
+						_box(holder, Vector3(0.04, 0.95, 0.04), Vector3(cx, 0.48, cz), Color("8a8e90"))  # legs
+				for sy in [0.25, 0.92]:
+					_box(holder, Vector3(0.48, 0.03, 0.96), Vector3(0, sy, 0), Color("8a8e90"))
+				_box(holder, Vector3(0.36, 0.22, 0.5), Vector3(0, 1.05, -0.2), Color("a83020"))  # red toolbox
+				_box(holder, Vector3(0.3, 0.2, 0.36), Vector3(0, 0.37, 0.2), Color("3a4a3a"))
+				_box(holder, Vector3(0.3, 0.24, 0.36), Vector3(0, 0.39, -0.25), Color("a89a30"))
+
+
+## Every alcove on this side ("alcove" in route.json: one, or a list), each as {"span", "kind"}.
+func _alcoves(seg: Dictionary, side: int) -> Array[Dictionary]:
+	var raw = _graph.node_data(seg["id"]).get("alcove", [])
+	var list: Array = raw if raw is Array else [raw]
+	var out: Array[Dictionary] = []
+	for a in list:
+		if a is Dictionary and (-1 if String(a.get("side", "right")) == "left" else 1) == side:
+			var at := float(a["at"])
+			out.append({"span": Vector2(at, at + float(a.get("length", 16.0))), "kind": String(a.get("kind", "kitchen"))})
+	return out
+
+
+## A BOILER ROOM bay (user reference) behind the opening `span` in this side wall: a room 7 m deep
+## the hall's full height, its steel-plate floor, back and end walls, ceiling and beams; big rusty
+## boilers on saddles with glowing fireboxes toward you, gauges, red valve wheels, pipes up to the
+## ceiling (steam from some); control panels between them; yellow-and-black safety frames along
+## the walkway; steel columns at the opening; a catwalk along the back under warm wall lamps.
+func _build_boiler_bay(parent: Node3D, seg: Dictionary, side: int, span: Vector2, pumps: bool = false) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var wx := side * (road_half + 1.0)
+	var depth := 7.0
+	var top := _ceil(seg["id"])
+	var mid := (span.x + span.y) / 2.0
+	var L := span.y - span.x
+	var out := func(d: float) -> float: return wx + side * d  # d metres back from the opening
+	var wall_tex := PsxTextures.service_wall() if pumps else PsxTextures.boiler_wall()  # the PUMP STATION: pale concrete
+	var wall := PsxMaterials.textured(wall_tex, Vector2(L / 2.0, top / 2.0))
+	var dark := Color("2a2c2e")
+	# The room.
+	_strip(parent, seg, span.x, span.y, side * (road_half + (1.0 + depth) / 2.0), 1.0 + depth, 0.0, PsxTextures.service_floor() if pumps else PsxTextures.steel_plate(),
+			(1.0 + depth) / tuning.lane_width, tuning.lane_width)
+	_item_box(parent, seg, mid, Vector3(out.call(depth), top / 2.0, 0), Vector3(0.2, top, L + 2.4), Color.WHITE).material_override = wall
+	for z in [span.x, span.y]:
+		_item_box(parent, seg, z, Vector3(out.call(depth / 2.0), top / 2.0, 0), Vector3(depth, top, 0.2), Color.WHITE).material_override = \
+				PsxMaterials.textured(wall_tex, Vector2(depth / 2.0, top / 2.0))
+	_item_box(parent, seg, mid, Vector3(out.call(depth / 2.0), top + 0.05, 0), Vector3(depth + 0.2, 0.1, L + 2.4), Color("26282a"))
+	var b := span.x + 3.0
+	while b < span.y - 1.0:
+		_item_box(parent, seg, b, Vector3(out.call(depth / 2.0), top - 0.3, 0), Vector3(depth, 0.4, 0.35), dark)  # beams
+		b += 6.0
+	# Steel columns at the opening, a hazard band at their feet.
+	var c := span.x
+	while c <= span.y + 0.01:
+		_item_box(parent, seg, c, Vector3(wx, top / 2.0, 0), Vector3(0.5, top, 0.5), Color("3e4244"))
+		_item_box(parent, seg, c, Vector3(wx, 0.4, 0), Vector3(0.54, 0.8, 0.54), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.hazard(), Vector2(2, 2))
+		c += L / maxf(1.0, roundf(L / 10.0))
+	# The boilers, one to every 11 m or so, with a control panel between.
+	var n := maxi(1, int((L - 2.0) / 11.0))
+	var step := L / n
+	for k in n:
+		var bz := span.x + step * (k + 0.5)
+		if pumps:
+			_pump(parent, seg, bz, out.call(3.6), side, k, minf(step - 2.5, 8.5))
+		else:
+			_boiler(parent, seg, bz, out.call(3.6), side, k, minf(step - 2.5, 8.5))
+		if k < n - 1:
+			var panel := Node3D.new()
+			parent.add_child(panel)
+			panel.transform = _frame_at(seg, span.x + step * (k + 1)) * Transform3D(Basis.IDENTITY, Vector3(out.call(1.2), 0, 0))
+			_box(panel, Vector3(0.8, 1.8, 1.1), Vector3(0, 0.9, 0), Color("4a4e52"))
+			for ly in [1.45, 1.3]:
+				for lz in [-0.25, 0.0, 0.25]:
+					var l := _box(panel, Vector3(0.02, 0.06, 0.06), Vector3(-side * 0.41, ly, lz), Color.WHITE)
+					l.material_override = PsxMaterials.glow(Color("ff3020") if (k + int(lz * 8.0)) % 2 == 0 else Color("40d060"))
+			_box(panel, Vector3(0.02, 0.5, 0.7), Vector3(-side * 0.41, 0.8, 0), Color("2a2c2e"))  # its switchgear
+	# Yellow-and-black safety frames along the walkway, in front of each boiler; at the pumps, a
+	# yellow pipe railing along the whole bay.
+	if pumps:
+		_yellow_rail(parent, seg, span.x + 0.5, span.y - 0.5, side * (road_half + 0.55))
+	for k in (0 if pumps else n):
+		var fz := span.x + step * (k + 0.5)
+		for dz in [-1.6, 1.6]:
+			_item_box(parent, seg, fz + dz, Vector3(side * (road_half + 0.55), 0.55, 0), Vector3(0.12, 1.1, 0.12), Color.WHITE).material_override = \
+					PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 3))
+		_item_box(parent, seg, fz, Vector3(side * (road_half + 0.55), 1.05, 0), Vector3(0.12, 0.12, 3.3), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.hazard(), Vector2(6, 1))
+	# The catwalk along the back wall, its hazard railing, its supports, and warm lamps over it.
+	var cy := 4.5
+	_item_box(parent, seg, mid, Vector3(out.call(depth - 1.0), cy, 0), Vector3(2.0, 0.1, L - 0.4), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.grating(), Vector2(3.0 * 2.0 / 1.4, 2.0 * L / 1.4))
+	_item_box(parent, seg, mid, Vector3(out.call(depth - 2.0), cy + 1.0, 0), Vector3(0.08, 0.08, L - 0.4), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.hazard(), Vector2(L / 1.2, 1))
+	_item_box(parent, seg, mid, Vector3(out.call(depth - 2.0), cy + 0.5, 0), Vector3(0.05, 0.05, L - 0.4), dark)
+	var p := span.x + 1.0
+	var lit := 0
+	while p < span.y - 0.5:
+		_item_box(parent, seg, p, Vector3(out.call(depth - 2.0), cy + 0.5, 0), Vector3(0.06, 1.0, 0.06), Color("8a7a30"))
+		_item_box(parent, seg, p, Vector3(out.call(depth - 2.0), cy / 2.0, 0), Vector3(0.14, cy, 0.14), dark)  # supports
+		if int(p - span.x) % 8 == 1:
+			var lamp := _item_box(parent, seg, p, Vector3(out.call(depth - 0.12), cy + 1.6, 0), Vector3(0.12, 0.3, 0.3), Color.WHITE)
+			lamp.material_override = PsxMaterials.glow(Color("ffd890"))
+			_halo_at(parent, seg, p, Vector3(out.call(depth - 0.25), cy + 1.6, 0), Color(1.0, 0.72, 0.38, 0.5), 1.4)
+			if lit < 3:
+				_ambience.add_lamp(lamp, Color(1.0, 0.78, 0.45) * 1.2, 6.0, {"alert": false})
+				lit += 1
+		p += 2.0
+
+
+## One boiler in a bay at `z`, its axis along the road at x: a rusty horizontal drum on saddles,
+## its glowing firebox toward the walkway, a gauge, a red valve wheel, pipes up to the ceiling
+## (steam off some), `length` long.
+func _boiler(parent: Node3D, seg: Dictionary, z: float, x: float, side: int, k: int, length: float) -> void:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var face := -float(side)  # toward the walkway
+	var r := 1.6
+	var cy := 2.15
+	_pipe_z(holder, Transform3D(Basis.IDENTITY, Vector3(0, cy, 0)), length, r, PsxMaterials.textured(PsxTextures.boiler_shell(), Vector2(5, 2)))
+	for e in [-1.0, 1.0]:
+		_pipe_z(holder, Transform3D(Basis.IDENTITY, Vector3(0, cy, e * (length / 2.0 - 0.15))), 0.3, r + 0.08, PsxMaterials.flat(Color("3a3836")))  # end bands
+		_box(holder, Vector3(2.4, 0.8, 0.5), Vector3(0, 0.4, e * (length / 2.0 - 1.2)), Color("3a3c3e"))  # saddles
+	# The firebox: a dark housing low on the walkway side, its grate glowing orange.
+	_box(holder, Vector3(0.7, 1.1, 1.6), Vector3(face * (r - 0.1), 1.0, 0), Color("2a2826"))
+	for s in 4:
+		var slat := _box(holder, Vector3(0.04, 0.6, 0.2), Vector3(face * (r + 0.26), 1.0, -0.45 + s * 0.3), Color.WHITE)
+		slat.material_override = PsxMaterials.glow(Color("ff7a20"))
+	_halo(holder, Vector3(face * (r + 0.4), 1.0, 0), Color(1.0, 0.45, 0.12, 0.55), 2.4)
+	var fire := Node3D.new()
+	holder.add_child(fire)
+	fire.position = Vector3(face * (r + 1.2), 1.0, 0)
+	_ambience.add_lamp(fire, Color(1.0, 0.45, 0.15) * 1.8, 6.0, {"alert": false, "flicker": 0.25})
+	var over := Node3D.new()  # a lamp up over it, so you see the boiler from the walkway
+	holder.add_child(over)
+	over.position = Vector3(face * 1.0, cy + r + 1.6, 0)
+	_ambience.add_lamp(over, Color(1.0, 0.82, 0.55) * 1.4, 7.0, {"alert": false})
+	var glow_floor := MeshInstance3D.new()
+	var gp := PlaneMesh.new()
+	gp.size = Vector2(3.6, 3.6)
+	glow_floor.mesh = gp
+	glow_floor.material_override = PsxMaterials.pool(Color(1.0, 0.42, 0.12, 0.35))
+	holder.add_child(glow_floor)
+	glow_floor.position = Vector3(face * (r + 1.0), 0.03, 0)
+	# A pressure gauge and a red valve wheel on the walkway side.
+	var gz := length / 2.0 - 1.4
+	_box(holder, Vector3(0.3, 0.08, 0.08), Vector3(face * (r + 0.1), cy + 0.8, gz), Color("4a4846"))
+	var gauge := MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = 0.22
+	disc.bottom_radius = 0.22
+	disc.height = 0.06
+	disc.radial_segments = 12
+	gauge.mesh = disc
+	gauge.material_override = PsxMaterials.flat(Color("e8e4d8"))
+	holder.add_child(gauge)
+	gauge.position = Vector3(face * (r + 0.28), cy + 0.8, gz)
+	gauge.rotation.z = PI / 2.0
+	_box(holder, Vector3(0.02, 0.16, 0.02), Vector3(face * (r + 0.32), cy + 0.84, gz), Color("1a1a1a"))  # its needle
+	var wheel := Node3D.new()
+	holder.add_child(wheel)
+	wheel.position = Vector3(face * (r + 0.35), cy + 0.2, -gz)
+	var red := Color("a01e18")
+	for s in 8:
+		var a := TAU * s / 8.0
+		var rim := _box(wheel, Vector3(0.06, 0.06, 0.22), Vector3(0, sin(a) * 0.32, cos(a) * 0.32), red)
+		rim.rotation.x = -(a + PI / 2.0)  # along the rim
+	for s in 2:
+		var spoke := _box(wheel, Vector3(0.04, 0.64, 0.04), Vector3.ZERO, red)
+		spoke.rotation.x = s * PI / 2.0
+	_box(holder, Vector3(0.35, 0.1, 0.1), Vector3(face * (r + 0.15), cy + 0.2, -gz), Color("4a4846"))
+	# Pipes up to the ceiling: rusty red or grey, with flanges, steam off some.
+	var top := _ceil(seg["id"])
+	for pz in [-length / 4.0, length / 4.0]:
+		var rusty := (k + int(pz > 0.0)) % 2 == 0
+		var pm := PsxMaterials.flat(Color("7a3420") if rusty else Color("5a5e60"))
+		var ph := top - (cy + r)
+		var pipe := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.26
+		cyl.bottom_radius = 0.26
+		cyl.height = ph
+		cyl.radial_segments = 10
+		pipe.mesh = cyl
+		pipe.material_override = pm
+		holder.add_child(pipe)
+		pipe.position = Vector3(0.3 * face, cy + r + ph / 2.0 - 0.1, pz)
+		var flange := MeshInstance3D.new()
+		var fc := CylinderMesh.new()
+		fc.top_radius = 0.36
+		fc.bottom_radius = 0.36
+		fc.height = 0.16
+		fc.radial_segments = 10
+		flange.mesh = fc
+		flange.material_override = PsxMaterials.flat(Color("3a3836"))
+		holder.add_child(flange)
+		flange.position = Vector3(0.3 * face, cy + r + 1.2, pz)
+	if k % 2 == 0:
+		var steam := Steam.new(4, hash([seg["id"], z]))
+		holder.add_child(steam)
+		steam.position = Vector3(face * 0.6, cy + r + 0.1, 0)
+		_audio.attach_loop(steam, "steam", -14.0, 10.0, 2.0)
+
+
+## BOILER ROOM jump: a yellow-and-black safety rail across the lane, two posts and two rails.
+func _build_safety_rail(parent: Node3D, seg: Dictionary, at: float, x: float, _lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var hz := PsxMaterials.textured(PsxTextures.hazard(), Vector2(4, 1))
+	var w := tuning.lane_width - 0.1
+	for sx in [-w / 2.0 + 0.06, w / 2.0 - 0.06]:
+		_box(holder, Vector3(0.1, 0.6, 0.1), Vector3(sx, 0.3, 0), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.hazard(), Vector2(1, 2))
+		_box(holder, Vector3(0.24, 0.04, 0.24), Vector3(sx, 0.02, 0), Color("3a3c3e"))  # its foot
+	_box(holder, Vector3(w, 0.1, 0.08), Vector3(0, 0.56, 0), Color.WHITE).material_override = hz
+	_box(holder, Vector3(w, 0.08, 0.06), Vector3(0, 0.28, 0), Color.WHITE).material_override = hz
+	return holder
+
+
+## The BOILER ROOM's hall lamps (user reference): industrial lamps hanging on cables over the
+## walkway from the high ceiling, each with its glow and pool; beams across the ceiling.
+func _hall_lamps(parent: Node3D, seg: Dictionary) -> void:
+	var top := _ceil(seg["id"])
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var z := float(seg["ramp_len"]) + 6.0
+	var n := 0
+	while z < float(seg["length"]) - 2.0:
+		var y := top - 2.0
+		_item_box(parent, seg, z, Vector3(0, (y + top) / 2.0, 0), Vector3(0.03, top - y, 0.03), Color("1a1a1a"))
+		_item_box(parent, seg, z, Vector3(0, y, 0), Vector3(0.7, 0.24, 0.5), Color("2a2c2e"))
+		var lens := _item_box(parent, seg, z, Vector3(0, y - 0.13, 0), Vector3(0.6, 0.03, 0.42), Color.WHITE)
+		lens.material_override = PsxMaterials.glow(Color("fff0c8"))
+		_halo_at(parent, seg, z, Vector3(0, y - 0.25, 0), Color(1.0, 0.9, 0.7, 0.4), 2.2)
+		_pool_at(parent, seg, z, 0.0, Color(1.0, 0.85, 0.6, 0.22), 3.4)
+		var at := Node3D.new()
+		parent.add_child(at)
+		at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y - 1.5, 0))
+		_ambience.add_lamp(at, Color(_theme(seg["id"]).get("lamp_color", Color(1.0, 0.9, 0.7))) * 2.5, 11.0, {"flicker": 0.3 if n % 5 == 4 else 0.0})
+		_item_box(parent, seg, z + 3.0, Vector3(0, top - 0.25, 0), Vector3(road_half * 2.0 + 2.0, 0.5, 0.4), Color("26282a"))  # a beam
+		z += 12.0
+		n += 1
+
+
+## A SEWER channel (user reference) behind the opening `span` in this side wall: dark green water
+## below the walkway's kerb with the lamps streaking on it, a stone ledge with yellow railings past
+## it, the far brick wall with stone pillars and yellow wall lamps, a big rusty pipe along its
+## ceiling, and water pouring from pipes in the far wall into the channel.
+func _build_sewer_channel(parent: Node3D, seg: Dictionary, side: int, span: Vector2, basin: bool = false) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var mid := (span.x + span.y) / 2.0
+	var L := span.y - span.x
+	var kerb := road_half + 0.5  # the water starts here
+	var water_w := 5.0
+	var ledge := 1.6
+	var back := kerb + water_w + ledge
+	var top := _ceil(seg["id"])
+	var wl := -0.55  # the water level
+	var x := func(d: float) -> float: return side * d
+	var brick := PsxTextures.service_wall() if basin else PsxTextures.sewer_wall()  # the PUMP STATION's basin: pale concrete
+	var stone := Color("6a6a62") if basin else Color("5a5c52")
+	# The kerb strip, the channel's sides and bottom, the water.
+	_strip(parent, seg, span.x, span.y, x.call(road_half + 0.25), 0.5, 0.0, PsxTextures.service_floor() if basin else PsxTextures.sewer_floor(), 0.5 / tuning.lane_width, tuning.lane_width)
+	if basin:  # a yellow railing along the walkway's edge
+		_yellow_rail(parent, seg, span.x + 0.5, span.y - 0.5, x.call(kerb - 0.1))
+	_item_box(parent, seg, mid, Vector3(x.call(kerb + 0.05), (wl - 0.7) / 2.0, 0), Vector3(0.1, 0.7 - wl + 0.02, L), Color.WHITE).material_override = \
+			PsxMaterials.textured(brick, Vector2(L / 2.0, 1))
+	_item_box(parent, seg, mid, Vector3(x.call(kerb + water_w / 2.0), -1.2, 0), Vector3(water_w, 0.1, L), Color("141a12"))  # bottom
+	var water := _item_box(parent, seg, mid, Vector3(x.call(kerb + water_w / 2.0), wl, 0), Vector3(water_w, 0.02, L), Color.WHITE)
+	water.material_override = PsxMaterials.glass(Color(0.04, 0.16, 0.17, 0.9) if basin else Color(0.04, 0.08, 0.05, 0.94))  # dark, still water (teal in the basin)
+	if basin:  # sluice gates standing in the water, and concrete blocks
+		var g := span.x + 6.0
+		while g < span.y - 3.0:
+			for gx in [kerb + water_w * 0.5, kerb + water_w * 0.5 + 1.2]:
+				_item_box(parent, seg, g, Vector3(x.call(gx), 1.0, 0), Vector3(0.25, 3.2, 0.25), Color("2e3438"))
+			_item_box(parent, seg, g, Vector3(x.call(kerb + water_w * 0.5 + 0.6), 0.6, 0), Vector3(1.0, 2.2, 0.12), Color("3a4248"))  # the gate
+			_item_box(parent, seg, g, Vector3(x.call(kerb + water_w * 0.5 + 0.6), 2.7, 0), Vector3(1.6, 0.25, 0.4), Color("2e3438"))  # its winding gear
+			_item_box(parent, seg, g + 4.0, Vector3(x.call(kerb + 1.2), wl + 0.3, 0), Vector3(1.4, 1.4, 1.4), Color("6a6a62"))  # a block
+			g += 12.0
+	_item_box(parent, seg, mid, Vector3(x.call(kerb + water_w + 0.05), (wl - 0.7) / 2.0, 0), Vector3(0.1, 0.7 - wl + 0.02, L), Color.WHITE).material_override = \
+			PsxMaterials.textured(brick, Vector2(L / 2.0, 1))
+	# The far ledge, its yellow railing, the far wall and the ceiling over it all.
+	_strip(parent, seg, span.x, span.y, x.call(kerb + water_w + ledge / 2.0), ledge, 0.0, PsxTextures.sewer_floor(), ledge / tuning.lane_width, tuning.lane_width)
+	_item_box(parent, seg, mid, Vector3(x.call(kerb + water_w + 0.15), 1.0, 0), Vector3(0.06, 0.06, L), Color("c8a020"))
+	_item_box(parent, seg, mid, Vector3(x.call(kerb + water_w + 0.15), 0.55, 0), Vector3(0.05, 0.05, L), Color("c8a020"))
+	_item_box(parent, seg, mid, Vector3(x.call(back), top / 2.0, 0), Vector3(0.2, top, L + 2.4), Color.WHITE).material_override = \
+			PsxMaterials.textured(brick, Vector2(L / 2.0, top / 2.0))
+	_item_box(parent, seg, mid, Vector3(x.call((road_half + 1.0 + back) / 2.0), top + 0.05, 0), Vector3(back - road_half - 1.0 + 0.2, 0.1, L + 2.4), Color("2e322a"))
+	for z in [span.x, span.y]:  # the end walls, down into the channel
+		_item_box(parent, seg, z, Vector3(x.call((road_half + 1.0 + back) / 2.0), (top + wl - 0.7) / 2.0, 0), Vector3(back - road_half - 1.0, top - wl + 0.7, 0.2), Color.WHITE).material_override = \
+				PsxMaterials.textured(brick, Vector2(3, 2))
+	_pipe_z(parent, _frame_at(seg, mid) * Transform3D(Basis.IDENTITY, Vector3(x.call(kerb + water_w * 0.6), top - 0.7, 0)), L, 0.45,
+			PsxMaterials.flat(Color("6a3a22")))
+	# Stone pillars along the opening and the far wall, lamps on the far ones, railing posts.
+	var p := span.x
+	var n := 0
+	var lit := 0
+	while p <= span.y + 0.01:
+		_item_box(parent, seg, p, Vector3(x.call(road_half + 1.0), top / 2.0, 0), Vector3(0.6, top, 0.6), stone)
+		_item_box(parent, seg, p, Vector3(x.call(back - 0.3), top / 2.0, 0), Vector3(0.6, top, 0.6), stone)
+		_item_box(parent, seg, p, Vector3(x.call(road_half + 1.0), top - 0.3, 0), Vector3(back - road_half - 1.0, 0.4, 0.4), Color("3a3e36"))  # a beam across
+		if n % 2 == 1 and lit < 4:
+			var lamp := _item_box(parent, seg, p, Vector3(x.call(back - 0.65), 2.4, 0), Vector3(0.12, 0.3, 0.24), Color.WHITE)
+			lamp.material_override = PsxMaterials.glow(Color("f0e070"))
+			_halo_at(parent, seg, p, Vector3(x.call(back - 0.8), 2.4, 0), Color(0.95, 0.85, 0.4, 0.5), 1.5)
+			_ambience.add_lamp(lamp, Color(0.95, 0.88, 0.5) * 1.3, 6.0, {"alert": false})
+			# Its light streaking on the water toward you.
+			var streak := MeshInstance3D.new()
+			var sp := PlaneMesh.new()
+			sp.size = Vector2(0.7, 4.5)
+			streak.mesh = sp
+			streak.material_override = PsxMaterials.pool(Color(0.95, 0.85, 0.4, 0.32))
+			parent.add_child(streak)
+			streak.transform = _frame_at(seg, p + 2.0) * Transform3D(Basis.IDENTITY, Vector3(x.call(kerb + water_w * 0.55), wl + 0.03, 0))
+			lit += 1
+		for r in 3:  # ripples catching the light
+			var rip := MeshInstance3D.new()
+			var rp := PlaneMesh.new()
+			rp.size = Vector2(0.18, 1.4)
+			rip.mesh = rp
+			rip.material_override = PsxMaterials.pool(Color(0.85, 0.95, 0.75, 0.28))
+			parent.add_child(rip)
+			rip.transform = _frame_at(seg, p + 1.5 + r * 2.2) * Transform3D(Basis.IDENTITY, Vector3(x.call(kerb + 0.8 + r * 1.4), wl + 0.03, 0))
+		for q in [p + 2.0, p + 4.0]:
+			if q < span.y:
+				_item_box(parent, seg, q, Vector3(x.call(kerb + water_w + 0.15), 0.5, 0), Vector3(0.06, 1.0, 0.06), Color("c8a020"))
+		# Water pouring from a pipe in the far wall, now and then.
+		if not basin and n % 3 == 1 and p + 4.0 < span.y:
+			var wz := p + 4.0
+			_pipe_x(parent, _frame_at(seg, wz) * Transform3D(Basis.IDENTITY, Vector3(x.call(back - 0.5), 2.2, 0)), 1.0, 0.3, Color("6a3a22"))
+			_waterfall(parent, seg, wz, Vector3(x.call(back - 1.0), 2.05, 0), Vector3(x.call(back - 1.35), wl, 0), 0.45)
+			_halo_at(parent, seg, wz, Vector3(x.call(back - 1.1), wl + 0.25, 0), Color(0.8, 0.9, 0.8, 0.45), 2.0)
+			_halo_at(parent, seg, wz, Vector3(x.call(back - 1.1), 1.2, 0), Color(0.8, 0.9, 0.8, 0.18), 1.4)
+			var splash := MeshInstance3D.new()  # the churned water where it lands
+			var spm := PlaneMesh.new()
+			spm.size = Vector2(1.6, 1.6)
+			splash.mesh = spm
+			splash.material_override = PsxMaterials.pool(Color(0.8, 0.9, 0.82, 0.4))
+			parent.add_child(splash)
+			splash.transform = _frame_at(seg, wz) * Transform3D(Basis.IDENTITY, Vector3(x.call(back - 1.3), wl + 0.03, 0))
+		p += 8.0
+		n += 1
+
+
+## The SEWER's walls on the walkway side (user reference): yellow wall lamps on the pillars with
+## their glow and pools, vents, and crates, steel cases and rusty drums on pallets, papers on the
+## floor; a rusty pipe along the wall up high.
+func _sewer_decor(parent: Node3D, seg: Dictionary, side: int, from: float, to: float) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var wall := road_half + 1.0
+	var spans: Array[Vector2] = [Vector2(from, to)]
+	for a in _alcoves(seg, side):
+		spans = _cut_spans(spans, a["span"])
+	for sp in spans:
+		for piece in _pieces(seg, sp.x, sp.y):
+			_pipe_z(parent, _frame_at(seg, (piece.x + piece.y) / 2.0) * Transform3D(Basis.IDENTITY, Vector3(side * (wall - 0.35), CEILING_Y - 0.5, 0)),
+					piece.y - piece.x, 0.28, PsxMaterials.flat(Color("6a3a22")))
+		var every := 8
+		var i := ceili(sp.x / float(every)) * every
+		var lit := 0
+		while i < sp.y - 1.0:
+			var near_bend := false
+			for leg in seg["legs"]:
+				if absf(float(leg["start"]) - i) < 1.5:
+					near_bend = true
+			if not near_bend:
+				var k := i / every
+				if k % 2 == 0:
+					var lamp := _item_box(parent, seg, i, Vector3(side * (road_half + 0.15), 2.5, 0), Vector3(0.12, 0.3, 0.24), Color.WHITE)
+					lamp.material_override = PsxMaterials.glow(Color("f0e070"))
+					_halo_at(parent, seg, i, Vector3(side * (road_half + 0.05), 2.5, 0), Color(0.95, 0.85, 0.4, 0.5), 1.4)
+					_pool_at(parent, seg, i, side * (road_half - 0.8), Color(0.95, 0.85, 0.45, 0.28), 2.4)
+					_ambience.add_lamp(lamp, Color(0.95, 0.88, 0.5) * 1.4, 6.0, {"flicker": 0.35 if lit % 4 == 3 else 0.0})
+					lit += 1
+				else:
+					_item_box(parent, seg, i, Vector3(side * (wall - 0.03), 2.7, 0), Vector3(0.04, 0.6, 0.9), Color.WHITE).material_override = \
+							PsxMaterials.textured(PsxTextures.vent(), Vector2(3, 2))
+				var at := float(i) + every / 2.0
+				if at < sp.y - 1.0:
+					var holder := Node3D.new()
+					parent.add_child(holder)
+					holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(side * (road_half + 0.6), 0, 0))
+					match (k + absi(hash(seg["id"]))) % 3:
+						0:  # steel cases on a pallet, one on top
+							_pallet(holder, Vector3.ZERO, 0.8, 1.2)
+							_box(holder, Vector3(0.7, 0.8, 1.1), Vector3(0, 0.54, 0), Color.WHITE).material_override = \
+									PsxMaterials.textured(PsxTextures.steel_case(), Vector2(3, 2))
+							_box(holder, Vector3(0.6, 0.5, 0.7), Vector3(0, 1.19, -0.15), Color.WHITE).material_override = \
+									PsxMaterials.textured(PsxTextures.steel_case(), Vector2(3, 2))
+						1:  # rusty drums
+							for dz in [-0.3, 0.3]:
+								_drum(holder, Vector3(0, 0, dz), Color("6a3420"))
+						2:  # a crate, and papers on the floor by it
+							_box(holder, Vector3(0.7, 0.7, 0.9), Vector3(0, 0.35, 0), Color.WHITE).material_override = \
+									PsxMaterials.textured(PsxTextures.crate_wood(), Vector2(3, 2))
+							for s in 2:
+								var paper := _box(holder, Vector3(0.3, 0.005, 0.22), Vector3(-side * (0.7 + s * 0.4), 0.01, 0.4 * s), Color("d8d4c4"))
+								paper.rotation.y = 0.6 * s - 0.3
+			i += every
+
+
+## The SEWER's fluorescent tubes hanging over the walkway, greenish-white, with their glow and
+## pools; drain grates set in the walkway between them.
+func _sewer_tubes(parent: Node3D, seg: Dictionary) -> void:
+	var z := float(seg["ramp_len"]) + 5.0
+	var n := 0
+	while z < float(seg["length"]) - 2.0:
+		var y := CEILING_Y - 0.9
+		for dx in [-0.25, 0.25]:
+			_item_box(parent, seg, z, Vector3(dx, (y + CEILING_Y) / 2.0, 0), Vector3(0.02, CEILING_Y - y, 0.02), Color("1a1a1a"))
+		_item_box(parent, seg, z, Vector3(0, y, 0), Vector3(0.5, 0.12, 1.6), Color("2a2e2a"))
+		var tube := _item_box(parent, seg, z, Vector3(0, y - 0.08, 0), Vector3(0.36, 0.04, 1.45), Color.WHITE)
+		tube.material_override = PsxMaterials.glow(Color("dcf0c8"))
+		_halo_at(parent, seg, z, Vector3(0, y - 0.15, 0), Color(0.8, 0.95, 0.7, 0.35), 2.2)
+		_pool_at(parent, seg, z, 0.0, Color(0.75, 0.92, 0.65, 0.22), 3.2)
+		var at := Node3D.new()
+		parent.add_child(at)
+		at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y - 1.4, 0))
+		_ambience.add_lamp(at, Color(0.8, 0.95, 0.72) * 1.6, 8.0, {"flicker": 0.35 if n % 4 == 2 else 0.0})
+		var gz := z + 5.0
+		if gz < float(seg["length"]) - 2.0:
+			_strip(parent, seg, gz, gz + 0.8, -tuning.lane_width * 0.5 if n % 2 == 0 else tuning.lane_width * 0.5, 1.2, 0.008, PsxTextures.grating(), 1.0, 0.8)
+		z += 10.0
+		n += 1
+
+
+## One PUMP STATION pump in a bay at `z` (user reference): a concrete plinth, a blue-grey motor
+## housing with cooling ribs, the pump casing, a big blue pipe from it up to the ceiling with
+## flanges and a red valve wheel, and a stub back into the wall.
+func _pump(parent: Node3D, seg: Dictionary, z: float, x: float, side: int, k: int, length: float) -> void:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var face := -float(side)
+	var blue := Color("4a6070")
+	var steel := Color("3a4650")
+	var l := minf(length, 6.0)
+	_box(holder, Vector3(3.0, 0.8, l), Vector3(0, 0.4, 0), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.concrete(), Vector2(3, 2))
+	_box(holder, Vector3(1.8, 1.5, l * 0.45), Vector3(0, 1.55, l * 0.22), blue)  # the motor
+	for r in 5:  # its cooling ribs
+		_box(holder, Vector3(1.9, 1.3, 0.05), Vector3(0, 1.55, l * 0.22 - l * 0.2 + r * l * 0.1), steel)
+	var casing := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.8
+	cyl.bottom_radius = 0.9
+	cyl.height = 1.4
+	cyl.radial_segments = 12
+	casing.mesh = cyl
+	casing.material_override = PsxMaterials.flat(blue.darkened(0.1))
+	holder.add_child(casing)
+	casing.position = Vector3(0, 1.5, -l * 0.25)
+	var top := _ceil(seg["id"])
+	var ph := top - 2.2
+	var pipe := MeshInstance3D.new()
+	var pc := CylinderMesh.new()
+	pc.top_radius = 0.45
+	pc.bottom_radius = 0.45
+	pc.height = ph
+	pc.radial_segments = 12
+	pipe.mesh = pc
+	pipe.material_override = PsxMaterials.flat(blue)
+	holder.add_child(pipe)
+	pipe.position = Vector3(0, 2.2 + ph / 2.0, -l * 0.25)
+	for fy in [2.4, 4.6]:
+		var flange := MeshInstance3D.new()
+		var fc := CylinderMesh.new()
+		fc.top_radius = 0.6
+		fc.bottom_radius = 0.6
+		fc.height = 0.18
+		fc.radial_segments = 12
+		flange.mesh = fc
+		flange.material_override = PsxMaterials.flat(steel)
+		holder.add_child(flange)
+		flange.position = Vector3(0, fy, -l * 0.25)
+	var wheel := Node3D.new()
+	holder.add_child(wheel)
+	wheel.position = Vector3(face * 0.75, 3.2, -l * 0.25)
+	var red := Color("a01e18")
+	for s in 8:
+		var a := TAU * s / 8.0
+		var rim := _box(wheel, Vector3(0.06, 0.06, 0.24), Vector3(0, sin(a) * 0.36, cos(a) * 0.36), red)
+		rim.rotation.x = -(a + PI / 2.0)
+	for s in 2:
+		var spoke := _box(wheel, Vector3(0.04, 0.72, 0.04), Vector3.ZERO, red)
+		spoke.rotation.x = s * PI / 2.0
+	_box(holder, Vector3(0.3, 0.1, 0.1), Vector3(face * 0.55, 3.2, -l * 0.25), steel)
+	_pipe_x(holder, Transform3D(Basis.IDENTITY, Vector3(-face * 1.4, 1.5, -l * 0.25)), 1.4, 0.4, blue)  # back into the wall
+	var lamp := _box(holder, Vector3(0.05, 0.08, 0.08), Vector3(face * 0.92, 1.9, l * 0.3), Color.WHITE)  # a running light
+	lamp.material_override = PsxMaterials.glow(Color("40d060") if k % 3 != 2 else Color("ff3020"))
+	var over := Node3D.new()  # a lamp up over it, so you see the pump from the walkway
+	holder.add_child(over)
+	over.position = Vector3(face * 1.2, 4.6, 0)
+	_ambience.add_lamp(over, Color(0.85, 0.95, 1.0) * 1.5, 7.0, {"alert": false})
+
+
+## A yellow pipe railing along x over [a, b]: posts every 2 m, a top and a middle rail.
+func _yellow_rail(parent: Node3D, seg: Dictionary, a: float, b: float, x: float) -> void:
+	var yellow := Color("c8a020")
+	var mid := (a + b) / 2.0
+	_item_box(parent, seg, mid, Vector3(x, 1.05, 0), Vector3(0.07, 0.07, b - a), yellow)
+	_item_box(parent, seg, mid, Vector3(x, 0.55, 0), Vector3(0.05, 0.05, b - a), yellow)
+	var p := a
+	while p <= b + 0.01:
+		_item_box(parent, seg, p, Vector3(x, 0.52, 0), Vector3(0.07, 1.05, 0.07), yellow)
+		p += 2.0
+
+
+## The PUMP STATION overhead (user reference): big blue pipes across the hall high up, each with
+## flanges and a red valve wheel, and red pipes along both sides of the ceiling.
+func _pump_overhead(parent: Node3D, seg: Dictionary, from: float) -> void:
+	var length: float = seg["length"]
+	var top := _ceil(seg["id"])
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	for piece in _pieces(seg, from, length):
+		var mid := (piece.x + piece.y) / 2.0
+		for s in [-1.0, 1.0]:
+			_pipe_z(parent, _frame_at(seg, mid) * Transform3D(Basis.IDENTITY, Vector3(s * (road_half + 0.7), top - 0.45, 0)), piece.y - piece.x, 0.12,
+					PsxMaterials.flat(Color("8a2018")))
+	var z := from + 18.0
+	while z < length - 6.0:
+		_pipe_x(parent, _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, top - 1.3, 0)), road_half * 2.0 + 2.2, 0.55, Color("4a6070"))
+		for fx in [-2.0, 2.0]:
+			_pipe_x(parent, _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(fx, top - 1.3, 0)), 0.2, 0.7, Color("3a4650"))
+		var wheel := Node3D.new()
+		parent.add_child(wheel)
+		wheel.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0.6, top - 0.55, 0))
+		for s in 8:
+			var a := TAU * s / 8.0
+			var rim := _box(wheel, Vector3(0.24, 0.06, 0.06), Vector3(cos(a) * 0.36, 0, sin(a) * 0.36), Color("a01e18"))
+			rim.rotation.y = -(a + PI / 2.0)
+		z += 30.0
+
+
+## A STORM DRAIN side (user reference) behind the opening `span`: the channel wall up to a raised
+## ledge with a hazard-striped lip and a railing, yellow ladders down the wall, outfall pipes in it
+## pouring water into the channel, buttress pillars; the upper wall behind the ledge with warm lamps
+## and a big pipe along it, cabinets and crates on the ledge.
+func _build_drain_side(parent: Node3D, seg: Dictionary, side: int, span: Vector2) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var wl := road_half + 1.0  # the channel wall's line
+	var ly := 2.3  # the ledge's height
+	var lw := 2.6  # ...and depth
+	var top := _ceil(seg["id"])
+	var mid := (span.x + span.y) / 2.0
+	var L := span.y - span.x
+	var x := func(d: float) -> float: return side * d
+	var concrete := PsxMaterials.textured(PsxTextures.drain_wall(), Vector2(L / 2.0, 1.2))
+	var grey := Color("6a6e70")
+	# The channel wall, the ledge, its lip, its railing; the upper wall and the ceiling over it.
+	_item_box(parent, seg, mid, Vector3(x.call(wl), ly / 2.0, 0), Vector3(0.3, ly, L), Color.WHITE).material_override = concrete
+	_item_box(parent, seg, mid, Vector3(x.call(wl + lw / 2.0), ly - 0.12, 0), Vector3(lw, 0.24, L), Color("4a4c46"))
+	_strip(parent, seg, span.x, span.y, x.call(wl + lw / 2.0), lw, ly + 0.005, PsxTextures.sewer_floor(), lw / tuning.lane_width, tuning.lane_width)
+	_item_box(parent, seg, mid, Vector3(x.call(wl + 0.12), ly + 0.02, 0), Vector3(0.24, 0.05, L), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.hazard(), Vector2(L / 0.8, 1))
+	for ry in [ly + 0.55, ly + 1.05]:
+		_item_box(parent, seg, mid, Vector3(x.call(wl + 0.25), ry, 0), Vector3(0.05, 0.05, L), grey)
+	_item_box(parent, seg, mid, Vector3(x.call(wl + lw), (ly + top) / 2.0, 0), Vector3(0.2, top - ly, L + 5.0), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.drain_wall(), Vector2(L / 2.0, (top - ly) / 2.0))
+	_item_box(parent, seg, mid, Vector3(x.call(wl + lw / 2.0), top + 0.05, 0), Vector3(lw + 0.4, 0.1, L + 5.0), Color("2e302a"))
+	for z in [span.x, span.y]:
+		_item_box(parent, seg, z, Vector3(x.call(wl + lw / 2.0), top / 2.0, 0), Vector3(lw, top, 0.3), Color.WHITE).material_override = \
+				PsxMaterials.textured(PsxTextures.drain_wall(), Vector2(2, 3))
+	_pipe_z(parent, _frame_at(seg, mid) * Transform3D(Basis.IDENTITY, Vector3(x.call(wl + lw - 0.6), top - 1.1, 0)), L, 0.5,
+			PsxMaterials.flat(Color("5a5e5c")))
+	# Every 8 m: a buttress, railing posts, a lamp on the upper wall (every other), and in turn a
+	# ladder, an outfall pouring water, or a cabinet or crates on the ledge.
+	var p := span.x + 4.0
+	var n := 0
+	var lit := 0
+	while p < span.y - 1.0:
+		_item_box(parent, seg, p, Vector3(x.call(wl - 0.1), top / 2.0, 0), Vector3(0.6, top, 0.8), Color("5a5c54"))  # buttress
+		_item_box(parent, seg, p, Vector3(x.call(wl + lw / 2.0), top - 0.3, 0), Vector3(lw, 0.5, 0.6), Color("4a4c46"))  # beam over the ledge
+		for q in [p + 2.0, p + 4.0, p + 6.0]:
+			if q < span.y - 0.5:
+				_item_box(parent, seg, q, Vector3(x.call(wl + 0.25), ly + 0.55, 0), Vector3(0.06, 1.1, 0.06), grey)
+		if n % 2 == 0:
+			var lamp := _item_box(parent, seg, p + 4.0, Vector3(x.call(wl + lw - 0.12), ly + 2.1, 0), Vector3(0.14, 0.26, 0.34), Color.WHITE)
+			lamp.material_override = PsxMaterials.glow(Color("ffd890"))
+			_halo_at(parent, seg, p + 4.0, Vector3(x.call(wl + lw - 0.3), ly + 2.1, 0), Color(1.0, 0.75, 0.4, 0.5), 1.6)
+			_pool_at(parent, seg, p + 4.0, x.call(road_half - 1.0), Color(1.0, 0.72, 0.38, 0.22), 2.6)
+			if lit < 4:
+				_ambience.add_lamp(lamp, Color(1.0, 0.8, 0.5) * 1.6, 8.0, {"alert": false})
+				lit += 1
+		var at := p + 4.0
+		if at < span.y - 1.5:
+			match (n + (0 if side < 0 else 1)) % 3:
+				0:  # a yellow ladder down the channel wall
+					for rz in [-0.22, 0.22]:
+						_item_box(parent, seg, at + rz, Vector3(x.call(wl - 0.2), (ly + 1.0) / 2.0, 0), Vector3(0.05, ly + 1.0, 0.05), Color("c8a020"))
+					var r := 0.3
+					while r < ly + 0.9:
+						_item_box(parent, seg, at, Vector3(x.call(wl - 0.2), r, 0), Vector3(0.04, 0.04, 0.44), Color("c8a020"))
+						r += 0.3
+				1:  # an outfall in the wall pouring water into the channel
+					_pipe_x(parent, _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x.call(wl - 0.1), 0.8, 0)), 0.5, 0.55, Color("3a3c38"))
+					_pipe_x(parent, _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x.call(wl - 0.2), 0.8, 0)), 0.3, 0.42, Color("141614"))
+					_waterfall(parent, seg, at, Vector3(x.call(wl - 0.35), 0.75, 0), Vector3(x.call(wl - 1.0), 0.0, 0), 0.6)
+					_halo_at(parent, seg, at, Vector3(x.call(wl - 0.9), 0.15, 0), Color(0.8, 0.9, 0.8, 0.4), 1.6)
+					_pool_at(parent, seg, at, x.call(wl - 1.2), Color(0.8, 0.9, 0.82, 0.3), 1.4)
+				2:  # a utility cabinet and crates on the ledge
+					_item_box(parent, seg, at, Vector3(x.call(wl + lw - 0.5), ly + 0.75, 0), Vector3(0.6, 1.5, 1.0), Color("7a7e80"))
+					_item_box(parent, seg, at, Vector3(x.call(wl + lw - 1.05), ly + 1.0, 0.25), Vector3(0.02, 0.12, 0.08), Color.WHITE).material_override = \
+							PsxMaterials.glow(Color("ff3020"))
+					_item_box(parent, seg, at + 1.6, Vector3(x.call(wl + lw - 0.8), ly + 0.4, 0), Vector3(0.8, 0.8, 0.9), Color.WHITE).material_override = \
+							PsxMaterials.textured(PsxTextures.crate_wood(), Vector2(3, 2))
+		p += 8.0
+		n += 1
+
+
+## The STORM DRAIN's channel floor (user reference): shallow water over it the whole way, the
+## lamps glinting on it, and grates across it now and then.
+func _drain_water(parent: Node3D, seg: Dictionary) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var length: float = seg["length"]
+	var from := float(seg["ramp_len"]) + 0.5
+	for piece in _pieces(seg, from, length):
+		var mid := (piece.x + piece.y) / 2.0
+		_item_box(parent, seg, mid, Vector3(0, 0.035, 0), Vector3(road_half * 2.0 + 1.6, 0.01, piece.y - piece.x), Color.WHITE).material_override = \
+				PsxMaterials.glass(Color(0.1, 0.13, 0.11, 0.5))
+	var g := from + 14.0
+	while g < length - 4.0:
+		_strip(parent, seg, g, g + 0.9, 0.0, road_half * 2.0, 0.012, PsxTextures.grating(), 5.0, 0.9)
+		g += 18.0
+	var z := from + 3.0
+	var k := 0
+	while z < length - 2.0:  # glints of light on the water
+		var gl := MeshInstance3D.new()
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(0.25, 1.6)
+		gl.mesh = plane
+		gl.material_override = PsxMaterials.pool(Color(1.0, 0.85, 0.55, 0.25))
+		parent.add_child(gl)
+		gl.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(((k * 37) % 11 - 5) * 0.55, 0.05, 0))
+		z += 2.3
+		k += 1
+
+
+## STORM DRAIN jump: a low concrete weir across the lane, water sheeting over its front.
+func _build_weir(parent: Node3D, seg: Dictionary, at: float, x: float, _lane: int) -> Node3D:
+	var holder := Node3D.new()
+	parent.add_child(holder)
+	holder.transform = _frame_at(seg, at) * Transform3D(Basis.IDENTITY, Vector3(x, 0, 0))
+	var w := tuning.lane_width + 0.02
+	_box(holder, Vector3(w, 0.45, 0.6), Vector3(0, 0.225, 0), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.drain_wall(), Vector2(3, 1))
+	_box(holder, Vector3(w, 0.05, 0.64), Vector3(0, 0.47, 0), Color("4a4c46"))
+	var sheet := MeshInstance3D.new()  # the water sheeting over it, flowing
+	var q := QuadMesh.new()
+	q.size = Vector2(w, 0.46)
+	sheet.mesh = q
+	sheet.material_override = PsxMaterials.water_fall(Color(0.82, 0.9, 0.86, 0.6), Vector2(w / 0.5, 0.5))
+	holder.add_child(sheet)
+	sheet.position = Vector3(0, 0.23, 0.31)
+	_box(holder, Vector3(w, 0.02, 0.1), Vector3(0, 0.49, 0.28), Color.WHITE).material_override = PsxMaterials.glow(Color("c8d4c8"))  # its glinting lip
+	return holder
+
+
+## Water pouring from `top` down to `bottom` (segment-local points at `z`, across and up), as flat
+## sheets with flowing water on them (user: a flat plane with animated water, not a block): one
+## facing you, one turned side-on, so it reads from any angle.
+func _waterfall(parent: Node3D, seg: Dictionary, z: float, top: Vector3, bottom: Vector3, width: float) -> void:
+	var down := top - bottom
+	var length := down.length()
+	var y_axis := down / length
+	var x_axis := y_axis.cross(Vector3.BACK).normalized()
+	var basis := Basis(x_axis, y_axis, x_axis.cross(y_axis).normalized())
+	var mat := PsxMaterials.water_fall(Color(0.82, 0.9, 0.86, 0.75), Vector2(width / 0.5, length / 1.0))
+	for turn in [0.0, PI / 2.0]:
+		var m := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(width, length)
+		m.mesh = q
+		m.material_override = mat
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(m)
+		m.transform = _frame_at(seg, z) * Transform3D(basis * Basis(Vector3.UP, turn), (top + bottom) / 2.0)
+
+
 ## A keycard reader on the wall: a dark box with a slot and a red LED, `dz` along the road.
 func _card_reader(holder: Node3D, out: float, dz: float, red: Material) -> void:
 	_box(holder, Vector3(0.08, 0.3, 0.18), Vector3(out * 0.04, 1.25, dz), Color("1e2022"))
@@ -5231,6 +6104,10 @@ func _build_lamps(parent: Node3D, seg: Dictionary) -> void:
 			_bollard_lamps(parent, seg)
 		"roof_posts":
 			_roof_lamp_posts(parent, seg)
+		"hall":
+			_hall_lamps(parent, seg)
+		"tubes":
+			_sewer_tubes(parent, seg)
 
 
 ## A fluorescent ceiling panel with its pool of cold white light.
@@ -5295,7 +6172,7 @@ func _build_marker(outer: Node3D, seg: Dictionary, at: float) -> void:
 		_markers.append({"at": seg["start"] + at, "seg": seg})
 		return
 	var leaf_w := ow / 2.0
-	var door_mat := PsxMaterials.textured(PsxTextures.door(), Vector2(3, 2))
+	var door_mat := PsxMaterials.textured(PsxTextures.steel_door() if String(theme.get("marker_door", "")) == "steel" else PsxTextures.door(), Vector2(3, 2))
 	var bar := Color("2c3034")
 	for s in [-1, 1]:
 		# Hinged at the doorway's side, the leaf reaching in to meet the other one in the middle.
@@ -5613,6 +6490,12 @@ func _ground(id: StringName) -> Texture2D:
 			return PsxTextures.exit_floor()
 		"helipad_slab":
 			return PsxTextures.helipad_slab()
+		"service_floor":
+			return PsxTextures.service_floor()
+		"steel_plate":
+			return PsxTextures.steel_plate()
+		"sewer_floor":
+			return PsxTextures.sewer_floor()
 		"grating":
 			return PsxTextures.grating()
 		"roof_paving":
@@ -5634,7 +6517,7 @@ func _ground(id: StringName) -> Texture2D:
 
 ## How long one floor tile is along the road (office tiles and roofing are square, one lane wide).
 func _ground_tile(id: StringName) -> float:
-	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "exit_floor", "helipad_slab", "grating", "roof_paving", "gravel"] else 4.0
+	return tuning.lane_width if _theme(id)["ground"] in ["office_floor", "security_floor", "canteen_floor", "warehouse_floor", "lobby_floor", "exit_floor", "helipad_slab", "grating", "roof_paving", "service_floor", "steel_plate", "sewer_floor", "gravel"] else 4.0
 
 
 func _wall_texture(theme: Dictionary) -> Texture2D:
@@ -5690,6 +6573,14 @@ func _obstacle_texture(name: String) -> Texture2D:
 			return PsxTextures.lobby_wall()
 		"exit_granite":
 			return PsxTextures.exit_granite()
+		"service_wall":
+			return PsxTextures.service_wall()
+		"boiler_wall":
+			return PsxTextures.boiler_wall()
+		"sewer_wall":
+			return PsxTextures.sewer_wall()
+		"drain_wall":
+			return PsxTextures.drain_wall()
 		"exit_ceiling":
 			return PsxTextures.exit_ceiling()
 		"lobby_column":

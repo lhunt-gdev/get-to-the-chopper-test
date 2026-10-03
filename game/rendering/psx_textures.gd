@@ -1388,6 +1388,194 @@ static func roof_paving() -> Texture2D:
 	return _finish("roof_paving", img)
 
 
+## SERVICE TUNNEL walls (user reference): pale cast-concrete panels, a fine seam grid, damp stains
+## and grime running down, a darker band at the foot.
+static func service_wall() -> Texture2D:
+	if _cache.has("service_wall"):
+		return _cache["service_wall"]
+	var img := _start("service_wall", Color("8a8678"), 0.05)
+	_aggregate(img, "service_wall_flecks", 260, 0.14)
+	_blotches(img, "service_wall_damp", 4, 6, 14, Color("6a6658"), 0.3)
+	for i in SIZE:
+		_put(img, i, 0, Color("5a5648"))
+		_put(img, 0, i, Color("5a5648"))
+		_put(img, i, 32, Color("6a6658"))
+	for k in 4:  # grime running down from the seam
+		var rng := _rng("service_wall_run%d" % k)
+		var sx := rng.randi_range(2, SIZE - 3)
+		for y in range(1, rng.randi_range(10, 26)):
+			_blend(img, sx, y, Color("4a4638"), 0.35)
+	for y in range(56, SIZE):
+		for x in SIZE:
+			_shade(img, x, y, 0.78)
+	return _finish("service_wall", img)
+
+
+## SERVICE TUNNEL floor (user reference): pale concrete slabs with dark seams and scuffs. One per lane.
+static func service_floor() -> Texture2D:
+	if _cache.has("service_floor"):
+		return _cache["service_floor"]
+	var img := _start("service_floor", Color("7a7870"), 0.05)
+	_aggregate(img, "service_floor_flecks", 300, 0.16)
+	for i in SIZE:
+		for w in 2:
+			_put(img, i, w, Color("3e3c36"))
+			_put(img, w, i, Color("3e3c36"))
+	_blotches(img, "service_floor_scuffs", 3, 5, 12, Color("5e5c54"), 0.3)
+	return _finish("service_floor", img)
+
+
+## BOILER ROOM floor (user reference): steel diamond plate in square tiles with dark seams, worn
+## bright where boots go. One tile per lane.
+static func steel_plate() -> Texture2D:
+	if _cache.has("steel_plate"):
+		return _cache["steel_plate"]
+	var img := _start("steel_plate", Color("5e5c58"), 0.04)
+	for y in SIZE:
+		for x in SIZE:
+			if (x + y * 2) % 8 == 0 or (x * 2 - y + 64) % 8 == 0:
+				_shade(img, x, y, 1.25)  # the diamond tread
+	for i in SIZE:
+		for w in 2:
+			_put(img, i, w, Color("2a2826"))
+			_put(img, w, i, Color("2a2826"))
+	for c in [[6, 6], [57, 6], [6, 57], [57, 57]]:
+		_put(img, c[0], c[1], Color("8a8680"))  # rivets
+	_blotches(img, "steel_plate_oil", 3, 5, 12, Color("3a3632"), 0.35)
+	return _finish("steel_plate", img)
+
+
+## BOILER ROOM walls (user reference): dark grey steel-and-concrete panels, soot and rust stains.
+static func boiler_wall() -> Texture2D:
+	if _cache.has("boiler_wall"):
+		return _cache["boiler_wall"]
+	var img := _start("boiler_wall", Color("4a4844"), 0.05)
+	_blotches(img, "boiler_wall_soot", 4, 6, 14, Color("2e2c2a"), 0.35)
+	_blotches(img, "boiler_wall_rust", 2, 3, 8, Color("6a3e24"), 0.35)
+	for i in SIZE:
+		_put(img, i, 0, Color("2a2826"))
+		_put(img, 0, i, Color("2a2826"))
+		_put(img, 32, i, Color("33312e"))
+	for x in range(4, SIZE, 16):
+		for y in [4, 28, 36, 60]:
+			_put(img, x, y, Color("6a6660"))  # bolts
+	return _finish("boiler_wall", img)
+
+
+## BOILER ROOM boiler shell (user reference): dark riveted steel plates, rust bleeding from the
+## seams, soot.
+static func boiler_shell() -> Texture2D:
+	if _cache.has("boiler_shell"):
+		return _cache["boiler_shell"]
+	var img := _start("boiler_shell", Color("3e3c3a"), 0.06)
+	_blotches(img, "boiler_shell_rust", 7, 4, 10, Color("6a3a20"), 0.45)
+	_blotches(img, "boiler_shell_soot", 3, 6, 12, Color("1e1c1a"), 0.4)
+	for band in [0, 32]:
+		for x in SIZE:
+			_put(img, x, band, Color("1e1c1a"))
+			if x % 5 == 2:
+				_put(img, x, band + 2, Color("6a6660"))  # rivets
+	for y in SIZE:
+		_put(img, 0, y, Color("2a2826"))
+		if y % 5 == 2:
+			_put(img, 2, y, Color("6a6660"))
+	return _finish("boiler_shell", img)
+
+
+## SEWER walls (user reference): dark mossy brick, green-grey, damp streaks down it, a concrete band
+## along the top.
+static func sewer_wall() -> Texture2D:
+	if _cache.has("sewer_wall"):
+		return _cache["sewer_wall"]
+	var img := _start("sewer_wall", Color("4a5040"), 0.05)
+	for y in range(8, SIZE):
+		for x in SIZE:
+			var row := (y - 8) / 7
+			var off := 0 if row % 2 == 0 else 8
+			if (y - 8) % 7 == 0 or (x + off) % 16 == 0:
+				_put(img, x, y, Color("2a2e24"))  # mortar
+	for y in 8:
+		for x in SIZE:
+			_put(img, x, y, Color("5e5e54").darkened(0.05 * ((x * 3 + y) % 3)))  # the concrete band
+	_blotches(img, "sewer_wall_moss", 5, 5, 12, Color("3a4a28"), 0.35)
+	for k in 5:
+		var rng := _rng("sewer_wall_drip%d" % k)
+		var sx := rng.randi_range(1, SIZE - 2)
+		for y in range(8, rng.randi_range(24, 56)):
+			_blend(img, sx, y, Color("2a3220"), 0.4)
+	return _finish("sewer_wall", img)
+
+
+## SEWER floor (user reference): wet dark stone slabs, green-tinged, a glint of water here and there.
+static func sewer_floor() -> Texture2D:
+	if _cache.has("sewer_floor"):
+		return _cache["sewer_floor"]
+	var img := _start("sewer_floor", Color("4a4e44"), 0.06)
+	_aggregate(img, "sewer_floor_flecks", 260, 0.18)
+	for i in SIZE:
+		for w in 2:
+			_put(img, i, w, Color("22261e"))
+			_put(img, w, i, Color("22261e"))
+	_blotches(img, "sewer_floor_wet", 4, 5, 12, Color("2e3428"), 0.35)
+	var rng := _rng("sewer_floor_glints")
+	for k in 30:
+		_put(img, rng.randi_range(2, SIZE - 1), rng.randi_range(2, SIZE - 1), Color("9aa890"))
+	return _finish("sewer_floor", img)
+
+
+## STORM DRAIN walls (user reference): grey-green cast concrete in big panels, rust and water
+## streaks running down, a dark tide line low down.
+static func drain_wall() -> Texture2D:
+	if _cache.has("drain_wall"):
+		return _cache["drain_wall"]
+	var img := _start("drain_wall", Color("62645a"), 0.05)
+	_aggregate(img, "drain_wall_flecks", 220, 0.14)
+	for i in SIZE:
+		_put(img, i, 0, Color("3e4038"))
+		_put(img, 0, i, Color("3e4038"))
+	var rng := _rng("drain_wall_streaks")
+	for k in 9:
+		var sx := rng.randi_range(1, SIZE - 2)
+		var c := Color("5a4228") if k % 3 == 0 else Color("3a3e32")
+		for y in range(rng.randi_range(0, 10), rng.randi_range(30, SIZE)):
+			_blend(img, sx, y, c, 0.45)
+			if k % 2 == 0:
+				_blend(img, sx + 1, y, c, 0.25)
+	for y in range(48, 54):
+		for x in SIZE:
+			_shade(img, x, y, 0.7)  # the tide line
+	return _finish("drain_wall", img)
+
+
+## Falling water's streaks (see PsxMaterials.water_fall): bright and dim runs of water down the
+## sheet with gaps between, and blobs of foam; tiles vertically as it scrolls.
+static func water_streaks() -> Texture2D:
+	if _cache.has("water_streaks"):
+		return _cache["water_streaks"]
+	var w := 32
+	var h := 64
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var rng := _rng("water_streaks")
+	for x in w:
+		var bright := rng.randf_range(0.2, 1.0)
+		var gap_at := rng.randi_range(0, h - 1)
+		var gap_len := rng.randi_range(0, 14)
+		for y in h:
+			var in_gap := ((y - gap_at + h) % h) < gap_len
+			var a := 0.25 if in_gap else rng.randf_range(0.6, 0.95)
+			var v := bright * rng.randf_range(0.8, 1.0)
+			img.set_pixel(x, y, Color(v, v, v, a))
+	for k in 10:  # foam
+		var fx := rng.randi_range(0, w - 3)
+		var fy := rng.randi_range(0, h - 3)
+		for dy in 2:
+			for dx in 3:
+				img.set_pixel(fx + dx, fy + dy, Color(1, 1, 1, 0.95))
+	var tex := ImageTexture.create_from_image(img)
+	_cache["water_streaks"] = tex
+	return tex
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)

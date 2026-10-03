@@ -150,3 +150,38 @@ static func _radial_material(color: Color) -> StandardMaterial3D:
 		_cache["_radial"] = tex
 	m.albedo_texture = _cache["_radial"]
 	return m
+
+
+## Falling water (the outfalls, the sewer's spouts, the weirs): streaks of water flowing down a flat
+## sheet, scrolled by time, soft at the sides, unlit and see-through, both sides.
+const WATER_FALL_CODE := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_never, blend_mix;
+uniform sampler2D streaks : filter_nearest, repeat_enable;
+uniform vec4 tint : source_color = vec4(0.8, 0.88, 0.82, 0.7);
+uniform float speed = 1.8;
+uniform vec2 uv_scale = vec2(1.0, 1.0);
+void fragment() {
+	vec2 uv = UV * uv_scale + vec2(0.0, -TIME * speed);
+	vec4 s = texture(streaks, uv);
+	float sides = smoothstep(0.0, 0.18, UV.x) * smoothstep(1.0, 0.82, UV.x);
+	ALBEDO = tint.rgb * (0.65 + 0.55 * s.r);
+	ALPHA = tint.a * s.a * sides;
+}
+"""
+
+
+static func water_fall(tint: Color, uv_scale: Vector2 = Vector2.ONE) -> ShaderMaterial:
+	var key := "water_fall_%s_%s" % [tint.to_html(), uv_scale]
+	if not _cache.has(key):
+		if not _cache.has("_water_fall_shader"):
+			var sh := Shader.new()
+			sh.code = WATER_FALL_CODE
+			_cache["_water_fall_shader"] = sh
+		var m := ShaderMaterial.new()
+		m.shader = _cache["_water_fall_shader"]
+		m.set_shader_parameter("streaks", PsxTextures.water_streaks())
+		m.set_shader_parameter("tint", tint)
+		m.set_shader_parameter("uv_scale", uv_scale)
+		_cache[key] = m
+	return _cache[key]

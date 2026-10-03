@@ -410,7 +410,7 @@
     },
     {
       "id": "service_tunnel",
-      "theme": "tunnel",
+      "theme": "service",
       "tier": "underground",
       "length": 100,
       "obstacles": [
@@ -442,7 +442,9 @@
     },
     {
       "id": "boiler_room",
-      "theme": "tunnel",
+      "theme": "boiler",
+      "alcove": [{"side": "left", "at": 28, "length": 28, "kind": "boiler"}, {"side": "right", "at": 28, "length": 28, "kind": "boiler"},
+                 {"side": "left", "at": 78, "length": 38, "kind": "boiler"}, {"side": "right", "at": 78, "length": 38, "kind": "boiler"}],
       "tier": "underground",
       "length": 120,
       "bends": [{"at": 60, "side": "right"}],
@@ -479,7 +481,8 @@
     },
     {
       "id": "sewer",
-      "theme": "tunnel",
+      "theme": "sewer",
+      "alcove": [{"side": "right", "at": 28, "length": 38, "kind": "channel"}, {"side": "right", "at": 88, "length": 38, "kind": "channel"}],
       "tier": "underground",
       "length": 130,
       "bends": [{"at": 70, "side": "left"}],
@@ -516,7 +519,9 @@
     },
     {
       "id": "pump_station",
-      "theme": "tunnel",
+      "theme": "pump",
+      "alcove": [{"side": "left", "at": 28, "length": 36, "kind": "pumps"}, {"side": "left", "at": 70, "length": 36, "kind": "pumps"},
+                 {"side": "right", "at": 28, "length": 78, "kind": "basin"}],
       "tier": "underground",
       "length": 110,
       "marker": {"at": 8},
@@ -547,7 +552,8 @@
     },
     {
       "id": "storm_drain",
-      "theme": "tunnel",
+      "theme": "drain",
+      "alcove": [{"side": "left", "at": 28, "length": 70, "kind": "ledge"}, {"side": "right", "at": 28, "length": 70, "kind": "ledge"}],
       "tier": "underground",
       "length": 100,
       "marker": {"at": 8},
