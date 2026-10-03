@@ -63,7 +63,7 @@ const CORNER_CLEAR_AFTER := 4.0
 ## The lanes on the inside of a corner, by the side it turns to (authored for 5 lanes).
 const INSIDE_LANES := {"left": [0, 1], "right": [3, 4]}
 ## Areas with no walls to mount tripwire emitters on (user rule: no tripwires on the rooftops).
-const NO_TRIPWIRE_THEMES := ["rooftops"]
+const NO_TRIPWIRE_THEMES := ["rooftops", "towers", "gantry", "skylights", "antennas", "edge"]
 const VIAS := ["corridor", "stairs", "ladder"]
 ## Height tiers, in tier steps (Tuning.tier_height metres each).
 const TIERS := {"roof": 1, "ground": 0, "underground": -1}

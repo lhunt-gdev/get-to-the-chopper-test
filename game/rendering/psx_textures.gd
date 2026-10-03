@@ -1306,6 +1306,88 @@ static func helipad_slab() -> Texture2D:
 	return _finish("helipad_slab", img)
 
 
+## WATER TOWERS tank (user reference): weathered grey steel plates in horizontal bands, rust
+## bleeding down from the seams and rivets.
+static func rust_tank() -> Texture2D:
+	if _cache.has("rust_tank"):
+		return _cache["rust_tank"]
+	var img := _start("rust_tank", Color("767472"), 0.05)
+	_blotches(img, "rust_tank_rust", 6, 4, 10, Color("7a4a2a"), 0.35)
+	var rng := _rng("rust_tank_streaks")
+	for band in [0, 21, 42]:
+		for x in SIZE:
+			_put(img, x, band, Color("3e3c3a"))
+			if x % 6 == 2:
+				_put(img, x, band + 2, Color("4a4846"))  # rivets
+		for k in 5:  # rust running down from the seam
+			var sx := rng.randi_range(0, SIZE - 1)
+			var run := rng.randi_range(4, 14)
+			for y in range(band + 1, mini(band + 1 + run, SIZE)):
+				_blend(img, sx, y, Color("8a4a24"), 0.5 * (1.0 - float(y - band) / run))
+	for y in SIZE:
+		if y % 16 == 0:
+			for x in range(0, SIZE, 16):
+				_put(img, x, y, Color("4a4846"))
+	return _finish("rust_tank", img)
+
+
+## GANTRY floor (user reference): steel grating, a grid of dark bars with the drop showing between,
+## warm city light glinting far below, and a heavier bearer bar across each tile.
+static func grating() -> Texture2D:
+	if _cache.has("grating"):
+		return _cache["grating"]
+	var img := _start("grating", Color("3e4244"), 0.04)
+	var rng := _rng("grating_glints")
+	for y in SIZE:
+		for x in SIZE:
+			if x % 8 >= 2 and y % 8 >= 2:  # a hole: dark, now and then a warm glint from below
+				var c := Color("101214")
+				if rng.randf() < 0.12:
+					c = Color("c08030").darkened(rng.randf_range(0.0, 0.45))
+				_put(img, x, y, c)
+	for x in SIZE:
+		for w in 3:
+			_put(img, x, w, Color("62666a"))  # the bearer bar
+	return _finish("grating", img)
+
+
+## SKYLIGHTS: the warm-lit room seen down through the glass (user reference): a pale lit floor with
+## the dark lines of beams and ducts across it and a few dark shapes of furniture.
+static func skylight_room() -> Texture2D:
+	if _cache.has("skylight_room"):
+		return _cache["skylight_room"]
+	var img := _start("skylight_room", Color("f8dc90"), 0.05)
+	for y in SIZE:
+		for x in SIZE:
+			_shade(img, x, y, 1.1 - 0.35 * absf(x - 32.0) / 32.0)  # brightest under the middle
+	for b in [10, 30, 50]:
+		for x in SIZE:
+			for w in 3:
+				_put(img, x, b + w, Color("5a4a30"))  # beams across
+	for k in 5:
+		var rng := _rng("skylight_room_%d" % k)
+		var r := Rect2i(rng.randi_range(2, 50), rng.randi_range(2, 50), rng.randi_range(6, 12), rng.randi_range(4, 9))
+		for y in range(r.position.y, mini(r.end.y, SIZE)):
+			for x in range(r.position.x, mini(r.end.x, SIZE)):
+				_put(img, x, y, Color("7a6a48"))  # desks, crates
+	return _finish("skylight_room", img)
+
+
+## Rooftop paving at night (WATER TOWERS, ANTENNA FARM, user references): darker weathered
+## concrete slabs with dark joints, so the lamps' warm pools stand out on it.
+static func roof_paving() -> Texture2D:
+	if _cache.has("roof_paving"):
+		return _cache["roof_paving"]
+	var img := _start("roof_paving", Color("4a4a4a"), 0.06)
+	_aggregate(img, "roof_paving_flecks", 360, 0.22)
+	for i in SIZE:
+		for w in 2:
+			_put(img, i, w, Color("222222"))
+			_put(img, w, i, Color("222222"))
+	_blotches(img, "roof_paving_stains", 4, 5, 12, Color("383634"), 0.3)
+	return _finish("roof_paving", img)
+
+
 static func _rng(key: String) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)

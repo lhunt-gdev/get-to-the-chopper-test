@@ -269,7 +269,7 @@
     },
     {
       "id": "water_towers",
-      "theme": "rooftops",
+      "theme": "towers",
       "tier": "roof",
       "length": 120,
       "bends": [{"at": 84, "side": "right"}],
@@ -299,7 +299,7 @@
     },
     {
       "id": "gantry",
-      "theme": "rooftops",
+      "theme": "gantry",
       "tier": "roof",
       "length": 90,
       "obstacles": [
@@ -324,7 +324,7 @@
     },
     {
       "id": "skylights",
-      "theme": "rooftops",
+      "theme": "skylights",
       "tier": "roof",
       "length": 110,
       "obstacles": [
@@ -353,7 +353,7 @@
     },
     {
       "id": "antenna_farm",
-      "theme": "rooftops",
+      "theme": "antennas",
       "tier": "roof",
       "length": 120,
       "bends": [{"at": 40, "side": "left"}],
@@ -383,7 +383,7 @@
     },
     {
       "id": "roof_edge",
-      "theme": "rooftops",
+      "theme": "edge",
       "tier": "roof",
       "length": 100,
       "obstacles": [

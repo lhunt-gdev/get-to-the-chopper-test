@@ -8,7 +8,7 @@ extends Node
 ## each) from the moment the level loads, so the opening pan hides it and nothing stutters.
 
 ## Ambience per area theme.
-const AREA_AMBIENCE := {"office": "amb_office", "security": "amb_office", "canteen": "amb_office", "warehouse": "amb_office", "dock": "amb_office", "lobby": "amb_office", "exit": "amb_office", "tunnel": "amb_tunnel", "rooftops": "amb_roof",
+const AREA_AMBIENCE := {"office": "amb_office", "security": "amb_office", "canteen": "amb_office", "warehouse": "amb_office", "dock": "amb_office", "lobby": "amb_office", "exit": "amb_office", "tunnel": "amb_tunnel", "rooftops": "amb_roof", "towers": "amb_roof", "gantry": "amb_roof", "skylights": "amb_roof", "antennas": "amb_roof", "edge": "amb_roof",
 		"helipad": "amb_roof", "compound": "amb_roof", "gate": "amb_roof"}
 ## Milliseconds of sound-building per frame.
 const BUILD_BUDGET_MS := 4.0

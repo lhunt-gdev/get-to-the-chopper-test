@@ -105,3 +105,48 @@ static func beam(color: Color) -> StandardMaterial3D:
 		m.albedo_texture = tex
 		_cache[key] = m
 	return _cache[key]
+
+
+## A soft glow round a light, the bloom a film camera sees (red beacons, lamps): additive, always
+## facing the camera, brightest in the middle and fading to nothing at the edge.
+static func halo(color: Color) -> StandardMaterial3D:
+	var key := "halo_" + color.to_html()
+	if not _cache.has(key):
+		var m := _radial_material(color)
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		m.disable_fog = true
+		_cache[key] = m
+	return _cache[key]
+
+
+## A pool of light on the ground under a lamp: the same soft radial glow, lying flat.
+static func pool(color: Color) -> StandardMaterial3D:
+	var key := "pool_" + color.to_html()
+	if not _cache.has(key):
+		_cache[key] = _radial_material(color)
+	return _cache[key]
+
+
+static func _radial_material(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	m.albedo_color = color
+	if not _cache.has("_radial"):
+		var fade := Gradient.new()
+		fade.set_color(0, Color(1, 1, 1, 1))
+		fade.set_color(1, Color(1, 1, 1, 0))
+		fade.add_point(0.3, Color(1, 1, 1, 0.45))
+		var tex := GradientTexture2D.new()
+		tex.gradient = fade
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.0, 0.5)
+		tex.width = 64
+		tex.height = 64
+		_cache["_radial"] = tex
+	m.albedo_texture = _cache["_radial"]
+	return m
