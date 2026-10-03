@@ -366,7 +366,7 @@ func _ready() -> void:
 	fill.position = Vector3(0, 0.3, -1.5)
 	_ambience.add_lamp(fill, Color(0.5, 0.58, 0.68) * 0.55, 6.5, {"alert": false})
 	# His muzzle flash lights him and what's round him for a moment (user: a cool looking flash).
-	_ambience.add_lamp(_player.muzzle_light(), SoldierRig.FLASH_LIGHT, SoldierRig.FLASH_LIGHT_RANGE, {"alert": false})
+	_ambience.add_lamp(_player.muzzle_light(), SoldierRig.FLASH_LIGHT, SoldierRig.FLASH_LIGHT_RANGE, {"alert": false, "own_slot": true})
 	_clock = ExtractionClock.new()
 	_clock.name = "ExtractionClock"
 	_clock.tuning = tuning
@@ -406,6 +406,9 @@ func _ready() -> void:
 		_audio.play_menu_music()
 		_update_camera(1.0)
 	_frontend.clicked.connect(func() -> void: _audio.play("tick", -2.0, 0.0, "UI"))
+	# The end screen's tally counting up, Doom style: a tick per step, a thunk as each row lands.
+	_frontend.tally_ticked.connect(func() -> void: _audio.play("tick", -6.0, 0.04, "UI"))
+	_frontend.tally_landed.connect(func() -> void: _audio.play("thunk", -3.0, 0.03, "UI"))
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
 
@@ -1269,6 +1272,8 @@ func _connect_security(sec: SecurityTrooper) -> void:
 	sec.wounded.connect(func() -> void: _audio.play_at("hit", head.call(), 0.0, 0.08))
 	sec.knocked_down.connect(func() -> void:
 		RunLog.record_event("runner_down", {"node": _runner.current})
+		if sec.alarm_at > 0.0 and sec.at < sec.alarm_at:  # dropped on his way, before his panel
+			RunLog.record_event("runner_stopped", {"node": _runner.current})
 		_audio.play_at("grunt_%d" % (randi() % 3), head.call(), -2.0, 0.05)
 		get_tree().create_timer(0.3).timeout.connect(func() -> void:
 			if is_instance_valid(sec):
@@ -7212,7 +7217,7 @@ func _shoot() -> void:
 
 
 func _end(reason: StringName) -> void:
-	GameState.end_run(reason, _runner.current)
+	GameState.end_run(reason, _runner.current, _player.distance_run() - _runner.segment_start)
 
 
 func _on_mission_end(end_type: String) -> void:
@@ -7275,9 +7280,14 @@ func _on_run_ended(reason: StringName) -> void:
 	_hud.show_end(reason, RunLog.route_summary())
 	# The end screen, a moment later (so you see what happened): the result, the debrief and the
 	# route taken (the LOCKED post-run route record).
-	var count := func(kind: String) -> int: return RunLog.events.filter(func(e: Dictionary) -> bool: return e["kind"] == kind).size()
-	var stats := {"time": _clock.elapsed, "hits": count.call("player_hit"), "downed": count.call("trooper_down") + count.call("dog_down") + count.call("runner_down"),
-			"alert": GameState.alert_level, "route": RunLog.route_summary().split(" > ")}
+	# The debrief: the route map (the areas and where in the last one it ended) and the tally.
+	var stats := RunLog.tally()
+	stats.merge({"time": _clock.elapsed, "alert": GameState.alert_level, "route": RunLog.route_summary().split(" > "),
+			"spare": _clock.gone_at - _clock.elapsed if reason == GameState.END_EXTRACTED else -1.0,
+			"graph": _graph, "visited": RunLog.visited.duplicate(), "discovered": RunLog.discovered.duplicate(),
+			"end_into": _player.distance_run() - _runner.segment_start,
+			"end_ramp": float(_current.get("ramp_len", 0.0)),
+			"levels": RouteMap.levels_text(_graph, RunLog.visited)})
 	get_tree().create_timer(1.1).timeout.connect(func() -> void: _frontend.show_end(reason, stats))
 	_audio.fade_loops(2.5)
 	_audio.stop_music()

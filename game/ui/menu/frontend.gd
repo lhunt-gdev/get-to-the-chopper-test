@@ -10,6 +10,9 @@ signal retry_requested
 signal menu_requested
 ## Any button pressed (the level plays a blip for it).
 signal clicked
+## The end screen's tally: a count step (a tick), a row landing (a thunk).
+signal tally_ticked
+signal tally_landed
 
 enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END }
 
@@ -63,7 +66,9 @@ func hide_all() -> void:
 	_show(Screen.NONE)
 
 
-## The run's over. stats: {time, hits, downed, alert, route: PackedStringArray}.
+## The run's over. stats: the tally's numbers (Tally.rows_for), and for the route map graph,
+## visited, discovered, end_into (how far into the last area it ended) and end_ramp (the stairs
+## at its start).
 func show_end(reason: StringName, stats: Dictionary) -> void:
 	_end_reason = reason
 	_end_stats = stats
@@ -196,10 +201,48 @@ func _build_end() -> void:
 	_root.add_child(Stamp.new(col))
 	_place_wide(UiKit.label(info[0], 16, col, HORIZONTAL_ALIGNMENT_CENTER), 80)
 	_place_wide(UiKit.label(info[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), 104)
-	var report := ReportPanel.new()
-	report.stats = _end_stats
-	report.accent = col
-	_root.add_child(report)
+	# The debrief (the LOCKED post-run route record): the route map, then the tally under it.
+	var w := _root.get_viewport_rect().size.x
+	var panel := DebriefPanel.new()
+	panel.rect = Rect2(14, 132, w - 28, 236)
+	_root.add_child(panel)
+	var x := panel.rect.position.x + 10.0
+	var inner := panel.rect.size.x - 20.0
+	var map: RouteMap = null
+	var graph = _end_stats.get("graph")
+	if graph is RouteGraph:
+		map = RouteMap.new()
+		map.graph = graph
+		var run: Array[StringName] = []
+		for id in _end_stats.get("visited", []):
+			run.append(StringName(id))
+		map.visited = run
+		map.discovered = _end_stats.get("discovered", {})
+		map.end_reason = _end_reason
+		map.end_into = float(_end_stats.get("end_into", 0.0))
+		map.end_ramp = float(_end_stats.get("end_ramp", 0.0))
+		map.position = Vector2(x, 156)
+		map.size = Vector2(inner, 52)
+		_root.add_child(map)
+		if not run.is_empty():
+			var where := UiKit.label("▶ " + graph.display_name(run[-1]), 8, col)
+			where.position = Vector2(x, 213)
+			_root.add_child(where)
+	var tally := Tally.new()
+	tally.rows = Tally.rows_for(_end_stats)
+	tally.delay = RouteMap.DRAW_TIME + 0.3 if map != null else 0.3
+	tally.position = Vector2(x, 236)
+	tally.size = Vector2(inner, Tally.ROW_H * tally.rows.size())
+	tally.ticked.connect(func() -> void: tally_ticked.emit())
+	tally.landed.connect(func() -> void: tally_landed.emit())
+	_root.add_child(tally)
+	# A tap anywhere but the buttons shows it all at once.
+	var skip := SkipArea.new()
+	skip.pressed.connect(func() -> void:
+		if map != null:
+			map.finish()
+		tally.skip())
+	_root.add_child(skip)
 	var first := _button("RETRY", 380, func() -> void: retry_requested.emit())
 	_button("MAIN MENU", 408, func() -> void: menu_requested.emit())
 	first.grab_focus()
@@ -319,7 +362,7 @@ class Reticle extends Control:
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_anchors_preset(Control.PRESET_FULL_RECT)
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
 
 	func _process(delta: float) -> void:
 		_t += delta
@@ -341,7 +384,7 @@ class Reticle extends Control:
 class HeaderBar extends Control:
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_anchors_preset(Control.PRESET_FULL_RECT)
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
 
 	func _draw() -> void:
 		var w := get_viewport_rect().size.x
@@ -357,45 +400,38 @@ class Stamp extends Control:
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_anchors_preset(Control.PRESET_FULL_RECT)
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
 
 	func _draw() -> void:
 		var w := get_viewport_rect().size.x
 		UiKit.panel(self, Rect2(14, 70, w - 28, 50), col, UiKit.PANEL_SOLID, 10.0)
 
 
-## The debrief: time, hits taken, enemies down, alert, and the route taken (the LOCKED post-run
-## route record), in a codec panel.
-class ReportPanel extends Control:
-	var stats: Dictionary
-	var accent := UiKit.TEAL
+## The debrief's codec panel: its header, and a rule between the route map and the tally (which
+## are their own controls, laid over it: RouteMap and Tally).
+class DebriefPanel extends Control:
+	var rect := Rect2()
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_anchors_preset(Control.PRESET_FULL_RECT)
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
 
 	func _draw() -> void:
-		var w := get_viewport_rect().size.x
-		var r := Rect2(14, 132, w - 28, 236)
-		UiKit.panel(self, r, UiKit.TEAL, UiKit.PANEL_SOLID, 8.0)
-		var f := UiKit.font()
-		var x := r.position.x + 12
-		var y := r.position.y + 18
-		draw_string(f, Vector2(x, y), "DEBRIEF", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
-		y += 18
-		var t: float = stats.get("time", 0.0)
-		var rows := [["TIME", "%d:%04.1f" % [int(t) / 60, fmod(t, 60.0)]], ["HITS TAKEN", str(stats.get("hits", 0))],
-				["ENEMIES DOWN", str(stats.get("downed", 0))], ["ALERT", "%d" % stats.get("alert", 1)]]
-		for row in rows:
-			draw_string(f, Vector2(x, y), row[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
-			draw_string(f, Vector2(x + 120, y), row[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
-			y += 14
-		y += 8
-		draw_string(f, Vector2(x, y), "ROUTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
-		y += 16
-		var route: PackedStringArray = stats.get("route", PackedStringArray())
-		for i in route.size():
-			var last := i == route.size() - 1
-			draw_string(f, Vector2(x, y), ("▶ " if last else "  ") + route[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
-					accent if last else UiKit.PAPER)
-			y += 13
+		UiKit.panel(self, rect, UiKit.TEAL, UiKit.PANEL_SOLID, 8.0)
+		var x := rect.position.x + 10.0
+		draw_string(UiKit.font(), Vector2(x, rect.position.y + 16), "DEBRIEF", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
+		draw_rect(Rect2(x, rect.position.y + 96, rect.size.x - 20.0, 1), Color(UiKit.TEAL_DIM, 0.8))
+
+
+## The end screen behind its buttons: a tap on it skips the route map and tally to the end.
+class SkipArea extends Control:
+	signal pressed
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
+
+	func _gui_input(event: InputEvent) -> void:
+		if (event is InputEventMouseButton and event.pressed) or (event is InputEventScreenTouch and event.pressed):
+			pressed.emit()
+			accept_event()

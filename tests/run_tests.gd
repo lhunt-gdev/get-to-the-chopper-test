@@ -27,6 +27,8 @@ func _run() -> void:
 	_test_searchlights()
 	_test_swipe_direction()
 	_test_sounds()
+	_test_route_map()
+	_test_tally()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -37,6 +39,105 @@ func _check(cond: bool, msg: String) -> void:
 	if not cond:
 		_failures += 1
 		printerr("FAIL: " + msg)
+
+
+## The post-run route map (LOCKED; design by the user): each area has one place, after every
+## way into it; this run's line follows the levels and ends where it ended; areas seen only
+## partway aren't drawn whole; and only ways into areas never reached get a lock.
+func _test_route_map() -> void:
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var lay := RouteMap.layout(g)
+	var placed := true
+	var after_all_ways_in := true
+	for id: StringName in lay:
+		var span: Vector2 = lay[id]
+		placed = placed and is_equal_approx(span.y - span.x, g.length_of(id))
+		for e in g.all_next(id):
+			var to := StringName(e["to"])
+			after_all_ways_in = after_all_ways_in and lay[to].x >= span.y - 0.001
+	_check(lay.size() == 19 and placed, "route map: every area placed, at its own length (%d areas)" % lay.size())
+	_check(after_all_ways_in, "route map: each area starts after every way into it ends")
+	_check(is_zero_approx(lay[&"main_floor_lobby"].x), "route map: the start is at the left")
+	var run: Array[StringName] = [&"main_floor_lobby", &"rooftops", &"water_towers", &"gantry"]
+	var line := RouteMap.run_line(g, lay, run, 40.0, 30.0)
+	_check(line[0] == Vector2(0, 0), "route map: the run's line starts at the start, on the main level")
+	_check(line[-1].is_equal_approx(Vector2(lay[&"gantry"].x + 40.0, 1)), "route map: it ends 40 m into the gantry, on the roof (%s)" % line[-1])
+	var climbs := 0
+	for i in range(1, line.size()):
+		climbs += int(line[i].y > line[i - 1].y)
+		_check(line[i].x >= line[i - 1].x - 0.001, "route map: the line never runs backwards")
+	_check(climbs == 1, "route map: one climb, up the stairs to the roof")
+	_check(RouteMap.levels_text(g, run) == "MAIN > ROOF", "route map: the route reads MAIN > ROOF")
+	# Discovery: how far into each area he's ever got (the gantry only 40 m; he never saw its end).
+	var found := {&"main_floor_lobby": 1.0e6, &"rooftops": 1.0e6, &"water_towers": 1.0e6, &"gantry": 40.0}
+	var seen := RouteMap.seen_full(g, lay, found)
+	_check(not seen.has(&"gantry") and seen.has(&"water_towers"), "route map: an area he's only seen part of isn't counted as seen to its end")
+	found[&"gantry"] = 1.0e6
+	_check(RouteMap.seen_full(g, lay, found).has(&"gantry"), "route map: ...until he has")
+	found[&"gantry"] = 40.0
+	var locks := RouteMap.locked_ways(g, seen, found)
+	var lock_pairs := locks.map(func(w: Array) -> String: return "%s>%s" % w)
+	_check("main_floor_lobby>building_main_floor" in lock_pairs and "rooftops>security_wing" in lock_pairs,
+			"route map: locks on the ways not taken (%s)" % [lock_pairs])
+	_check(not ("water_towers>gantry" in lock_pairs) and not ("gantry>skylights" in lock_pairs),
+			"route map: no lock into an area he reached, nor off one he didn't see the end of")
+	# A death on the real stairs (12 m) shows partway along the drawn ones (30 m here); one past them
+	# shows past the drawn ones, on the new level.
+	var up: Array[StringName] = [&"main_floor_lobby", &"rooftops"]
+	var on_stairs := RouteMap.run_line(g, lay, up, 6.0, 30.0, 12.0)
+	_check(on_stairs[-1].y > 0.4 and on_stairs[-1].y < 0.6, "route map: halfway up the real stairs is halfway up the drawn ones (%s)" % on_stairs[-1])
+	var past := RouteMap.run_line(g, lay, up, 20.0, 30.0, 12.0)
+	_check(past[-1].y == 1.0 and past[-1].x > lay[&"rooftops"].x + 30.0, "route map: past the stairs is on the roof, past the drawn stairs (%s)" % past[-1])
+	# The end mark moves under the line rather than cover a lock.
+	var locks_at: Array[Rect2] = [Rect2(Vector2(98, 86), Vector2(7, 9))]
+	_check(RouteMap.end_mark_at(Vector2(100, 100), RouteMap.SKULL, locks_at).y > 100.0, "route map: the skull goes under the line when a lock is above")
+	_check(RouteMap.end_mark_at(Vector2(100, 100), RouteMap.SKULL, [] as Array[Rect2]).y < 100.0, "route map: ...and above it otherwise")
+	# RunLog records an area as seen to its end once he goes on from it.
+	var log: Node = load("res://game/autoload/run_log.gd").new()
+	log.begin()
+	log.enter_node(&"main_floor_lobby")
+	log.enter_node(&"rooftops")
+	_check(log.discovered[&"main_floor_lobby"] >= 1.0e6 and is_zero_approx(log.discovered[&"rooftops"]),
+			"route map: going on from an area marks it seen to its end; a new one starts at 0 m")
+	log.free()
+	# The end screen: a tap anywhere but the buttons skips the map and tally (the skip area covers
+	# the screen).
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	fe.show_end(&"killed", {"graph": g, "visited": up, "discovered": found, "end_into": 10.0, "time": 9.0})
+	var skip_size := Vector2.ZERO
+	for c in fe.find_children("*", "Control", true, false):
+		if c.get_class() == "Control" and c.mouse_filter == Control.MOUSE_FILTER_STOP and c.get_script() != null and c.has_signal("pressed"):
+			skip_size = (c as Control).size
+	_check(skip_size == fe.get_viewport().get_visible_rect().size, "end screen: the tap-to-skip area covers the screen (%s)" % skip_size)
+	fe.free()
+
+
+## The end screen's tally (user, after DOS Doom): plain counts only, the chopper's spare time only
+## when he got out, and the numbers counting up to their totals.
+func _test_tally() -> void:
+	var stats := {"time": 61.2, "spare": 9.0, "downed": 4, "hits": 2, "run_into": 15, "alarms_set_off": 1,
+			"alarms_stopped": 0, "top_alert": 2, "levels": "MAIN > BELOW", "new_areas": 3}
+	var rows := Tally.rows_for(stats)
+	_check(rows.size() == 10 and rows[1][0] == "CHOPPER TO SPARE", "tally: ten rows, with the chopper's spare time when he got out")
+	stats["spare"] = -1.0
+	_check(Tally.rows_for(stats).size() == 9, "tally: no spare time when he didn't")
+	var texts := []
+	for row in rows:
+		texts.append(Tally.value_text(row, Tally.steps_of(row), Tally.steps_of(row)))
+	_check(texts == ["1:01.2", "0:09", "4", "2", "15", "1", "0", "CAUTION", "MAIN > BELOW", "3"], "tally: final values (%s)" % [texts])
+	_check(not ("%s" % [texts]).contains(" OF "), "tally: plain counts, no 'of N' totals (user)")
+	_check(Tally.steps_of(rows[4]) == Tally.MAX_STEPS and Tally.value_text(rows[4], 6, 12) in ["7", "8"], "tally: a big count counts up in at most a dozen steps")
+	_check(Tally.steps_of(rows[7]) == 0, "tally: a word lands at once")
+	_check(Tally.value_text(["TIME", "time", 119.97, UiKit.PAPER], 10, 10) == "2:00.0", "tally: 1:59.97 reads 2:00.0, not 1:60.0")
+	# The longest route through the levels fits beside its label (squeezed if it must be).
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var longest: Array[StringName] = [&"main_floor_lobby", &"rooftops", &"security_wing", &"staff_canteen", &"warehouse", &"pump_station", &"storm_drain", &"helipad"]
+	var route := Tally.fit_value("ROUTE", RouteMap.levels_text(g, longest), 222.0)
+	var f := UiKit.font()
+	_check(route == "MAIN>ROOF>MAIN>BELOW>MAIN" and f.get_string_size("ROUTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x + 6.0 + f.get_string_size(route, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= 222.0,
+			"tally: the longest route fits beside ROUTE (%s)" % route)
+	_check(Tally.fit_value("ROUTE", "MAIN > ROOF", 222.0) == "MAIN > ROOF", "tally: a short route keeps its spaces")
 
 
 func _test_sounds() -> void:

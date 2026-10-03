@@ -47,9 +47,10 @@ func set_alert(level: int) -> void:
 	alert_changed.emit(level)
 
 
-func end_run(reason: StringName, at_node: StringName) -> void:
+## The run's over, `into` metres into `at_node` (for the route map).
+func end_run(reason: StringName, at_node: StringName, into: float = 0.0) -> void:
 	if not run_active:
 		return
 	run_active = false
-	RunLog.finish(reason, at_node)
+	RunLog.finish(reason, at_node, into)
 	run_ended.emit(reason)

@@ -37,7 +37,7 @@ static func all_names() -> Array[String]:
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
-			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite"]
+			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite", "thunk"]
 	for i in 3:
 		names.append("grunt_%d" % i)
 	for surface in SURFACES:
@@ -251,6 +251,14 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.tone(0.0, 0.015, 3000.0, 2500.0, 0.4, Synth.Wave.SQUARE, 0.0005, 6.0)
 			syn.noise(0.0, 0.01, 0.2, 0.0, 3000.0, 0.0005, 8.0)
 			syn.normalize(0.3)
+		"thunk":
+			# A row of the end screen's tally landing (after Doom's): a short, heavy knock.
+			syn = Synth.create(0.18, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.12, 150.0, 70.0, 0.7, Synth.Wave.SQUARE, 0.001, 9.0)
+			syn.noise(0.0, 0.06, 0.45, 1800.0, 300.0, 0.0005, 14.0)
+			syn.lowpass(2400.0)
+			syn.crush(8, 1)
+			syn.normalize(0.55)
 		"squelch":
 			# A radio message: a burst of static and a blip.
 			syn = Synth.create(0.3, SFX_RATE, seed_value)

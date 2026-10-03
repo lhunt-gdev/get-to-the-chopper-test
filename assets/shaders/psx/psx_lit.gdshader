@@ -35,6 +35,8 @@ global uniform vec4 lamp_pos_8; global uniform vec4 lamp_col_8;
 global uniform vec4 lamp_pos_9; global uniform vec4 lamp_col_9;
 global uniform vec4 lamp_pos_10; global uniform vec4 lamp_col_10;
 global uniform vec4 lamp_pos_11; global uniform vec4 lamp_col_11;
+// A lamp of its own, outside the nearest-12 (his muzzle flash), so it never puts out a level lamp.
+global uniform vec4 lamp_pos_12; global uniform vec4 lamp_col_12;
 
 void vertex() {
 	vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
@@ -88,6 +90,7 @@ void fragment() {
 		light += lamp(lamp_pos_9, lamp_col_9, p, n);
 		light += lamp(lamp_pos_10, lamp_col_10, p, n);
 		light += lamp(lamp_pos_11, lamp_col_11, p, n);
+		light += lamp(lamp_pos_12, lamp_col_12, p, n);
 		// Stepped light with an ordered dither between the steps: pools with crisp pixel edges.
 		float steps = 12.0;
 		light = floor(light * steps + bayer4(FRAGCOORD.xy)) / steps;

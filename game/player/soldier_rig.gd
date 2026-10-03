@@ -56,12 +56,13 @@ const FLASH_LIGHT := Color(1.0, 0.72, 0.35) * 2.2
 const FLASH_LIGHT_RANGE := 4.5
 const FLASH_SHADER := preload("res://assets/shaders/psx/psx_muzzle_flash.gdshader")
 ## Hands up when caught (user: palms forward and a little in, not facing out): how far each arm
-## turns about itself (rad), shared out so no one joint twists the skin too far: the upper arm out
-## at the shoulder, the forearm at the elbow, the hand at the wrist. And how far the elbows bend.
+## turns out about itself (rad), shared between the upper arm (at the shoulder) and the forearm (at
+## the elbow) so no one joint twists the skin too far, and how far the elbows bend. The wrists then
+## set each hand exactly: running on from the forearm, its palm facing forwards and this much in.
 const HANDS_UP_SHOULDER_TURN := 0.9
 const HANDS_UP_FOREARM_TURN := 0.6
-const HANDS_UP_WRIST_TURN := 0.35
 const HANDS_UP_ELBOW := 0.7
+const HANDS_UP_PALM_IN := 0.3
 ## The shrug (user: his shoulders bent out of shape with his arms up): once an upper arm is raised
 ## past SHRUG_FROM (rad from hanging down), the collarbone lifts SHRUG of each radian more, up to
 ## SHRUG_MAX, and the shoulder joint turns that much less, so the arm points the same way but the
@@ -108,6 +109,11 @@ var _flash_reach := 1.0
 var _flash_rng := RandomNumberGenerator.new()
 ## The state animate() was last given, so a shot can re-pose him straight away (see recoil()).
 var _last_state := {}
+## Each glove's own axes, in its wrist joint's frame (side -> Vector3): which way the hand runs from
+## the wrist (to the fingers), and which way its palm faces (toward his thigh at rest). Measured from
+## the model when built (see _measure_hand), so the hands can be posed exactly.
+var _hand_run := {}
+var _hand_palm := {}
 var _meshes: Array[MeshInstance3D] = []
 var _materials: Array[Material] = []
 var _skeleton: Skeleton3D
@@ -230,6 +236,8 @@ func _build() -> void:
 		knees[side] = nodes["Knee" + s]
 		ankles[side] = nodes["Ankle" + s]
 	_build_pistol()
+	for side in [-1, 1]:
+		_measure_hand(side)
 	# The goggles' lenses glow green.
 	var head_at := _in_rig(head).origin
 	for lens: Vector3 in _lenses():
@@ -249,6 +257,56 @@ func _build() -> void:
 	_pose_stand()
 	_shrug()
 	_apply()
+
+
+## A glove's axes in its wrist joint's frame, from the model at rest: the hand runs from the wrist
+## toward the middle of its vertices; its palm faces along its thinnest spread across that (the
+## palm-to-knuckles thickness of the fist; clearly thinner than its width), signed toward his thigh.
+## In the wrist joint's frame the hand sits as on the model (the joints don't carry its rest turn).
+func _measure_hand(side: int) -> void:
+	var wb := _skeleton.find_bone("Wrist" + ("R" if side > 0 else "L"))
+	var rest: Transform3D = _rest[wb]
+	var origin: Vector3 = _sk_xf * rest.origin
+	var pts: Array[Vector3] = []
+	for mi: MeshInstance3D in _meshes:
+		if mi.skin == null or mi.mesh == null:
+			continue
+		var arr := mi.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / maxi(1, verts.size())
+		for vi in verts.size():
+			for k in per:
+				var bi: int = bones[vi * per + k]
+				var b := mi.skin.get_bind_bone(bi)
+				if b < 0:
+					b = _skeleton.find_bone(mi.skin.get_bind_name(bi))
+				if b == wb and weights[vi * per + k] >= 0.6:
+					pts.append(_sk_xf * (rest * (mi.skin.get_bind_pose(bi) * verts[vi])) - origin)
+	if pts.size() < 8:  # no glove found: a hand hanging down, palm in
+		_hand_run[side] = Vector3.DOWN
+		_hand_palm[side] = Vector3(-side, 0, 0)
+		return
+	var mid := Vector3.ZERO
+	for q in pts:
+		mid += q
+	mid /= pts.size()
+	var run := mid.normalized()
+	var u := run.cross(Vector3.FORWARD).normalized()
+	var w := run.cross(u)
+	var uu := 0.0
+	var ww := 0.0
+	var uw := 0.0
+	for q in pts:
+		var d := q - mid
+		uu += d.dot(u) * d.dot(u)
+		ww += d.dot(w) * d.dot(w)
+		uw += d.dot(u) * d.dot(w)
+	var thin := 0.5 * atan2(2.0 * uw, uu - ww) + PI / 2.0  # the widest spread's angle, turned a quarter
+	var palm := (u * cos(thin) + w * sin(thin)).normalized()
+	_hand_run[side] = run
+	_hand_palm[side] = -palm if palm.x * side > 0.0 else palm
 
 
 ## The pistol in his right hand (user): a low-poly sidearm (slide, frame, raked grip, trigger
@@ -335,6 +393,7 @@ func recoil() -> void:
 	if not _last_state.is_empty():
 		animate(0.0, _last_state)
 	_kick = 1.0
+	_flash_light.visible = true  # the level's lighting reads it later this same tick
 	var shape := _flash_rng.randf()
 	(_flash_star.material_override as ShaderMaterial).set_shader_parameter("seed", shape)
 	(_flash_tongues.material_override as ShaderMaterial).set_shader_parameter("seed", shape)
@@ -396,11 +455,13 @@ func _apply() -> void:
 ## --- Posing -----------------------------------------------------------------------------------
 
 func _reset() -> void:
+	# The whole basis, not just the rotation (which keeps the old scale): the shrug, the aim and the
+	# hands-up set bases directly, and a tiny scale left over would build up frame on frame.
 	for j in [hips, spine, chest, neck, head]:
-		j.rotation = Vector3.ZERO
+		j.basis = Basis.IDENTITY
 	for d in [clavicles, shoulders, elbows, wrists, leg_hips, knees, ankles]:
 		for k in d:
-			d[k].rotation = Vector3.ZERO
+			d[k].basis = Basis.IDENTITY
 	hips.position = Vector3(0, _hip_y, 0)
 	rotation = Vector3.ZERO
 
@@ -416,7 +477,7 @@ func _pose_stand() -> void:
 
 ## Every frame, from the player's state: `run` 0..1 (how fast, of full speed), `airborne` (and
 ## `rising`), `sliding`, `cover` ("", "crouch", "stand"), `stun` 0..1, `lean` (lane change, -1..1),
-## `surrender`.
+## `surrender`, `aim` (FIRE held: the gun up).
 ## Joint signs (the model faces -Z): spine, neck, head: -x leans forward. Shoulders, leg hips:
 ## +x swings the limb forward. Elbows: +x bends the forearm up and forward. Knees: -x folds the
 ## shin back. Shoulder z: side * angle raises the arm out to its side.
@@ -490,8 +551,8 @@ func _aim_and_recoil(delta: float, aiming: bool) -> void:
 		elbows[1].rotation = elbows[1].rotation.lerp(Vector3(AIM_ELBOW, 0.0, 0.0), a)
 		# The wrist turns the gun straight ahead and level, however the rest of him is turned (the
 		# stride, the lean into the run): before the kick, so the kick still flips it up.
-		var ahead := _in_rig(elbows[1]).basis.inverse() * GUN_AHEAD
-		wrists[1].basis = wrists[1].basis.slerp(ahead, a)
+		var ahead := (_in_rig(elbows[1]).basis.inverse() * GUN_AHEAD).orthonormalized()
+		wrists[1].quaternion = wrists[1].quaternion.slerp(ahead.get_rotation_quaternion(), a)
 	var k := _kick * _kick
 	shoulders[1].rotation.x += 0.12 * k  # the muzzle flips up ~15 degrees at the peak
 	elbows[1].rotation.x += 0.16 * k
@@ -501,7 +562,10 @@ func _aim_and_recoil(delta: float, aiming: bool) -> void:
 	var u := (1.0 - _kick) / FLASH_TIME  # 0 on the shot .. 1 gone
 	var on := _kick > 0.0 and u < 1.0
 	_muzzle_flash.visible = on
-	_flash_light.visible = on
+	# The lamp is read by the level's lighting in the next physics tick, before the next frame is
+	# posed: light it if the flash will still show on that frame.
+	var kick_next := _kick - delta / RECOIL_TIME
+	_flash_light.visible = kick_next > 0.0 and (1.0 - kick_next) / FLASH_TIME < 1.0
 	if on:
 		for m: MeshInstance3D in [_flash_star, _flash_tongues]:
 			(m.material_override as ShaderMaterial).set_shader_parameter("heat", 1.0 - u)
@@ -580,13 +644,28 @@ func _pose_surrender() -> void:
 	for side in [-1, 1]:
 		knees[side].rotation.x = -1.6
 		ankles[side].rotation.x = 0.5
-		# Arms up, each arm turned about itself on the way (the upper arm, the forearm, the hand) so his
-		# palms face forwards and a little in (user), the elbows bending the forearms up over his head.
+		# Arms up, each arm turned out about itself on the way (the upper arm, then the forearm: the
+		# forearm runs down its joint's frame, so it turns the same way as -UP), the elbows bending the
+		# forearms up over his head...
 		shoulders[side].basis = Basis(Vector3.BACK, side * 2.3) * Basis(Vector3.UP, -side * HANDS_UP_SHOULDER_TURN)
 		var forearm: Vector3 = (wrists[side] as Node3D).position.normalized()  # the forearm, in the elbow's axes
-		elbows[side].basis = Basis(Vector3.RIGHT, HANDS_UP_ELBOW) * Basis(forearm, -side * HANDS_UP_FOREARM_TURN)
-		wrists[side].basis = Basis(Vector3.UP, -side * HANDS_UP_WRIST_TURN)
+		elbows[side].basis = Basis(Vector3.RIGHT, HANDS_UP_ELBOW) * Basis(forearm, side * HANDS_UP_FOREARM_TURN)
 	head.rotation.x = 0.15
+	# ...then each hand set exactly (user: palms forwards and a little in): running on from its
+	# forearm, palm facing forwards and turned in a little (rig axes; he faces -Z).
+	for side in [-1, 1]:
+		var e := _in_rig(elbows[side]).basis
+		var run := (e * (wrists[side] as Node3D).position).normalized()
+		var palm := Vector3(-side * HANDS_UP_PALM_IN, 0.0, -1.0)
+		palm = (palm - run * palm.dot(run)).normalized()
+		wrists[side].basis = e.inverse() * _frame(run, palm) * _frame(_hand_run[side], _hand_palm[side]).inverse()
+
+
+## An orthonormal frame with `a` as its first axis and `b` (made square to it) as its second.
+static func _frame(a: Vector3, b: Vector3) -> Basis:
+	var x := a.normalized()
+	var y := (b - x * b.dot(x)).normalized()
+	return Basis(x, y, x.cross(y))
 
 
 ## Hit: the whole model flashes red for a moment.

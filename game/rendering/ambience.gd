@@ -29,12 +29,15 @@ var brightness_scale := 1.0
 
 ## A lamp at `node` (it moves with it). range: how far its pool reaches. flicker 0..1: how often it
 ## stutters. blink > 0: on/off period in seconds (beacons). alert: pulses red at ALERT.
-## fixture: the glowing mesh you see, swapped to off_mat while the lamp is off.
+## fixture: the glowing mesh you see, swapped to off_mat while the lamp is off. own_slot: lit in a
+## slot of its own, outside the nearest SLOTS (one lamp: his muzzle flash, so a shot never puts out
+## a level lamp by taking its slot); lit while its node is visible.
 func add_lamp(node: Node3D, color: Color, range_m: float, opts: Dictionary = {}) -> void:
 	var lamp := {"node": node, "color": color, "range": range_m, "flicker": opts.get("flicker", 0.0),
 			"blink": opts.get("blink", 0.0), "alert": opts.get("alert", true), "fixture": opts.get("fixture", null),
 			"on_mat": opts.get("on_mat", null), "off_mat": opts.get("off_mat", null),
-			"seed": float(absi(hash(node.get_instance_id())) % 1000) / 37.0, "lit": 1.0}
+			"seed": float(absi(hash(node.get_instance_id())) % 1000) / 37.0, "lit": 1.0,
+			"own_slot": opts.get("own_slot", false)}
 	_lamps.append(lamp)
 
 
@@ -73,9 +76,17 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 
 	_lamps = _lamps.filter(func(l: Dictionary) -> bool: return is_instance_valid(l["node"]))
 	var near: Array[Dictionary] = []
+	var own_pos := Vector4.ZERO
+	var own_col := Vector4.ZERO
 	for l in _lamps:
 		var node: Node3D = l["node"]
 		if not node.is_inside_tree() or not node.is_visible_in_tree():  # e.g. walls rebuilt, the old ones on their way out
+			continue
+		if l["own_slot"]:
+			var oc: Color = l["color"]
+			var p: Vector3 = node.global_position
+			own_pos = Vector4(p.x, p.y, p.z, l["range"])
+			own_col = Vector4(oc.r * b, oc.g * b, oc.b * b, 1)
 			continue
 		l["lit"] = _lit(l)
 		var fixture = l["fixture"]
@@ -103,6 +114,8 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 			col = Vector4(c.r * e, c.g * e, c.b * e, 1)
 		RenderingServer.global_shader_parameter_set("lamp_pos_%d" % i, pos)
 		RenderingServer.global_shader_parameter_set("lamp_col_%d" % i, col)
+	RenderingServer.global_shader_parameter_set("lamp_pos_%d" % SLOTS, own_pos)
+	RenderingServer.global_shader_parameter_set("lamp_col_%d" % SLOTS, own_col)
 
 
 ## How strongly the screen edges throb: x = ALERT red, y = CAUTION amber (both 0..1, pulsing).
