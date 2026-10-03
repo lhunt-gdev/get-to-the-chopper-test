@@ -21,6 +21,9 @@ const POOL_HALF_LENGTH := 1.6
 ## Where the lamp sits: out to the side on the next building, high up.
 const OUT := 13.0
 const UP := 9.0
+## The beam's cone: its radius at the lamp, and at its far end (under the road).
+const TOP_RADIUS := 0.2
+const BEAM_END_RADIUS := 1.3
 ## How long it holds on you once it's caught you.
 const HOLD := 1.6
 const WHITE := Color(0.8, 0.88, 1.0)
@@ -55,8 +58,8 @@ func _init() -> void:
 	add_child(lamp)
 	_beam = MeshInstance3D.new()
 	var cone := CylinderMesh.new()
-	cone.top_radius = 0.2
-	cone.bottom_radius = 1.3
+	cone.top_radius = TOP_RADIUS
+	cone.bottom_radius = BEAM_END_RADIUS
 	cone.height = 1.0  # scaled to the beam's length every frame
 	cone.radial_segments = 10
 	cone.rings = 1
@@ -122,9 +125,25 @@ func update(delta: float, player_d: float, player_x: float) -> bool:
 ## Beam from the lamp down to the pool; the pool's disc and light on the road.
 func _aim() -> void:
 	var src := Vector3(side * OUT, UP - 0.2, 0)
-	var dst := Vector3(x, 0.0, 0)
-	var dir := (src - dst).normalized()
-	_beam.basis = Basis(Quaternion(Vector3.UP, dir)) * Basis.from_scale(Vector3(1, src.distance_to(dst), 1))
+	var ground := Vector3(x, 0.0, 0)
+	var dir := (src - ground).normalized()
+	var cos_t := maxf(dir.y, 0.2)
+	var sin_t := sqrt(maxf(0.0, 1.0 - dir.y * dir.y))
+	var reach := src.distance_to(ground)
+	# Where the beam meets the road it must land exactly on the pool's disc (user: the circle didn't
+	# line up): POOL_RADIUS across, POOL_HALF_LENGTH along. A tilted round cone lands wider across, so
+	# the cone is squashed: across by cos(tilt), along stretched to the pool's length. And it's
+	# carried on into the ground until its end ring is all under it (user), so no end shows.
+	var length := reach
+	var sx := 1.0
+	var sz := 1.0
+	for i in 2:
+		var at_ground := TOP_RADIUS + (BEAM_END_RADIUS - TOP_RADIUS) * reach / length
+		sx = POOL_RADIUS * cos_t / at_ground
+		sz = POOL_HALF_LENGTH / at_ground
+		length = reach + (BEAM_END_RADIUS * sx * sin_t + 0.15) / cos_t
+	var dst := src - dir * length
+	_beam.basis = Basis(Quaternion(Vector3.UP, dir)) * Basis.from_scale(Vector3(sx, length, sz))
 	_beam.position = (src + dst) / 2.0
 	_disc.position = Vector3(x, 0.02, 0)
 	pool.position = Vector3(x, 1.5, 0)

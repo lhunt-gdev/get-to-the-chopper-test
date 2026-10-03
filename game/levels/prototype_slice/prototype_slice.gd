@@ -68,10 +68,13 @@ const THEMES := {
 			"skins": {"barrier_looks": ["cabinet", "blockade"], "pipe": "wires", "box_look": "office",
 					"wall": "office_wall"}},
 	# Open night sky: no walls or ceiling, a low lip at the roof edge, the city all around.
-	"rooftops": {"wall": "brick", "ambient": Color(0.2, 0.24, 0.36), "moon": Color(0.32, 0.38, 0.58), "lamps": "posts", "snow": true,
-			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "gravel", "no_walls": true,
-			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"),
-			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "roof_vent",
+	# ROOFTOPS (user reference): the office building's roof: cracked paving out to a low parapet,
+	# short lamp posts lighting the walkway, air-con units and ducts, a green electrical cabinet,
+	# raised roof blocks with ladders, a hazard band, a roof hut.
+	"rooftops": {"wall": "brick", "ambient": Color(0.1, 0.11, 0.17), "moon": Color(0.13, 0.15, 0.25), "lamps": "roof_posts", "snow": true,
+			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "roof_paving", "no_walls": true,
+			"lip": 0.8, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "low_wall": true, "wide_roof": 5.0, "office_roof": true,
+			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "condenser",
 					"wall_looks": ["hvac"]}},
 	# WATER TOWERS (user reference): the rooftops, with big rusty water tanks on steel stands either
 	# side, one pair joined by a pipe arching over the road; paving slabs, a chain-link railing along
@@ -800,6 +803,9 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 	_build_surfaces(node, seg, road_end, 0.0, 0.0)
 	if _theme(id).get("sky", false):
 		_build_city(node, seg)
+	if _theme(id).get("office_roof", false):
+		_office_roof_decor(node, seg)
+		_far_masts(node, seg, 8)
 	if _theme(id).get("towers", false):
 		_water_towers(node, seg)
 		_walkway_clutter(node, seg, 5.5, float(seg["ramp_len"]) + 4.0, length - 3.0)
@@ -1795,13 +1801,16 @@ func _build_roof_edges(parent: Node3D, seg: Dictionary, open_l: float, open_r: f
 			if on_ramp:
 				continue  # the stairwell (or ladder) has its own walls
 			# Roofing out to the edge, the lip, and the building's front dropping away below.
-			var strip_tex := _ground(seg["id"]) if theme.get("railing", false) else PsxTextures.gravel()
+			var strip_tex := _ground(seg["id"]) if theme.get("railing", false) or theme.get("low_wall", false) else PsxTextures.gravel()
 			_strip(parent, seg, piece.x, piece.y, side * (road_w / 2.0 + (1.0 + wide) / 2.0), 1.0 + wide, 0.0, strip_tex, (1.0 + wide) / tuning.lane_width, tuning.lane_width)
 			var i := _leg_index(seg, (piece.x + piece.y) / 2.0)
 			var mid := (piece.x + piece.y) / 2.0
 			var l: float = piece.y - piece.x
 			for span in _wall_spans(piece.x, piece.y, hole):  # the lip stops where a stairwell crosses it
 				var sm := (span.x + span.y) / 2.0
+				if theme.get("low_wall", false):  # the ROOFTOPS: a low concrete parapet
+					_low_wall(parent, seg, span, side * (edge - 0.1), lip)
+					continue
 				if theme.get("parapet", false):  # the ROOF EDGE: a tall parapet with red lights
 					_roof_parapet(parent, seg, span, side * (edge - 0.1), lip, side)
 					continue
@@ -2129,16 +2138,18 @@ func _pendant_lamp(parent: Node3D, seg: Dictionary, z: float, failing: bool) -> 
 	bulb.material_override = on
 	var haze := MeshInstance3D.new()
 	var beam := CylinderMesh.new()
+	var haze_top := y - 0.15
+	var haze_bottom := -0.2  # just under the floor, so its end never shows (user)
 	beam.top_radius = 0.35
-	beam.bottom_radius = 1.6
-	beam.height = 2.6
+	beam.bottom_radius = 0.35 + 0.48 * (haze_top - haze_bottom)
+	beam.height = haze_top - haze_bottom
 	beam.radial_segments = 10
 	beam.cap_top = false
 	beam.cap_bottom = false
 	haze.mesh = beam
 	haze.material_override = PsxMaterials.beam(Color(0.85, 0.92, 1.0, 0.07))
 	parent.add_child(haze)
-	haze.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y - 1.45, 0))
+	haze.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, (haze_top + haze_bottom) / 2.0, 0))
 	var at := Node3D.new()
 	parent.add_child(at)
 	at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(0, y - 1.0, 0))
@@ -4007,6 +4018,14 @@ func _pool_at(parent: Node3D, seg: Dictionary, z: float, x: float, color: Color,
 func _beam_cone(parent: Node3D, seg: Dictionary, z: float, from: Vector3, to: Vector3, r_top: float, r_bottom: float, color: Color) -> void:
 	var m := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
+	var dir := (from - to).normalized()
+	var length := from.distance_to(to)
+	# Tilted, its end ring would stick half out of the ground (user): carry it on until the ring's
+	# top is under the ground, widening at the same rate.
+	var tilt_sin := sqrt(maxf(0.0, 1.0 - dir.y * dir.y))
+	var extra := (r_bottom * tilt_sin + 0.15) / maxf(absf(dir.y), 0.2)
+	to -= dir * extra
+	r_bottom += (r_bottom - r_top) * extra / length
 	cyl.top_radius = r_top
 	cyl.bottom_radius = r_bottom
 	cyl.height = from.distance_to(to)
@@ -4017,7 +4036,6 @@ func _beam_cone(parent: Node3D, seg: Dictionary, z: float, from: Vector3, to: Ve
 	m.material_override = PsxMaterials.beam(color)
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(m)
-	var dir := (from - to).normalized()
 	m.transform = _frame_at(seg, z) * Transform3D(Basis(Quaternion(Vector3.UP, dir)), (from + to) / 2.0)
 
 
@@ -4115,6 +4133,106 @@ func _far_masts(parent: Node3D, seg: Dictionary, count: int) -> void:
 		var red := _item_box(parent, seg, at, Vector3(x, base + tall + 0.2, -(z - at)), Vector3(0.3, 0.3, 0.3), Color.WHITE)
 		red.material_override = _beacon_mat if _beacon_mat else PsxMaterials.glow(Color("ff3020"))
 		_halo_at(parent, seg, at, Vector3(x, base + tall + 0.2, -(z - at)), Color(1.0, 0.15, 0.08, 0.55), 2.4)
+
+
+## The ROOFTOPS' low parapet over span (x..y) at x (user reference): a concrete wall to about knee
+## height with a pale coping on top.
+func _low_wall(parent: Node3D, seg: Dictionary, span: Vector2, x: float, lip: float) -> void:
+	var mid := (span.x + span.y) / 2.0
+	var l := span.y - span.x + 0.2
+	_item_box(parent, seg, mid, Vector3(x, lip / 2.0, 0), Vector3(0.34, lip, l), Color.WHITE).material_override = \
+			PsxMaterials.textured(PsxTextures.concrete(), Vector2(maxf(1.0, l / 2.0), 1))
+	_item_box(parent, seg, mid, Vector3(x, lip + 0.04, 0), Vector3(0.44, 0.08, l), Color("7e7c76"))
+
+
+## The ROOFTOPS' lamps (user reference): short posts along the walkway's edges, alternating sides,
+## each with an angled head shining warm-white down onto the walkway, its glow and its pool.
+func _roof_lamp_posts(parent: Node3D, seg: Dictionary) -> void:
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var holes: Dictionary = seg.get("holes", {})
+	var z := float(seg["ramp_len"]) + 5.0
+	var n := 0
+	var lit := 0
+	while z < float(seg["length"]) - 2.0:
+		var side := -1 if n % 2 == 0 else 1
+		var hole: Vector2 = holes.get(side, Vector2.ZERO)
+		if z < hole.x - 2.0 or z > hole.y + 2.0:
+			var x := side * (road_half + 0.55)
+			_item_box(parent, seg, z, Vector3(x, 0.8, 0), Vector3(0.12, 1.6, 0.12), Color("2a2c2e"))
+			var head := Node3D.new()
+			parent.add_child(head)
+			head.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(x - side * 0.18, 1.62, 0))
+			head.rotation.z += side * 0.35  # tipped toward the walkway
+			_box(head, Vector3(0.5, 0.16, 0.3), Vector3.ZERO, Color("1e2022"))
+			var lens := _box(head, Vector3(0.42, 0.03, 0.24), Vector3(0, -0.09, 0), Color.WHITE)
+			lens.material_override = PsxMaterials.glow(Color("f8f0d8"))
+			_halo(head, Vector3(0, -0.12, 0), Color(1.0, 0.92, 0.75, 0.5), 1.5)
+			_pool_at(parent, seg, z, x - side * 1.6, Color(1.0, 0.88, 0.65, 0.3), 2.8)
+			var at := Node3D.new()
+			parent.add_child(at)
+			at.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(x - side * 1.2, 1.2, 0))
+			_ambience.add_lamp(at, Color(1.0, 0.92, 0.75) * 1.4, 6.0, {"flicker": 0.3 if lit % 5 == 4 else 0.0})
+			lit += 1
+		z += 8.0
+		n += 1
+
+
+## The ROOFTOPS beside the walkway (user reference): big air-con units with grilles on top and duct
+## runs into them, a green electrical cabinet, raised roof blocks with ladders, a hazard band across
+## the walkway, a roof hut near the end. Clear of the stairwells and bends.
+func _office_roof_decor(parent: Node3D, seg: Dictionary) -> void:
+	var length: float = seg["length"]
+	var road_half := tuning.lane_count * tuning.lane_width / 2.0
+	var hvac := PsxMaterials.textured(PsxTextures.hvac(), Vector2(3, 2))
+	var grille := PsxMaterials.textured(PsxTextures.vent(), Vector2(3, 2))
+	var duct := Color("8a8e90")
+	var until := length - tuning.decision_lead - tuning.fork_cue_length - 2.0 if _is_authored_fork(seg["id"]) else length - 6.0
+	for side in [-1, 1]:
+		var hole: Vector2 = seg.get("holes", {}).get(side, Vector2.ZERO)
+		var z := float(seg["ramp_len"]) + (8.0 if side < 0 else 13.0)
+		var n := 0
+		while z < until:
+			var near := z > hole.x - 5.0 and z < hole.y + 5.0
+			for leg in seg["legs"]:
+				if float(leg["start"]) > 0.0 and absf(float(leg["start"]) - z) < 7.0:
+					near = true
+			if not near:
+				var holder := Node3D.new()
+				parent.add_child(holder)
+				holder.transform = _frame_at(seg, z) * Transform3D(Basis.IDENTITY, Vector3(side * (road_half + 2.0), 0, 0))
+				var out := float(side)
+				match (n + (0 if side < 0 else 2)) % 4:
+					0, 2:  # a big air-con unit with a grille on top, and its duct out to the parapet
+						_box(holder, Vector3(2.2, 0.14, 2.9), Vector3(0, 0.07, 0), Color("3a3c3e"))
+						_box(holder, Vector3(2.0, 1.6, 2.7), Vector3(0, 0.94, 0), Color.WHITE).material_override = hvac
+						var top := _box(holder, Vector3(1.6, 0.04, 2.0), Vector3(0, 1.76, 0), Color.WHITE)
+						top.material_override = grille
+						_box(holder, Vector3(0.6, 0.6, 0.6), Vector3(out * 1.2, 0.95, -0.6), Color.WHITE).material_override = PsxMaterials.flat(duct)
+						_box(holder, Vector3(2.2, 0.55, 0.55), Vector3(out * 2.4, 0.95, -0.6), Color.WHITE).material_override = PsxMaterials.flat(duct)  # duct run
+						for dx in [1.8, 3.0]:
+							_box(holder, Vector3(0.06, 0.7, 0.06), Vector3(out * dx, 0.35, -0.6), Color("3a3c3e"))  # its stands
+					1:  # a green electrical cabinet and a small box beside it
+						_box(holder, Vector3(1.0, 1.5, 1.4), Vector3(-out * 0.6, 0.75, 0), Color("2e4a30"))
+						_box(holder, Vector3(0.02, 1.3, 0.04), Vector3(-out * 1.11, 0.75, 0), Color("1a2a1c"))  # the doors' split
+						_box(holder, Vector3(0.02, 0.18, 0.26), Vector3(-out * 1.11, 1.15, 0.35), Color("e8e4dc"))  # its warning label
+						_box(holder, Vector3(0.7, 0.6, 0.7), Vector3(out * 0.5, 0.3, 0.9), Color("6a6e70"))
+					3:  # a raised roof block with a ladder up the side facing you
+						_box(holder, Vector3(3.0, 2.6, 5.0), Vector3(out * 1.2, 1.3, 0), Color.WHITE).material_override = \
+								PsxMaterials.textured(PsxTextures.concrete(), Vector2(3, 2))
+						_box(holder, Vector3(3.1, 0.1, 5.1), Vector3(out * 1.2, 2.65, 0), Color("6a6c68"))
+						for rz in [-0.22, 0.22]:
+							_box(holder, Vector3(0.05, 3.2, 0.05), Vector3(-out * 0.32, 1.6, 2.0 + rz), Color("3a3c3e"))
+						for ry in range(1, 9):
+							_box(holder, Vector3(0.05, 0.04, 0.44), Vector3(-out * 0.32, ry * 0.36, 2.0), Color("3a3c3e"))
+						var red := _box(holder, Vector3(0.18, 0.18, 0.18), Vector3(out * 2.3, 2.85, -2.0), Color.WHITE)
+						red.material_override = _beacon_mat if _beacon_mat else PsxMaterials.glow(Color("ff3020"))
+						_halo(holder, red.position, Color(1.0, 0.15, 0.08, 0.5), 1.4)
+			z += 8.0
+			n += 1
+	# A hazard band across the walkway (a step in the roof), and a roof hut ahead near the end.
+	var band := length * 0.55
+	_strip(parent, seg, band - 0.35, band, 0.0, road_half * 2.0 + 1.6, 0.01, PsxTextures.hazard(), 10.0, 0.35)
+	_roof_hut(parent, seg, until - 2.0, road_half + 3.4, -1)
 
 
 ## A keycard reader on the wall: a dark box with a slot and a red LED, `dz` along the road.
@@ -5111,6 +5229,8 @@ func _build_lamps(parent: Node3D, seg: Dictionary) -> void:
 				_lamp_post(parent, seg, length * 0.4, side * (edge - 0.3), -side)
 		"bollards":
 			_bollard_lamps(parent, seg)
+		"roof_posts":
+			_roof_lamp_posts(parent, seg)
 
 
 ## A fluorescent ceiling panel with its pool of cold white light.
