@@ -35,6 +35,10 @@ extends Node
 ##                  it runs past
 ##   runner_escapes - main route, never shoots the alarm runner: he gets to his alarm (Alert 2)
 ##   roof_spotted - roof route at Alert 1, never dodging the searchlights: spotted, the alert rises
+##   sniper_hit   - as roof_loud (Alert 2: the roof snipers are out), but holds its lane when the
+##                  first sniper locks on: hit once; it dodges the rest
+## Every bot dodges a roof sniper once his laser locks (one lane to the free side, then it holds
+## until he's fired). RESULT ends snipers=hit/dodged/out of view on a tall phone when he locked.
 ##   squad_caught - trips both main-route wires (Alert 3, the squad comes after us), then takes
 ##                  the next cover and stays in it: the squad catches up, CAPTURED
 
@@ -55,6 +59,14 @@ var _took_cover := false
 var _cover_frames := 0
 ## stumble_once: the obstacle it deliberately doesn't jump (null until chosen).
 var _fumble: Variant = null
+## sniper_hit: the sniper it holds its lane for (the first to lock on), and whether it has (a
+## freed sniper compares equal to null, so the flag is what counts once he's gone).
+var _held_for: Object = null
+var _held_once := false
+## Snipers seen locking (by instance id), and how many were out of view on a tall phone screen
+## (19.5:9: 270x585, the narrowest view the game gets) when they did.
+var _locks_seen := {}
+var _unseen := 0
 
 
 func _ready() -> void:
@@ -72,7 +84,7 @@ func _ready() -> void:
 			_trip_in = [&"building_main_floor"]
 		"roof_down":
 			_prefer = {&"main_floor_lobby": 1, &"rooftops": -1}
-		"roof_loud":
+		"roof_loud", "sniper_hit":
 			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
 			_trip_in = [&"main_floor_lobby"]
 		"miss_ladder":
@@ -131,6 +143,24 @@ func _physics_process(_delta: float) -> void:
 		if left_to_split < 4.0:
 			_prefer[&"main_floor_lobby"] = 0
 			_cooldown = mini(_cooldown, 0)
+
+	# A roof sniper's laser has locked on: step one lane to the free side, then hold until he's fired
+	# (never back through the locked lane). sniper_hit holds its lane for the first one.
+	var sn: Sniper = _locked_sniper()
+	if sn != null and not _locks_seen.has(sn.get_instance_id()):
+		_locks_seen[sn.get_instance_id()] = true
+		if not _in_phone_view(sn.scope_position()):
+			_unseen += 1
+	if sn != null:
+		var in_line := absf(_player.lane_x(_player.lane) - sn.locked_x) < _player.tuning.lane_width * 0.5
+		if scenario == "sniper_hit" and (not _held_once or (is_instance_valid(_held_for) and _held_for == sn)):
+			_held_for = sn
+			_held_once = true
+		elif in_line:
+			var to := _dodge_lane(obstacles, d)
+			if to != _player.lane:
+				_player.handle_swipe(Vector2i.RIGHT if to > _player.lane else Vector2i.LEFT)
+		_cooldown = maxi(_cooldown, 3)
 
 	# Steering: avoid lanes with cover (walls, boxes) coming up; lean to the preferred side at junctions.
 	_cooldown -= 1
@@ -242,10 +272,50 @@ func _count(kind: String) -> int:
 	return RunLog.events.filter(func(e: Dictionary) -> bool: return e["kind"] == kind).size()
 
 
+## Whether a point is in the camera's view on a tall phone (270x585, the narrowest the game gets).
+func _in_phone_view(p: Vector3) -> bool:
+	var cam: Camera3D = _level._camera
+	var c := cam.global_transform.affine_inverse() * p
+	if c.z >= 0.0:
+		return false
+	var half_v := tan(deg_to_rad(cam.fov) / 2.0)
+	var half_h := half_v * 270.0 / 585.0
+	return absf(c.x / -c.z) <= half_h * 0.9 and absf(c.y / -c.z) <= half_v * 0.95
+
+
+## A sniper on our area whose laser has locked on (null if none).
+func _locked_sniper() -> Sniper:
+	for s: Dictionary in _level._snipers:
+		var sn: Sniper = s["node"]
+		if is_instance_valid(sn) and s["seg"].get("promoted", false) and sn.is_locked():
+			return sn
+	return null
+
+
+## The lane next to ours to dodge into: free of cover and searchlight pools, toward the middle.
+func _dodge_lane(obstacles: Array, d: float) -> int:
+	var lane_count: int = _player.tuning.lane_count
+	var best := _player.lane
+	var best_score := -INF
+	for to in [_player.lane - 1, _player.lane + 1]:
+		if to < 0 or to >= lane_count:
+			continue
+		var score := -absf(to - (lane_count - 1) / 2.0)
+		if _blocked_ahead(obstacles, to, d):
+			score -= 100.0
+		if _lit_ahead(to, d):
+			score -= 60.0
+		if score > best_score:
+			best_score = score
+			best = to
+	return best
+
+
 func _report(reason: String) -> void:
-	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d lights=%d time=%.1f" % [scenario, reason,
+	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d lights=%d time=%.1f snipers=%d/%d/%d" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
-			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed])
+			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
+			_count("sniper_hit"), _count("sniper_dodged"), _unseen])
 	get_tree().quit()
 
 

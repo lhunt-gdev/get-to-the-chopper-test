@@ -52,6 +52,14 @@ const ZONE_DOOR_AT := 8
 const SEARCHLIGHT_GAP := 20.0
 ## ...and not in the last stretch before a split, where you're lining up for your exit.
 const SEARCHLIGHT_SPLIT_CLEAR := 25.0
+## Snipers (user design): the stretch from his spot to just past where he fires (m; he tracks for a
+## second and locks for under one, at run speed), kept free of obstacles so a dodge is always one
+## free lane away; clear of searchlights by this much each side, so a dodge never steps into a
+## pool; done before the last stretch of an area (its fork and slowdown); this far apart.
+const SNIPER_STRETCH := 24.0
+const SNIPER_LIGHT_CLEAR := 10.0
+const SNIPER_END_CLEAR := 22.0
+const SNIPER_GAP := 30.0
 ## No cover wall on the inside of a corner (user rule): it blocks the view round it and looks
 ## wrong. Each bend is a jog: it turns toward its side, runs BEND_RUN m (Tuning.branch_out_length),
 ## then turns back, so it has two corners, the second with its inside on the other side. A corridor
@@ -388,6 +396,34 @@ func validate() -> PackedStringArray:
 			for j in range(i + 1, lights.size()):
 				if absf(float(lights[j].get("at", 0)) - s_at) < SEARCHLIGHT_GAP:
 					problems.append("node '%s': searchlights at %s m and %s m are too close together" % [id, s.get("at"), lights[j].get("at")])
+		# Snipers (user): roofs only, CAUTION and up, an open stretch to dodge in, away from the
+		# searchlights, the stairs and the fork, and apart.
+		var snipers: Array = n.get("snipers", [])
+		for i in snipers.size():
+			var s: Dictionary = snipers[i]
+			var s_at := float(s.get("at", -1))
+			var s_end := s_at + SNIPER_STRETCH
+			if String(n.get("tier", "ground")) != "roof":
+				problems.append("node '%s': snipers only on the roofs" % id)
+			if not String(s.get("side", "")) in ["left", "right"]:
+				problems.append("node '%s': a sniper needs \"side\": \"left\" or \"right\"" % id)
+			if int(s.get("min_alert", 2)) < 2:
+				problems.append("node '%s': snipers only at CAUTION and ALERT (min_alert 2 or 3)" % id)
+			if s_at < 0.0 or s_end > length - SNIPER_END_CLEAR:
+				problems.append("node '%s': sniper at %s m doesn't finish before the area's last %s m" % [id, s.get("at"), SNIPER_END_CLEAR])
+			if entered_by_stairs and s_at < STAIR_EXIT_CLEAR:
+				problems.append("node '%s': sniper at %s m is too close to the stairs' exit door" % [id, s.get("at")])
+			for ob in n.get("obstacles", []):
+				var ob_at := float(ob.get("at", 0))
+				if ob_at >= s_at and ob_at <= s_end:
+					problems.append("node '%s': sniper at %s m: obstacle at %s m in his stretch (a dodge must always be free)" % [id, s.get("at"), ob_at])
+			for l in lights:
+				var l_at := float(l.get("at", 0))
+				if l_at > s_at - SNIPER_LIGHT_CLEAR and l_at < s_end + SNIPER_LIGHT_CLEAR:
+					problems.append("node '%s': sniper at %s m is too near the searchlight at %s m (a dodge could step into its pool)" % [id, s.get("at"), l_at])
+			for j in range(i + 1, snipers.size()):
+				if absf(float(snipers[j].get("at", 0)) - s_at) < SNIPER_GAP:
+					problems.append("node '%s': snipers at %s m and %s m are too close together" % [id, s.get("at"), snipers[j].get("at")])
 		for a in n.get("alarms", []):
 			if not String(a.get("side", "")) in ["left", "right"]:
 				problems.append("node '%s': an alarm box needs \"side\": \"left\" or \"right\"" % id)

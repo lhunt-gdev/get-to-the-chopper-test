@@ -213,3 +213,18 @@ var fire_on_left := false
 @export_range(0.0, 1.0) var squad_timing_chance: float = 0.9
 ## The rear-view CCTV's picture size (pixels; it's scaled up 1:1 in a small monitor under the clock).
 @export var squad_cctv_size: Vector2i = Vector2i(128, 72)
+
+@export_group("Sniper")
+## How long his laser follows you before it locks (s; user: "for a second").
+@export var sniper_track_time: float = 1.0
+## How fast it slides after you across the lanes while following (m/s; a lane change is 14).
+@export var sniper_follow_speed: float = 7.0
+## Your window to dodge once it's locked (s), at CAUTION and at ALERT (LOCKED: alert changes the
+## pressure).
+@export var sniper_window_alert2: float = 0.6
+@export var sniper_window_alert3: float = 0.45
+## Where his nest is from his spot: how far straight on, out to the side and up (m): far enough on
+## that he stays in view while he follows you and locks on, even on a tall phone screen.
+@export var sniper_nest_ahead: float = 75.0
+@export var sniper_nest_out: float = 15.0
+@export var sniper_nest_up: float = 7.0

@@ -37,7 +37,7 @@ static func all_names() -> Array[String]:
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
-			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite", "thunk"]
+			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite", "thunk", "sniper_aim", "sniper_lock", "sniper_shot"]
 	for i in 3:
 		names.append("grunt_%d" % i)
 	for surface in SURFACES:
@@ -251,6 +251,29 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.tone(0.0, 0.015, 3000.0, 2500.0, 0.4, Synth.Wave.SQUARE, 0.0005, 6.0)
 			syn.noise(0.0, 0.01, 0.2, 0.0, 3000.0, 0.0005, 8.0)
 			syn.normalize(0.3)
+		"sniper_aim":
+			# A sniper's laser coming on: a thin rising whine.
+			syn = Synth.create(0.35, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.3, 1400.0, 2600.0, 0.25, Synth.Wave.SINE, 0.02, 2.0)
+			syn.tone(0.0, 0.3, 1410.0, 2610.0, 0.12, Synth.Wave.SQUARE, 0.02, 2.0)
+			syn.lowpass(5000.0)
+			syn.normalize(0.35)
+		"sniper_lock":
+			# Locked on: a fast, high double beep (change lane now).
+			syn = Synth.create(0.22, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.05, 3100.0, 3100.0, 0.5, Synth.Wave.SQUARE, 0.001, 1.0)
+			syn.tone(0.09, 0.07, 3100.0, 3100.0, 0.5, Synth.Wave.SQUARE, 0.001, 1.0)
+			syn.lowpass(7000.0)
+			syn.normalize(0.5)
+		"sniper_shot":
+			# The sniper's rifle, far off: a hard crack, a low thump and a long echo off the city.
+			syn = Synth.create(1.6, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.05, 1.0, 9000.0, 1500.0, 0.0005, 30.0)
+			syn.tone(0.0, 0.18, 120.0, 55.0, 0.8, Synth.Wave.TRIANGLE, 0.001, 12.0)
+			syn.noise(0.02, 0.3, 0.35, 2500.0, 200.0, 0.002, 7.0)
+			syn.echo(0.23, 0.45, 0.35)
+			syn.lowpass(7000.0)
+			syn.normalize(0.7)
 		"thunk":
 			# A row of the end screen's tally landing (after Doom's): a short, heavy knock.
 			syn = Synth.create(0.18, SFX_RATE, seed_value)

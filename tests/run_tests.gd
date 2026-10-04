@@ -29,6 +29,7 @@ func _run() -> void:
 	_test_sounds()
 	_test_route_map()
 	_test_tally()
+	_test_snipers()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -111,6 +112,132 @@ func _test_route_map() -> void:
 			skip_size = (c as Control).size
 	_check(skip_size == fe.get_viewport().get_visible_rect().size, "end screen: the tap-to-skip area covers the screen (%s)" % skip_size)
 	fe.free()
+
+
+## The Sniper (user design; LOCKED roster: a timed movement threat you dodge): his hit rule, a
+## shorter window at ALERT, where he may go, and one go at him: quiet below CAUTION, then following,
+## locking and firing, hitting a player who stays and missing one who changes lane.
+func _test_snipers() -> void:
+	_check(Sniper.shot_hits(0.0, 0.0, false, 1.4) and Sniper.shot_hits(0.6, 0.0, false, 1.4), "sniper: still in the locked lane, hit")
+	_check(not Sniper.shot_hits(1.4, 0.0, false, 1.4), "sniper: a lane over, missed")
+	_check(not Sniper.shot_hits(0.0, 0.0, true, 1.4), "sniper: in cover, missed (as with the troopers)")
+	var tt := Tuning.new()
+	_check(Sniper.window_for(3, tt.sniper_window_alert2, tt.sniper_window_alert3) < Sniper.window_for(2, tt.sniper_window_alert2, tt.sniper_window_alert3),
+			"sniper: less time to dodge at ALERT")
+	_check(is_equal_approx(tt.sniper_track_time, 1.0), "sniper: his laser follows you for a second (user)")
+	var probe := Sniper.new(tt)
+	_check(not probe.has_method("hit") and not probe.has_method("is_targetable") and not "health" in probe,
+			"sniper: can't be shot or killed, only dodged (user; auto-aim and tap-to-target only pick combatants)")
+	probe.free()
+	# Where he may go.
+	var base := {"id": "r", "tier": "roof", "length": 100, "obstacles": [], "searchlights": [], "next": [{"to": "e"}]}
+	var rules := {
+		"snipers only on the roofs": {"tier": "ground", "snipers": [{"at": 10, "side": "left"}]},
+		"only at CAUTION and ALERT": {"snipers": [{"at": 10, "side": "left", "min_alert": 1}]},
+		"obstacle at 20": {"snipers": [{"at": 10, "side": "left"}], "obstacles": [{"kind": "box", "lanes": [2], "at": 20}]},
+		"too near the searchlight": {"snipers": [{"at": 10, "side": "left"}], "searchlights": [{"at": 40, "side": "right"}]},
+		"doesn't finish before": {"snipers": [{"at": 60, "side": "left"}]},
+		"too close together": {"length": 200, "snipers": [{"at": 10, "side": "left"}, {"at": 30, "side": "right"}]},
+		"a sniper needs \"side\"": {"snipers": [{"at": 10}]},
+	}
+	for want in rules:
+		var n := base.duplicate(true)
+		n.merge(rules[want], true)
+		var g := RouteGraph.from_dict({"start": "r", "nodes": [n, {"id": "e", "tier": "ground", "length": 30, "end": "extract"}]})
+		var problems := " | ".join(g.validate())
+		_check(problems.contains(want), "sniper rule '%s' (%s)" % [want, problems])
+	# Into a roof by stairs: not on the flight or just off it (the stairs' clear exit).
+	var stair_in := {"id": "s", "tier": "ground", "length": 60, "next": [{"to": "e"}, {"to": "r", "side": "left", "via": "stairs"}]}
+	for at_m in [10.0, RouteGraph.STAIR_EXIT_CLEAR]:
+		var rn := base.duplicate(true)
+		rn["snipers"] = [{"at": at_m, "side": "left"}]
+		var gs := RouteGraph.from_dict({"start": "s", "nodes": [stair_in, rn, {"id": "e", "tier": "ground", "length": 30, "end": "extract"}]})
+		var close := " | ".join(gs.validate()).contains("sniper at %s m is too close to the stairs" % at_m)
+		_check(close == (at_m < RouteGraph.STAIR_EXIT_CLEAR), "sniper: %s m into an area reached by stairs is %s" % [at_m, "too close" if at_m < RouteGraph.STAIR_EXIT_CLEAR else "fine"])
+	var ok := base.duplicate(true)
+	ok["snipers"] = [{"at": 10, "side": "left"}]
+	var fine := RouteGraph.from_dict({"start": "r", "nodes": [ok, {"id": "e", "tier": "ground", "length": 30, "end": "extract"}]})
+	_check(not " | ".join(fine.validate()).contains("sniper"), "sniper: a good spot passes")
+	var real := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var count := 0
+	for id in [&"water_towers", &"gantry", &"skylights", &"antenna_farm"]:
+		count += real.node_data(id).get("snipers", []).size()
+	_check(count == 4, "sniper: one in each of the four open roof stretches (%d)" % count)
+	# One go at him: a straight road, route_point(d, x, y) = (x, y, -d). Still SNEAKING when you
+	# reach his spot, CAUTION 2 m on (within START_LATE): the alert is all that holds him back.
+	var road := func(d: float, x: float, y: float) -> Vector3: return Vector3(x, y, -d)
+	for dodge in [false, true]:
+		var sn := Sniper.new(tt)
+		sn.at = 10.0
+		root.add_child(sn)
+		var d := 0.0
+		var x := 0.0
+		var shot := Sniper.Shot.NONE
+		var quiet := true
+		for f in 240:
+			d += tt.run_speed / 60.0
+			var alert := 1 if d < sn.at + 2.0 else 2
+			if dodge and sn.is_locked():
+				x = minf(x + tt.lane_change_speed / 60.0, tt.lane_width)
+			var r := sn.update(1.0 / 60.0, alert, d, x, false, road)
+			if alert == 1 and sn.state != Sniper.State.WAITING:
+				quiet = false
+			if r != Sniper.Shot.NONE:
+				shot = r
+				break
+		_check(quiet, "sniper: quiet below CAUTION, even at his spot")
+		_check(shot == (Sniper.Shot.MISSED if dodge else Sniper.Shot.HIT), "sniper: %s" % ("a lane change in the window, missed" if dodge else "stay in the lane, hit"))
+		_check(sn.state == Sniper.State.DONE, "sniper: he fires once")
+		sn.free()
+	# Never above SNEAKING: he never starts, and he's done once you're past.
+	var calm := Sniper.new(tt)
+	calm.at = 10.0
+	root.add_child(calm)
+	var cd := 0.0
+	var woke := false
+	for f in 240:
+		cd += tt.run_speed / 60.0
+		if calm.update(1.0 / 60.0, 1, cd, 0.0, false, road) != Sniper.Shot.NONE or calm.state in [Sniper.State.TRACKING, Sniper.State.LOCKED]:
+			woke = true
+	_check(not woke and calm.state == Sniper.State.DONE, "sniper: never at SNEAKING (user: CAUTION and up)")
+	calm.free()
+	# The laser follows you for a second: a lane change while it's following doesn't shake it (it
+	# lags, then catches up); it locks a second in, squarely on a lane, and fires the window later
+	# (shorter at ALERT).
+	for alert in [2, 3]:
+		var sn := Sniper.new(tt)
+		sn.at = 10.0
+		root.add_child(sn)
+		var d := 0.0
+		var x := 0.0
+		var t_track := -1
+		var t_lock := -1
+		var t_shot := -1
+		var lagged := false
+		var shot := Sniper.Shot.NONE
+		for f in 240:
+			d += tt.run_speed / 60.0
+			if t_track >= 0 and f - t_track >= 18:
+				x = minf(x + tt.lane_change_speed / 60.0, tt.lane_width)
+			var r := sn.update(1.0 / 60.0, alert, d, x, false, road)
+			if sn.is_tracking():
+				if t_track < 0:
+					t_track = f
+				lagged = lagged or absf(sn.aim_x - x) > 0.05
+			if sn.is_locked() and t_lock < 0:
+				t_lock = f
+			if r != Sniper.Shot.NONE:
+				t_shot = f
+				shot = r
+				break
+		var win := Sniper.window_for(alert, tt.sniper_window_alert2, tt.sniper_window_alert3)
+		_check(lagged and is_equal_approx(sn.locked_x, tt.lane_width) and shot == Sniper.Shot.HIT,
+				"sniper (alert %d): his laser follows you; a lane change while it's following doesn't shake it (user)" % alert)
+		_check(absi((t_lock - t_track) - roundi(tt.sniper_track_time * 60.0)) <= 1, "sniper (alert %d): it locks after a second of following (%d frames)" % [alert, t_lock - t_track])
+		_check(absi((t_shot - t_lock) - roundi(win * 60.0)) <= 1, "sniper (alert %d): he fires %.2f s after the lock (%d frames)" % [alert, win, t_shot - t_lock])
+		sn.free()
+	_check(is_equal_approx(Sniper.lane_centre(1.05, 1.4, 5), 1.4) and is_equal_approx(Sniper.lane_centre(0.58, 1.4, 5), 0.0) and is_equal_approx(Sniper.lane_centre(9.0, 1.4, 5), 2.8),
+			"sniper: the lock lands squarely on a lane")
 
 
 ## The end screen's tally (user, after DOS Doom): plain counts only, the chopper's spare time only

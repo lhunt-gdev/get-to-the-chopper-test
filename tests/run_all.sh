@@ -11,10 +11,13 @@ echo "== Unit tests"
 
 echo "== Bot playthroughs"
 fail=0
-expect() {  # scenario, expected substring
-  local out
+expect() {  # scenario, expected substring(s): every one must be in its RESULT line
+  local out ok=1
   out=$("$GODOT" --headless --path . --fixed-fps 60 res://tests/autoplay/autoplay.tscn -- --scenario="$1" 2>&1 | grep RESULT || true)
-  if [[ "$out" == *"$2"* ]]; then echo "PASS $out"; else echo "FAIL [$1] expected '$2', got: ${out:-no result}"; fail=1; fi
+  for want in "${@:2}"; do
+    [[ "$out" == *"$want"* ]] || ok=0
+  done
+  if [[ $ok == 1 ]]; then echo "PASS $out"; else echo "FAIL [$1] expected '${*:2}', got: ${out:-no result}"; fail=1; fi
 }
 # The WAREHOUSE's exit is a roller shutter: one door, where a double door counts two leaves. The
 # MAIN FLOOR EXIT's front has three glass doors you burst through: three more.
@@ -27,7 +30,10 @@ expect tunnel_quiet "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=
 expect tunnel_loud "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15"
 expect tunnel_alarm "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=0 alarms=1"
 expect roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15"
-expect roof_loud   "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0"
+expect roof_loud   "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0" "snipers=0/4/0"
+# The roof snipers are out at Alert 2: sniper_hit holds its lane for the first one (hit once) and
+# dodges the other three. The last number: snipers out of view on a tall phone when they locked.
+expect sniper_hit  "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=1" "snipers=1/3/0"
 expect miss_ladder "reason=captured alert=2 route=$R |"
 expect warehouse_drop "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0"
 expect late_switch "reason=extracted alert=1 route=$G"

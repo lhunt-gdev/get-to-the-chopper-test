@@ -252,6 +252,12 @@ var _current: Dictionary = {}
 var _combatants: Array[Dictionary] = []
 ## Roof searchlights: {node: Searchlight, owner: segment node, seg: segment}.
 var _lights: Array[Dictionary] = []
+## Roof snipers (CAUTION and ALERT): {node: Sniper, owner: segment node, seg: segment}. Not
+## combatants: auto-aim never picks them (LOCKED roster: you dodge him, you don't shoot him).
+var _snipers: Array[Dictionary] = []
+## Snipers over a road you didn't take: {node, tier}. Hidden once you go into another level: the
+## block under his nest runs down through the levels below, so it would stand in your corridor.
+var _retired_snipers: Array[Dictionary] = []
 var _fire_held := false
 var _fire_cooldown := 0.0
 ## HYBRID / TAP_TO_TARGET: the enemy the player last tapped.
@@ -524,6 +530,8 @@ func _physics_process(delta: float) -> void:
 			_update_squad(delta)
 		if GameState.run_active:
 			_update_searchlights(delta)
+		if GameState.run_active:
+			_update_snipers(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
@@ -1082,6 +1090,26 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		_ambience.add_lamp(light.pool, Color(0.8, 0.88, 1.0) * 1.6, 4.5, {"alert": false})
 		light.spotted.connect(_on_searchlight_spotted.bind(light))
 		_lights.append({"node": light, "owner": node, "seg": seg})
+	# Snipers (roofs, CAUTION and ALERT; user design): his spot is where he starts on you; his nest
+	# is ahead of it, out to one side and up, on the next building over.
+	for s: Dictionary in _graph.node_data(id).get("snipers", []):
+		var sn := Sniper.new(tuning)
+		var into := float(s["at"])
+		sn.at = start + into
+		sn.side = -1 if String(s.get("side", "right")) == "left" else 1
+		sn.min_alert = int(s.get("min_alert", 2))
+		var here := _frame_at(seg, into)
+		var nest_into := minf(into + float(s.get("ahead", tuning.sniper_nest_ahead)), float(seg["length"]) - 1.0)
+		var out := float(s.get("out", tuning.sniper_nest_out))
+		var up := float(s.get("up", tuning.sniper_nest_up)) + _height(seg, nest_into) - _height(seg, into)
+		# Straight on from his spot, not along the road: a bend on the way can't swing him off screen.
+		sn.nest = Transform3D(Basis.IDENTITY, Vector3(sn.side * out, up, -(nest_into - into)))
+		node.add_child(sn)
+		sn.transform = here
+		sn.tracking.connect(_on_sniper_tracking)
+		sn.locked.connect(_on_sniper_locked.bind(sn))
+		sn.fired.connect(_on_sniper_fired.bind(sn))
+		_snipers.append({"node": sn, "owner": node, "seg": seg})
 	for a: Dictionary in _graph.node_data(id).get("alarms", []):
 		var box := AlarmBox.new()
 		box.at = start + float(a["at"])
@@ -1164,6 +1192,7 @@ func _discard(branch: Dictionary) -> void:
 	_obstacles = _obstacles.filter(func(o: Dictionary) -> bool: return o["owner"] != node)
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	_lights = _lights.filter(func(l: Dictionary) -> bool: return l["owner"] != node)
+	_snipers = _snipers.filter(func(s: Dictionary) -> bool: return s["owner"] != node)
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
 	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	node.queue_free()
@@ -1199,11 +1228,20 @@ func _retire(node: Node3D, gone_at: float) -> void:
 			c["node"].visible = false  # nobody left standing on a road you didn't take
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	_lights = _lights.filter(func(l: Dictionary) -> bool: return l["owner"] != node)
+	for s in _snipers:
+		if s["owner"] == node and is_instance_valid(s["node"]):
+			s["node"].stand_down()  # he lies low over a road you didn't take
+			_retired_snipers.append({"node": s["node"], "tier": _graph.tier_of(StringName(s["seg"]["id"]))})
+	_snipers = _snipers.filter(func(s: Dictionary) -> bool: return s["owner"] != node)
 	_retired.append({"node": node, "gone_at": gone_at})
 
 
 ## Entering a side branch: move the player into the branch's own lanes (same spot in the world).
 func _on_node_entered(id: StringName) -> void:
+	for r in _retired_snipers:
+		if is_instance_valid(r["node"]) and _graph.tier_of(id) != r["tier"]:
+			r["node"].visible = false  # you're down the stairs: his nest's block would be in your way
+	_retired_snipers = _retired_snipers.filter(func(r: Dictionary) -> bool: return is_instance_valid(r["node"]) and r["node"].visible)
 	var area := _graph.display_name(id)
 	if area != _last_area:  # MGS-style location caption
 		_last_area = area
@@ -6904,6 +6942,64 @@ func _update_searchlights(delta: float) -> void:
 	_lights = _lights.filter(func(l: Dictionary) -> bool: return is_instance_valid(l["node"]) and l["node"].at > d - 20.0)
 
 
+## The roof snipers: each starts on you when you reach his spot (if the alert's CAUTION or up),
+## follows you, locks on and fires once. Only on the area you're on (one on a branch ahead waits).
+func _update_snipers(delta: float) -> void:
+	var d := _player.distance_run()
+	for s in _snipers:
+		var sn: Sniper = s["node"]
+		if not is_instance_valid(sn) or not s["seg"].get("promoted", false):
+			continue
+		var shot := sn.update(delta, GameState.alert_level, d, _player.track_x, _player.in_cover, _route_point)
+		if shot == Sniper.Shot.HIT:
+			RunLog.record_event("sniper_hit", {"node": _runner.current})
+			_damage_player("sniper")
+			if not GameState.run_active:
+				return
+		elif shot == Sniper.Shot.MISSED:
+			RunLog.record_event("sniper_dodged", {"node": _runner.current})
+	_snipers = _snipers.filter(func(s: Dictionary) -> bool: return is_instance_valid(s["node"]) and s["node"].at > d - 60.0)
+
+
+## A sniper's laser has come on, following you.
+func _on_sniper_tracking() -> void:
+	RunLog.record_event("sniper", {"node": _runner.current})
+	_hud.show_chopper_message("SNIPER!", Color("ffb347"), 1.6, false)
+	_audio.play("sniper_aim", -4.0, 0.0)
+
+
+## Locked on: the beep (change lane now).
+func _on_sniper_locked(_sn: Sniper) -> void:
+	_audio.play("sniper_lock", -2.0, 0.0)
+
+
+## He's fired: the crack from his nest, far off (a hit is the usual hit, from _update_snipers;
+## a miss sparks off the roof where you were).
+func _on_sniper_fired(hit: bool, where: Vector3, sn: Sniper) -> void:
+	_audio.play("sniper_shot", -1.0, 0.04)
+	if not hit:
+		_audio.play_at("zap", where, -6.0, 0.1)
+		_sparks(where)
+
+
+## A shot glancing off the roof: a few sparks flying out and fading.
+func _sparks(where: Vector3) -> void:
+	for i in 6:
+		var m := MeshInstance3D.new()
+		var b := BoxMesh.new()
+		b.size = Vector3(0.07, 0.07, 0.07)
+		m.mesh = b
+		m.material_override = PsxMaterials.glow(Color("ffd060"))
+		m.top_level = true
+		_world.add_child(m)
+		m.global_position = where
+		var a := TAU * i / 6.0 + 0.4
+		var to := where + Vector3(cos(a) * 0.6, 0.3 + 0.25 * (i % 3), sin(a) * 0.6)
+		var tw := m.create_tween()
+		tw.tween_property(m, "global_position", to, 0.22).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(m.queue_free)
+
+
 ## A searchlight's caught you: the "!" sting, and the alert goes up one level.
 func _on_searchlight_spotted(light: Searchlight) -> void:
 	RunLog.record_event("searchlight", {"node": _runner.current})
@@ -7275,6 +7371,9 @@ func _on_run_ended(reason: StringName) -> void:
 	_clock.stop()
 	_fire_held = false
 	_player.aiming = false  # he lowers the pistol, however the run ended
+	for s in _snipers:  # their lasers go out
+		if is_instance_valid(s["node"]):
+			s["node"].stand_down()
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())

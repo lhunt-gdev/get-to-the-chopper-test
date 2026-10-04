@@ -293,6 +293,7 @@
         {"at": 44, "side": "left"},
         {"at": 92, "side": "right"}
       ],
+      "snipers": [{"at": 4, "side": "left"}],
       "next": [
         {"to": "gantry", "label": "GANTRY"}
       ]
@@ -318,6 +319,7 @@
       "searchlights": [
         {"at": 50, "side": "right"}
       ],
+      "snipers": [{"at": 6, "side": "right", "out": 12}],
       "next": [
         {"to": "skylights", "label": "SKYLIGHTS"}
       ]
@@ -347,6 +349,7 @@
         {"at": 42, "side": "right"},
         {"at": 80, "side": "left"}
       ],
+      "snipers": [{"at": 2, "side": "right"}],
       "next": [
         {"to": "antenna_farm", "label": "ANTENNA FARM"}
       ]
@@ -377,6 +380,7 @@
         {"at": 56, "side": "left"},
         {"at": 96, "side": "right"}
       ],
+      "snipers": [{"at": 4, "side": "right"}],
       "next": [
         {"to": "roof_edge", "label": "ROOF EDGE"}
       ]
