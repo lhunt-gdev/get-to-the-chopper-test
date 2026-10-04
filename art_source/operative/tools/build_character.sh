@@ -28,7 +28,8 @@ WORK="$ROOT/$(dirname "$SRC_REL")/work"
 TOOLS="art_source/operative/tools"
 mkdir -p "$WORK" "$OUT"
 export CHAR="$NAME"
-run() { "$BLENDER" --background --python "$TOOLS/$1" -- "${@:2}" 2>&1 | grep -E "^(BASE|TRIS|SAVED|APOSE|APOSED|REMESHED|LOW_TRIS|BAKED|DONE|TURNED|LANDMARKS|WEIGHTS|LENSES|EXPORTED)|Error|Traceback" || true; }
+# (A stage that fails stops the build: Blender exits non-zero on a Python error.)
+run() { "$BLENDER" --background --python-exit-code 1 --python "$TOOLS/$1" -- "${@:2}" 2>&1 | { grep -E "^(BASE|TRIS|SAVED|APOSE|APOSED|REMESHED|LOW_TRIS|BAKED|DONE|TURNED|LANDMARKS|WEIGHTS|LENSES|EXPORTED)|Error|Traceback" || true; }; }
 echo "== $NAME, stage 1: reduce"
 run stage1_reduce.py "$SRC" "$WORK"
 if [[ "$POSE" == "apose" ]]; then
@@ -38,6 +39,7 @@ fi
 echo "== $NAME, stage 3: remesh, reduce to $TRIS triangles, bake a ${TEX}px texture"
 run stage3_bake.py "$WORK" "$WORK" "$TRIS" "$TEX"
 echo "== $NAME, stage 4: face forward, rig, weights, lenses, export"
+rm -f "$WORK/${NAME}_rigged.glb"  # (so a failed stage 4 can't leave an old one to copy)
 run stage4_rig.py "$WORK/${NAME}_low_${TRIS}.blend" "$WORK/${NAME}_rigged.glb" "$WORK/${NAME}_joints.json" "$ROOT/$OUT/$NAME.json"
 cp "$WORK/${NAME}_rigged.glb" "$OUT/$NAME.glb"
 echo "== done: $OUT/$NAME.glb ($(wc -c < "$OUT/$NAME.glb") bytes), $OUT/$NAME.json"

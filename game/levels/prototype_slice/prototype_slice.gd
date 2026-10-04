@@ -1328,15 +1328,17 @@ func _connect_security(sec: SecurityTrooper) -> void:
 
 
 ## Where the runner raised the alarm: a red panel on the wall, flashing.
-func _build_runner_alarm(sec: SecurityTrooper) -> void:
+func _build_runner_alarm(sec: SecurityTrooper, klaxon: bool = true) -> void:
 	var seg := _runner_segment(sec.at)
 	if seg.is_empty():
-		return  # round a split you didn't take: you only hear about it
+		return  # round a split you didn't take (or not built yet): you only hear about it
+	sec.panel_built = true
 	var px := signf(sec.wall_x) * (tuning.lane_count * tuning.lane_width / 2.0 + 0.45)
 	var panel := _item_box(seg["node"], seg, sec.at - seg["start"], Vector3(px, 1.7, 0), Vector3(0.14, 0.45, 0.4), Color.WHITE)
 	panel.material_override = PsxMaterials.glow(Color("ff3020"))
 	_ambience.add_lamp(panel, Color(1.0, 0.15, 0.1) * 1.6, 5.0, {"blink": 0.5, "alert": false})
-	_audio.play_at("klaxon", panel.global_position, -4.0)
+	if klaxon:
+		_audio.play_at("klaxon", panel.global_position, -4.0)
 
 
 ## A trooper's sounds: the "!" when he starts aiming, his shots, being hit, and going down.
@@ -6898,8 +6900,13 @@ func _update_security(delta: float, sec: SecurityTrooper, d: float, alert: int) 
 				elif o["kind"] in ["barrier", "box"]:
 					lows.append({"at": o["at"], "x": o["x"]})
 	sec.update(delta, tuning, alert, d, walls, lows, highs, _runner_point)
-	if sec.is_running():
-		sec.x = move_toward(sec.x, _through_doors(sec.at, sec.x), 7.0 * delta)  # through the zone doors
+	if sec.state == SecurityTrooper.State.ALARM and not sec.panel_built and not _runner_segment(sec.at).is_empty():
+		_build_runner_alarm(sec, false)  # his stretch is built now: the panel his hand's on
+	if sec.is_running() and sec.alarm_at - sec.at > SecurityTrooper.TO_WALL:
+		# Through the zone doors; not on the last stretch, where he cuts across to the wall his alarm's
+		# on (it's short of the next door: he'd otherwise be pulled into the middle and stop ~2 m from
+		# the panel, slamming nothing).
+		sec.x = move_toward(sec.x, _through_doors(sec.at, sec.x), 7.0 * delta)
 	if sec.is_running() and sec.state == SecurityTrooper.State.RUN:
 		_hud.show_runner(sec.progress())
 	if sec.is_alive() and sec.visible and absf(sec.at - d) < 0.6 \
@@ -7272,7 +7279,7 @@ func fire_target() -> Node3D:
 ## Where on a target you aim: a trooper's chest, a dog's body, an alarm box's face.
 func _aim_height(n: Node3D) -> float:
 	if n is SecurityTrooper:
-		return 1.2
+		return RifleTrooper.CHEST  # the scout's chest, as the guard's
 	if n is RifleTrooper:
 		return RifleTrooper.CHEST
 	if n is RusherDog:
@@ -7374,8 +7381,8 @@ func _on_run_ended(reason: StringName) -> void:
 	for s in _snipers:  # their lasers go out
 		if is_instance_valid(s["node"]):
 			s["node"].stand_down()
-	for c in _combatants:  # the troopers lower their rifles
-		if is_instance_valid(c["node"]) and c["node"] is RifleTrooper:
+	for c in _combatants:  # the troopers lower their rifles, the dogs and the runner pull up
+		if is_instance_valid(c["node"]) and (c["node"] is RifleTrooper or c["node"] is RusherDog or c["node"] is SecurityTrooper):
 			c["node"].stand_down()
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)

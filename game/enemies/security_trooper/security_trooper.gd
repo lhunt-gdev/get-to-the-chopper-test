@@ -7,8 +7,10 @@ extends Node3D
 ## level. Letting him go is a valid choice (LOCKED). He weaves round walls and vaults low
 ## obstacles on the way, and he never shoots.
 ##
-## Placeholder art: boxes. The level calls update() every physics frame. Everything is in route
-## space: `at` (distance along the route) and `x` (across it).
+## He's the scout (user: "the alarm guard"), unarmed, a radio on his back with a blinking amber
+## light (GuardRig without a rifle): he runs, vaults and slides as CROSS does, slams the panel with
+## his hand, and falls on his face when he's shot down. The level calls update() every physics
+## frame. Everything is in route space: `at` (distance along the route) and `x` (across it).
 
 signal spotted
 signal wounded
@@ -18,12 +20,17 @@ signal raised
 
 enum State { IDLE, STARTLED, RUN, ALARM, DOWN }
 
-const COLOR := Color("7088b0")  # bluer than the riflemen, light enough to read through the fog
+const SCOUT := preload("res://game/enemies/scout/scout.glb")
 const LASER := Color("ff2a2a")
 const AMBER := Color("ffb347")
 const SWERVE_SPEED := 6.0
 ## The last stretch (m) where he cuts across to the wall the alarm is on.
 const TO_WALL := 8.0
+## At the alarm, facing the wall: where his hand goes on the panel (his space: a little right of
+## his middle, about the panel's height, the wall ~0.5 m in front of him).
+const PANEL := Vector3(0.06, 1.65, -0.53)
+## Where his blood pools once he's down: in front of him (he falls on his face, away from you).
+const POOL_AT := Vector3(0, 0.035, -1.2)
 
 var at: float = 0.0
 var x: float = 0.0
@@ -39,11 +46,14 @@ var alarm_at: float = 0.0
 var wall_x: float = 0.0
 
 var _timer := 0.0
-var _run := 0.0
 var _lane_x := 0.0
 var _body: Node3D
-var _legs: Array[Node3D] = []
-var _arms: Array[Node3D] = []
+var _rig: GuardRig
+var _last_hop := 0.0
+var _was_ducking := false
+## His alarm panel's been built (the level builds it when he raises the alarm, or, if his stretch of
+## route wasn't built then, once it is).
+var panel_built := false
 var _warn: Label3D
 ## A blinking amber light on his radio, so you can follow him down a dark corridor.
 var _beacon: MeshInstance3D
@@ -53,30 +63,23 @@ func _init(tuning: Tuning) -> void:
 	health = tuning.security_health
 	_body = Node3D.new()
 	add_child(_body)
-	_part(_body, Vector3(0.5, 0.75, 0.32), Vector3(0, 1.2, 0), COLOR)                    # torso
-	_part(_body, Vector3(0.38, 0.3, 0.38), Vector3(0, 1.75, 0), Color("c9a07a"))          # head
-	_part(_body, Vector3(0.42, 0.14, 0.42), Vector3(0, 1.94, 0), COLOR.darkened(0.45))    # cap
-	_part(_body, Vector3(0.52, 0.1, 0.34), Vector3(0, 1.0, 0), AMBER.darkened(0.15))     # amber belt: "security"
-	_part(_body, Vector3(0.12, 0.22, 0.08), Vector3(0.18, 1.35, 0.2), Color("1c1c1a"))   # radio on his back
-	_part(_body, Vector3(0.02, 0.3, 0.02), Vector3(0.22, 1.58, 0.2), Color("1c1c1a"))    # its aerial
+	_rig = GuardRig.new(GuardRifle.Kind.CARBINE, SCOUT, "SCOUT", false)
+	_body.add_child(_rig)
+	# The radio on his back (on the carrier, between his shoulder blades, a little to his right), its
+	# aerial, and its blinking amber light on top.
+	var radio := Node3D.new()
+	radio.name = "Radio"
+	_rig.chest.add_child(radio)
+	radio.position = Vector3(0.07, -0.14, 0.16)
+	_part(radio, Vector3(0.11, 0.18, 0.06), Vector3.ZERO, Color("1c1c1a"))
+	_part(radio, Vector3(0.015, 0.26, 0.015), Vector3(0.035, 0.21, 0.0), Color("1c1c1a"))
 	_beacon = MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.14, 0.1, 0.06)
+	bm.size = Vector3(0.1, 0.06, 0.05)
 	_beacon.mesh = bm
 	_beacon.material_override = PsxMaterials.glow(AMBER)
-	_beacon.position = Vector3(0.18, 1.5, 0.25)
-	_body.add_child(_beacon)
-	for s in [-1, 1]:
-		var hip := Node3D.new()
-		_body.add_child(hip)
-		hip.position = Vector3(s * 0.13, 0.82, 0)
-		_part(hip, Vector3(0.18, 0.82, 0.2), Vector3(0, -0.41, 0), COLOR.darkened(0.25))
-		_legs.append(hip)
-		var shoulder := Node3D.new()
-		_body.add_child(shoulder)
-		shoulder.position = Vector3(s * 0.32, 1.52, 0)
-		_part(shoulder, Vector3(0.13, 0.6, 0.14), Vector3(0, -0.3, 0), COLOR.darkened(0.1))
-		_arms.append(shoulder)
+	_beacon.position = Vector3(-0.01, 0.12, 0.01)
+	radio.add_child(_beacon)
 	var shadow := MeshInstance3D.new()
 	shadow.mesh = PsxMaterials.shadow_mesh(Vector2(0.8, 0.6))
 	shadow.material_override = PsxMaterials.shadow(false, tuning)
@@ -163,6 +166,7 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, walls: Ar
 			_timer -= delta
 			_warn.visible = fmod(_timer, 0.16) > 0.06
 			_body.rotation.y = lerpf(_body.rotation.y, PI, clampf(delta * 14.0, 0.0, 1.0))  # turning to run
+			_rig.animate(delta, {"run": 0.4})  # (a step into the turn)
 			if _timer <= 0.0:
 				state = State.RUN
 				_warn.visible = false
@@ -187,17 +191,25 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, walls: Ar
 	if state == State.ALARM:
 		if _put(place, 0.0):  # at the panel (shown once that stretch is built), facing the wall
 			rotate_object_local(Vector3.UP, -signf(wall_x) * PI / 2.0)
+			_rig.animate(delta, {"reach": global_transform * PANEL})  # his hand on it
+			_beacon.visible = fmod(Time.get_ticks_msec() / 1000.0, 0.5) < 0.3
 		return
-	_put(place, _hop(lows))
+	var hop := _hop(lows)
+	_put(place, hop)
 	_beacon.visible = fmod(Time.get_ticks_msec() / 1000.0, 0.5) < 0.3
-	_body.scale.y = lerpf(_body.scale.y, 0.62 if _ducking(highs) else 1.0, clampf(delta * 18.0, 0.0, 1.0))
-	_body.rotation.x = -0.22  # leaning into the sprint
-	_run += delta * 14.0
-	var swing := sin(_run) * 0.8
-	_legs[0].rotation.x = swing
-	_legs[1].rotation.x = -swing
-	_arms[0].rotation.x = -swing
-	_arms[1].rotation.x = swing
+	# A sprint (as CROSS runs), up over what he vaults, down under what he slides under.
+	_rig.animate(delta, {"run": 1.0, "airborne": hop > 0.05, "rising": hop > _last_hop, "duck": _ducking(highs)})
+	_last_hop = hop
+	_was_ducking = _ducking(highs)
+
+
+## The run's over (nothing updates him any more): if he was running, he slows to a stand.
+func stand_down() -> void:
+	if is_running():
+		if top_level and _last_hop > 0.0:
+			global_position.y -= _last_hop  # mid-vault: back on the floor
+			_last_hop = 0.0
+		_rig.pose_to({"duck": true} if _was_ducking else {}, 0.6)  # (still under a pipe: stays down)
 
 
 ## Shot by the player.
@@ -206,9 +218,8 @@ func hit() -> void:
 		return
 	health -= 1
 	wounded.emit()
-	_body.scale = Vector3(1.15, 0.9, 1.15)
-	create_tween().tween_property(_body, "scale", Vector3.ONE, 0.12)
-	Blood.mist(self, Vector3(0, 1.25, 0.25), Vector3(0, 1.0, 0.35), get_instance_id() + health)
+	_rig.flinch()
+	Blood.mist(self, Vector3(0, RifleTrooper.CHEST, 0.25), Vector3(0, 1.0, 0.35), get_instance_id() + health)
 	if health <= 0:
 		knock_down()
 
@@ -216,29 +227,29 @@ func hit() -> void:
 func knock_down() -> void:
 	if not is_alive():
 		return
+	if state == State.ALARM:
+		# At the panel he faces the wall: turned back down the route first, so he falls along the
+		# wall, not into it.
+		rotate_object_local(Vector3.UP, signf(wall_x) * PI / 2.0)
 	state = State.DOWN
 	_warn.visible = false
+	_beacon.visible = false  # (down: no light to follow)
+	if top_level and _last_hop > 0.0:
+		global_position.y -= _last_hop  # shot mid-vault: he comes down where he is
+		_last_hop = 0.0
 	knocked_down.emit()
-	for limb in _legs + _arms:
-		limb.rotation.x = 0.0
+	# Shot in the back as he runs: he goes down on his face, away from you.
+	_rig.fall()
 	var tween := create_tween()
-	# Shot in the back as he runs: he goes down forward, away from you.
-	tween.tween_property(_body, "rotation:x", -PI / 2.0, 0.3).set_ease(Tween.EASE_IN)
-	tween.parallel().tween_property(_body, "position:y", 0.2, 0.3)
-	tween.tween_callback(func() -> void: Blood.pool(self, Vector3(0, 0.035, -0.8), 1.2, 2.2, get_instance_id()))
+	tween.tween_interval(GuardRig.FALL_TIME)
+	tween.tween_callback(func() -> void: Blood.pool(self, POOL_AT, 1.2, 2.2, get_instance_id()))
 
 
-## At the alarm: he slaps it, then stays there with his hand on it.
+## At the alarm: he slaps it, then stays there with his hand on it (posed in update()).
 func _slam() -> void:
-	_body.rotation.x = 0.0
-	_body.scale = Vector3.ONE
 	_warn.text = "!!"
 	_warn.modulate = LASER
 	_warn.visible = true
-	for limb in _legs:
-		limb.rotation.x = 0.0
-	_arms[0].rotation.x = 0.0
-	_arms[1].rotation.x = -PI / 2.0  # reaching up to the panel
 	get_tree().create_timer(1.5).timeout.connect(func() -> void:
 		if is_instance_valid(self):
 			_warn.visible = false)

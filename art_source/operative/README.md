@@ -61,6 +61,18 @@ built this way has the same 19-joint skeleton, so SoldierRig poses him too: the 
 `GuardRig` (`game/enemies/guard/guard_rig.gd`, a SoldierRig with a rifle in both hands, no lenses
 file: he has no goggles), which the rifle troopers, the pursuit squad and the sniper wear.
 
+`build_scout.sh` and `build_boss.sh` are the same for the scout and the boss (`art_source/scout/`,
+`art_source/boss/`, into `game/enemies/scout/` and `game/enemies/boss/`; both T-posed).
+
+The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
+then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one
+end), scales him to 0.72 m at the shoulder (the line of his back between his legs), finds his paws,
+traces each leg up from its paw to where it meets the body, finds his head and tail, and places a
+dog's 19 bones from those and a dog's proportions (hips, spine, chest, neck, head, two in the tail,
+three in each leg). The weights are bone heat, worked out at ten times his size (bone heat fails on a
+mesh this small, with legs this thin), then each leg below the body kept to its own bones. He writes
+`game/enemies/rusher_dog/dog.glb`; `DogRig` (`game/enemies/rusher_dog/dog_rig.gd`) poses him.
+
 After a re-import, check the new texture's `.import` file has `detect_3d/compress_to=0` (Godot
 can set 1 the first time, which makes it lossy); CROSS's and the guard's are 0.
 

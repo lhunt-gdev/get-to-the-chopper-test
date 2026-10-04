@@ -11,6 +11,9 @@ extends SoldierRig
 ## handguard. Each reach is a two-joint solve: the elbow bends so shoulder to wrist is the right
 ## length, the shoulder turns the arm onto the target with the elbow out to a natural side, and the
 ## wrist turns the hand to hold on. The legs, hips and back pose as CROSS's do (SoldierRig).
+##
+## Unarmed (the scout, the alarm runner: another model built the same way), his arms swing free as
+## CROSS's do, and the same reach puts his hand on what he's reaching for (the alarm panel).
 
 const GUARD_MODEL := preload("res://game/enemies/guard/guard.glb")
 ## How the rifle sits in the right fist: its barrel this far (rad) above the line of the hand (the
@@ -57,6 +60,8 @@ const FALL_BLEND := 0.3
 const RIFLE_FLASH := 1.5
 
 var kind: GuardRifle.Kind = GuardRifle.Kind.CARBINE
+## Carrying a rifle (false: the scout).
+var armed := true
 var rifle: Node3D
 ## The rifle in the right wrist joint's frame.
 var _attach := Transform3D.IDENTITY
@@ -80,13 +85,23 @@ var _held_left := 0.0
 ## Where the elbows go this frame (chest axes; see POLES_*).
 var _poles: Array[Vector3] = [Vector3.DOWN, Vector3.DOWN]
 var _body_joints: Array[Node3D] = []
+## Unarmed, reaching: for what (this rig's space), and how far into the reach he is (0..1, eased).
+var _reach_at := Vector3.ZERO
+var _reach_w := 0.0
 
 
-func _init(rifle_kind: GuardRifle.Kind = GuardRifle.Kind.CARBINE) -> void:
-	super(GUARD_MODEL, "", "GUARD")
+## rifle_kind: which rifle; model and rig_name: which character (the guard, or the scout);
+## carries_rifle: false for no rifle at all (the scout).
+func _init(rifle_kind: GuardRifle.Kind = GuardRifle.Kind.CARBINE, model: PackedScene = GUARD_MODEL,
+		rig_name: String = "GUARD", carries_rifle: bool = true) -> void:
+	super(model, "", rig_name)
 	kind = rifle_kind
+	armed = carries_rifle
 	_body_joints = [hips, spine, chest, neck, head, leg_hips[-1], leg_hips[1], knees[-1], knees[1], ankles[-1], ankles[1]]
-	_build_rifle()
+	if not armed:  # his free arms blend too (into a slide, a fall), the reach's collarbone and hand too
+		_body_joints.append_array([shoulders[-1], shoulders[1], elbows[-1], elbows[1], clavicles[-1], clavicles[1], wrists[-1], wrists[1]])
+	if armed:
+		_build_rifle()
 	animate(0.0, {})
 
 
@@ -186,12 +201,14 @@ func light() -> Node3D:
 
 ## Where shots leave the rifle (world space).
 func muzzle_position() -> Vector3:
-	return _muzzle.global_position if _muzzle.is_inside_tree() else global_position + Vector3.UP * 1.3
+	return _muzzle.global_position if armed and _muzzle.is_inside_tree() else global_position + Vector3.UP * 1.3
 
 
 ## A shot: the rifle kicks up into his shoulder and the muzzle flashes (a new shape, size and reach
 ## each time, as CROSS's does). There's no lamp: the flash lamp is the player's.
 func fire() -> void:
+	if not armed:
+		return
 	_kick = 1.0
 	_still = false
 	var shape := _flash_rng.randf()
@@ -222,7 +239,8 @@ func is_down() -> bool:
 
 ## Every frame he's to move (the enemy calls it), from his state: `run` 0..1 (how fast, of a full
 ## run), `airborne` (and `rising`), `duck` (sliding under something), `aim` (the rifle up at
-## `target`, world space), `prone` (lying in a sniper's nest). fire(), flinch() and fall() start
+## `target`, world space), `prone` (lying in a sniper's nest), `reach` (unarmed: his right hand
+## flat on that point, world space). fire(), flinch() and fall() start
 ## their own moves. Settled and given the same state again, he's left as he is (cheap to call).
 func animate(delta: float, s: Dictionary) -> void:
 	if _still and s == _last_state:
@@ -244,12 +262,19 @@ func animate(delta: float, s: Dictionary) -> void:
 	_prone = s.get("prone", false)
 	if s.has("target") and is_inside_tree():
 		_target = global_transform.affine_inverse() * (s["target"] as Vector3)
+	if s.has("reach") and is_inside_tree():
+		_reach_at = global_transform.affine_inverse() * (s["reach"] as Vector3)
+	_reach_w = move_toward(_reach_w, 1.0 if s.has("reach") else 0.0, delta * 7.0)
 	_flash(delta)
 	_pose_body()
-	_hold(_rifle_target())
-	_show_flash()
+	if armed:
+		_hold(_rifle_target())
+		_show_flash()
+	else:
+		_free_arms()
 	_apply()
 	_still = (_run == target_run and target_run == 0.0 and (_aim == 0.0 or _aim == 1.0) and (_duck == 0.0 or _duck == 1.0)
+			and (_reach_w == 0.0 or _reach_w == 1.0)
 			and _kick == 0.0 and _flinch == 0.0 and (_fall < 0.0 or _fall >= 1.0) and _flash_left <= 0.0)
 
 
@@ -272,6 +297,10 @@ func _pose_body() -> void:
 			_pose_guard()
 		else:
 			_pose_run()
+			if not armed:
+				# No pistol forward: the right arm pumps opposite the left, as the left does.
+				shoulders[1].rotation.x = -0.7 * _run * sin(_phase + PI)
+				elbows[1].rotation.x = 1.1 + 0.3 * _run
 		if _duck > 0.0:
 			# Into the slide (as CROSS slides), blended so he drops into it.
 			var from := _snap()
@@ -299,6 +328,10 @@ func _pose_body() -> void:
 
 ## Standing guard: feet a little apart, the left a half step ahead, knees soft.
 func _pose_guard() -> void:
+	if not armed:
+		for side in [-1, 1]:  # his hands by his sides
+			shoulders[side].rotation = Vector3(0.0, 0.0, side * 0.05)
+			elbows[side].rotation.x = 0.2
 	hips.position.y = _hip_y - 0.03
 	spine.rotation.x = -0.05
 	leg_hips[-1].rotation.x = 0.18
@@ -416,6 +449,26 @@ func _hold(xf: Transform3D) -> void:
 		_reach(-1, Transform3D(held.basis.slerp(flung, t), held.origin.lerp(at, t)), ch * _poles[1])
 		return
 	_reach(-1, _left_on(r), ch * _poles[1])
+
+
+## No rifle (the scout): his arms as the pose left them (swinging as he runs), the right hand
+## reaching flat onto `_reach_at` (the alarm panel), and down, both arms flung out ahead on the
+## floor.
+func _free_arms() -> void:
+	var ch := _in_rig(chest).basis
+	if _reach_w > 0.0 and _fall < 0.0:
+		var w := _reach_w * _reach_w * (3.0 - 2.0 * _reach_w)
+		var toward := (_reach_at - _in_rig(shoulders[1]).origin).normalized()
+		# Fingers up, palm onto it.
+		var hand := _frame(Vector3.UP, toward) * _frame(_hand_run[1], _hand_palm[1]).inverse()
+		var on := Transform3D(hand, _reach_at - toward * 0.03 - hand * (_hand_mid[1] as Vector3))
+		_reach(1, _in_rig(wrists[1]).interpolate_with(on, w), ch * Vector3(0.6, -1.0, 0.2))
+	if _fall > 0.6:
+		var t := clampf((_fall - 0.6) / 0.4, 0.0, 1.0)
+		for side in [-1, 1]:
+			var flung := _frame(Vector3(0.3 * side, 0, -1), Vector3.DOWN) * _frame(_hand_run[side], _hand_palm[side]).inverse()
+			var at := Vector3(0.45 * side, 0.08, -2.0) - flung * (_hand_mid[side] as Vector3)
+			_reach(side, _in_rig(wrists[side]).interpolate_with(Transform3D(flung, at), t), ch * Vector3(0.5 * side, -1.0, 0.0))
 
 
 ## Where the left wrist goes to hold the rifle at `r` under its handguard.

@@ -7,8 +7,10 @@ extends Node3D
 ## stumble (user decision), then it runs on past. Cover doesn't help (LOCKED): it gets round to you.
 ## On the way it bounds over low obstacles and runs round walls.
 ##
-## Placeholder art: boxes. The level calls update() every physics frame. Everything is in route
-## space: `at` (distance along the route) and `x` (across it).
+## He's the user's German Shepherd in a tactical vest (DogRig): standing guard, crouched and
+## barking for the telegraph, galloping at you, leaping at you for the bite, dropping onto his side
+## when he's shot. The level calls update() every physics frame. Everything is in route space:
+## `at` (distance along the route) and `x` (across it).
 
 signal barked
 signal bit
@@ -17,13 +19,15 @@ signal yelped
 enum State { IDLE, WINDUP, CHARGE, PASSED, DOWN }
 enum Contact { NONE, BIT, MISSED }
 
-const TAN := Color("9a7448")
-const SADDLE := Color("26201a")
 const LASER := Color("ff2a2a")
 ## Sideways speed (m/s) when it swerves round a wall or back into its lane.
 const SWERVE_SPEED := 7.0
-## How far behind you it carries on running before it's gone.
-const RUN_ON := 12.0
+## How far behind you it carries on running before it's gone (inside the 10 m the level keeps
+## updating it for, or it would stay there, frozen, behind you).
+const RUN_ON := 8.0
+## How far from you (m) he springs for the bite: his leap at you peaks as he reaches you (he and you
+## close at ~20 m/s), in front of the camera.
+const LUNGE_AT := 3.5
 
 var at: float = 0.0
 var x: float = 0.0
@@ -36,35 +40,21 @@ var locked_x: float = 0.0
 var committed: bool = false
 
 var _timer := 0.0
-var _run := 0.0
 var _body: Node3D
-var _legs: Array[Node3D] = []
-var _tail: Node3D
+var _dog: DogRig
 var _warn: Label3D
+var _hop := 0.0
+var _lunged := false
+## Bounding over something: where it is along the route (to land clear of it if he's shot).
+var _over_at := 0.0
+var _route_point: Callable
 
 
 func _init(tuning: Tuning) -> void:
 	_body = Node3D.new()
 	add_child(_body)
-	# Head toward -Z (toward you, like a trooper's rifle).
-	_part(_body, Vector3(0.3, 0.3, 0.82), Vector3(0, 0.55, 0), TAN)                # body
-	_part(_body, Vector3(0.32, 0.12, 0.56), Vector3(0, 0.72, 0.05), SADDLE)        # black saddle
-	_part(_body, Vector3(0.24, 0.26, 0.2), Vector3(0, 0.72, -0.44), TAN)           # neck
-	_part(_body, Vector3(0.24, 0.24, 0.3), Vector3(0, 0.86, -0.56), TAN.darkened(0.1))  # head
-	_part(_body, Vector3(0.13, 0.11, 0.2), Vector3(0, 0.8, -0.78), SADDLE)         # muzzle
-	for s in [-1, 1]:
-		_part(_body, Vector3(0.06, 0.14, 0.06), Vector3(s * 0.08, 1.04, -0.52), SADDLE)  # ears up
-	for leg in [Vector3(-0.1, 0.42, -0.3), Vector3(0.1, 0.42, -0.3), Vector3(-0.1, 0.42, 0.3), Vector3(0.1, 0.42, 0.3)]:
-		var hip := Node3D.new()
-		_body.add_child(hip)
-		hip.position = leg
-		_part(hip, Vector3(0.09, 0.42, 0.09), Vector3(0, -0.21, 0), TAN.darkened(0.15))
-		_legs.append(hip)
-	_tail = Node3D.new()
-	_body.add_child(_tail)
-	_tail.position = Vector3(0, 0.64, 0.4)
-	_tail.rotation.x = 0.6
-	_part(_tail, Vector3(0.07, 0.07, 0.34), Vector3(0, 0, 0.17), SADDLE)
+	_dog = DogRig.new()  # head toward -Z (toward you, like a trooper's rifle)
+	_body.add_child(_dog)
 	var shadow := MeshInstance3D.new()
 	shadow.mesh = PsxMaterials.shadow_mesh(Vector2(0.5, 1.0))
 	shadow.material_override = PsxMaterials.shadow(false, tuning)
@@ -79,7 +69,7 @@ func _init(tuning: Tuning) -> void:
 	_warn.outline_size = 10
 	_warn.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_warn.no_depth_test = true
-	_warn.position = Vector3(0, 1.6, 0)
+	_warn.position = Vector3(0, 1.4, 0)
 	_warn.visible = false
 	add_child(_warn)
 
@@ -136,7 +126,36 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 		walls: Array, lows: Array, route_point: Callable) -> Contact:
 	note_seen(tuning, alert, player_d)
 	visible = is_active(alert) or state == State.DOWN
-	_tail.rotation.y = sin(Time.get_ticks_msec() / 90.0) * (0.5 if state == State.IDLE else 0.15)
+	var contact := _behave(delta, tuning, alert, player_d, player_x, in_cover, walls, lows, route_point)
+	if state == State.CHARGE and not _lunged and at <= player_d + 0.6 + LUNGE_AT:
+		_lunged = true
+		_dog.lunge()  # the bite: a leap at you (it lands as he reaches you)
+	_pose(delta, player_d)
+	return contact
+
+
+## The run's over (nothing updates him any more): whatever he's doing settles, standing.
+func stand_down() -> void:
+	_warn.visible = false
+	if is_alive():
+		_land()
+		_dog.pose_to({}, 0.6)
+
+
+## Him, posed for what he's doing: on guard he stands as he's built (nothing to pose: from the
+## front, as you see him, a wag wouldn't show); barking, crouched; running, a gallop, stretched out
+## over what he bounds over. Down, he drops on his own (DogRig.fall()).
+func _pose(delta: float, _player_d: float) -> void:
+	if not visible or state == State.DOWN or state == State.IDLE:
+		return
+	if state == State.WINDUP:
+		_dog.animate(delta, {"bark": true})
+	else:
+		_dog.animate(delta, {"run": 1.0, "leap": clampf(_hop / 0.6, 0.0, 1.0)})
+
+
+func _behave(delta: float, tuning: Tuning, alert: int, player_d: float, player_x: float, in_cover: bool,
+		walls: Array, lows: Array, route_point: Callable) -> Contact:
 	match state:
 		State.IDLE:
 			var ahead := at - player_d
@@ -146,7 +165,6 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 					locked_x = player_x
 					_timer = windup_time(tuning, alert)
 					_warn.visible = true
-					_body.rotation.x = -0.18  # crouched, front down, ready to spring
 					barked.emit()
 		State.WINDUP:
 			_timer -= delta
@@ -154,7 +172,6 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 			if _timer <= 0.0:
 				state = State.CHARGE
 				_warn.visible = false
-				_body.rotation.x = 0.0
 				var here := global_transform
 				top_level = true  # from here it moves along the route on its own
 				global_transform = here
@@ -183,11 +200,10 @@ func hit() -> void:
 	state = State.DOWN
 	_warn.visible = false
 	yelped.emit()
-	for leg in _legs:
-		leg.rotation.x = 0.0
+	_land()  # shot in mid-bound: he comes down, clear of what he was bounding over
+	_dog.fall()  # onto his side, resting on the floor
 	var tween := create_tween()
-	tween.tween_property(_body, "rotation:z", PI / 2.0, 0.22).set_ease(Tween.EASE_IN)
-	tween.parallel().tween_property(_body, "position:y", 0.16, 0.22)  # on its side, resting on the floor
+	tween.tween_interval(DogRig.DROP_TIME)
 	tween.tween_callback(func() -> void: Blood.pool(self, Vector3(0, 0.035, 0), 0.8, 1.8, get_instance_id()))
 
 
@@ -208,29 +224,31 @@ func _lane_target(player_d: float, walls: Array) -> float:
 	return locked_x
 
 
-## Puts it on the route at (at, x), facing down the route toward you, galloping, and bounding
-## over any low obstacle it's passing.
-func _place(route_point: Callable, lows: Array, delta: float) -> void:
+## Mid-bound (the run's over, or he's shot): down on the floor, on the far side of what he was
+## bounding over (on your side of it: he was coming toward you).
+func _land() -> void:
+	if not top_level or _hop <= 0.0 or not _route_point.is_valid():
+		return
+	at = minf(at, _over_at - 1.1)
+	var pos: Vector3 = _route_point.call(at, x, 0.0)
+	var toward: Vector3 = _route_point.call(at - 1.0, x, 0.0)
+	global_transform = Transform3D(Basis.IDENTITY, pos).looking_at(toward, Vector3.UP)
+	_hop = 0.0
+
+
+## Puts it on the route at (at, x), facing down the route toward you, bounding over any low
+## obstacle it's passing (how high, for his pose: _hop).
+func _place(route_point: Callable, lows: Array, _delta: float) -> void:
+	_route_point = route_point
 	var hop := 0.0
 	for o in lows:
 		var dd := absf(float(o["at"]) - at)
 		if dd < 0.9 and absf(float(o["x"]) - x) < 0.9:
-			hop = maxf(hop, 0.75 * cos(PI * 0.5 * dd / 0.9))  # highest right over it
+			var h := 0.75 * cos(PI * 0.5 * dd / 0.9)  # highest right over it
+			if h > hop:
+				hop = h
+				_over_at = float(o["at"])
 	var pos: Vector3 = route_point.call(at, x, hop)
 	var toward: Vector3 = route_point.call(at - 1.0, x, hop)
 	global_transform = Transform3D(Basis.IDENTITY, pos).looking_at(toward, Vector3.UP)
-	_run += delta * 15.0
-	var swing := sin(_run) * 0.75
-	for i in _legs.size():
-		_legs[i].rotation.x = swing if i < 2 else -swing
-	_body.position.y = absf(sin(_run)) * 0.06
-
-
-func _part(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
-	var m := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	m.mesh = mesh
-	m.material_override = PsxMaterials.flat(color)
-	m.position = pos
-	parent.add_child(m)
+	_hop = hop

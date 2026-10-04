@@ -29,3 +29,11 @@ __pycache__/
 # The guard's source art, the same way (rebuilt by art_source/operative/tools/build_guard.sh).
 art_source/guard/guard-meshy.glb
 art_source/guard/work/
+# The scout's, boss's and dog's source art, the same way (rebuilt by build_character.sh /
+# build_dog.sh in art_source/operative/tools).
+art_source/scout/scout.glb
+art_source/scout/work/
+art_source/boss/boss.glb
+art_source/boss/work/
+art_source/dog/dog.glb
+art_source/dog/work/
