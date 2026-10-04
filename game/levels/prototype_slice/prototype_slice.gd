@@ -7170,7 +7170,7 @@ func _caught_by_squad() -> void:
 	for g in _squad:
 		if not is_instance_valid(g) or not g.is_chasing():
 			continue
-		g.grab()
+		g.grab(behind * Vector3(0, 1.2, 0))  # at your back
 		var side := -1.0 if i % 2 == 0 else 1.0
 		var spot := Vector3(side * (1.2 + (i / 2) * 0.9), 0, 1.3 + (i / 2) * 0.8)
 		g.create_tween().tween_property(g, "global_transform", behind * Transform3D(Basis.IDENTITY, spot), 0.35).set_ease(Tween.EASE_OUT)
@@ -7274,7 +7274,7 @@ func _aim_height(n: Node3D) -> float:
 	if n is SecurityTrooper:
 		return 1.2
 	if n is RifleTrooper:
-		return 1.15
+		return RifleTrooper.CHEST
 	if n is RusherDog:
 		return 0.55
 	return 0.0
@@ -7374,6 +7374,9 @@ func _on_run_ended(reason: StringName) -> void:
 	for s in _snipers:  # their lasers go out
 		if is_instance_valid(s["node"]):
 			s["node"].stand_down()
+	for c in _combatants:  # the troopers lower their rifles
+		if is_instance_valid(c["node"]) and c["node"] is RifleTrooper:
+			c["node"].stand_down()
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())

@@ -46,7 +46,9 @@ var _timer: float = 0.0
 var _window: float = 0.6
 var _blink: float = 0.0
 var _nest: Node3D
+## He turns (yaw) to aim; the guard (lying in it) and his scoped rifle.
 var _figure: Node3D
+var _rig: GuardRig
 var _scope: Node3D
 var _glint: MeshInstance3D
 var _laser: MeshInstance3D
@@ -168,7 +170,8 @@ func scope_position() -> Vector3:
 # --- Looks --------------------------------------------------------------------------------------
 
 ## His nest: the top of a tall block on the next building over (it runs down out of sight), a low
-## lip round it, and him lying on it with his rifle, its scope glinting red.
+## lip round it, and him lying on it (the guard, user) with his scoped rifle on its bipod, the scope
+## glinting red.
 func _build_nest() -> void:
 	_nest = Node3D.new()
 	_nest.name = "Nest"
@@ -181,15 +184,14 @@ func _build_nest() -> void:
 		_part(_nest, lip[0], lip[1], concrete.darkened(0.35))
 	_figure = Node3D.new()
 	_nest.add_child(_figure)
-	_figure.position = Vector3(0, 0.05, 0.5)
-	var drab := Color("4a4f45")
-	_part(_figure, Vector3(0.5, 0.32, 1.5), Vector3(0, 0.16, 0.45), drab)  # lying flat, feet back
-	_part(_figure, Vector3(0.3, 0.3, 0.3), Vector3(0, 0.3, -0.35), drab.darkened(0.3))  # head
-	_part(_figure, Vector3(0.09, 0.09, 1.4), Vector3(0.12, 0.3, -0.9), Color("1c1c1a"))  # rifle
-	_part(_figure, Vector3(0.11, 0.11, 0.32), Vector3(0.12, 0.42, -0.5), Color("101012"))  # scope
-	_scope = Node3D.new()
-	_figure.add_child(_scope)
-	_scope.position = Vector3(0.12, 0.42, -0.68)
+	_figure.position = Vector3(0, 0.05, 0.6)
+	# Facing his spot (where you'll be when his laser comes on), so he isn't turned round then.
+	var spot := nest.affine_inverse() * Vector3(0, 1.1, 0)
+	_figure.rotation.y = atan2(-(spot.x - _figure.position.x), -(spot.z - _figure.position.z))
+	_rig = GuardRig.new(GuardRifle.Kind.SNIPER)
+	_figure.add_child(_rig)
+	_rig.animate(0.0, {"prone": true, "aim": true, "target": _nest.global_transform * spot})
+	_scope = _rig.scope()
 	_glint = MeshInstance3D.new()
 	var quad := QuadMesh.new()
 	quad.size = Vector2(1.8, 1.8)  # big enough to see where the laser comes from, far off
@@ -212,6 +214,11 @@ func _build_nest() -> void:
 ## The laser from his scope to you (`to`), its dot on the road under the lane it's on (`dot`),
 ## him turned to aim along it, and the glint. Locked on: brighter, and blinking.
 func _show_laser(to: Vector3, dot: Vector3) -> void:
+	# Him first (turned, his rifle on you), so the laser leaves his scope where it is now.
+	var flat := Vector3(to.x, _figure.global_position.y, to.z)
+	if flat.distance_to(_figure.global_position) > 0.5:
+		_figure.look_at(flat, Vector3.UP)
+	_rig.animate(1.0 / 60.0, {"prone": true, "aim": true, "target": to})
 	var from := scope_position()
 	var lock := state == State.LOCKED
 	var on := not lock or fmod(_blink, BLINK * 2.0) < BLINK
@@ -221,9 +228,6 @@ func _show_laser(to: Vector3, dot: Vector3) -> void:
 	_dot.visible = on
 	_glint.visible = true
 	_glint.scale = Vector3.ONE * (1.6 if lock else 1.0)
-	var flat := Vector3(to.x, _figure.global_position.y, to.z)
-	if flat.distance_to(_figure.global_position) > 0.5:
-		_figure.look_at(flat, Vector3.UP)
 
 
 func _hide_laser() -> void:
@@ -237,6 +241,8 @@ func _hide_laser() -> void:
 func _fire(where: Vector3) -> void:
 	state = State.DONE
 	_hide_laser()
+	_rig.fire()
+	_rig.pose_to({"prone": true, "aim": true, "target": where}, GuardRig.KICK_TIME)
 	var from := scope_position()
 	_stretch(_tracer, from, where, true)
 	_flash.visible = true

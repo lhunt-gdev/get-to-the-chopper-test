@@ -1,14 +1,15 @@
-# CROSS, stage 4: rig the low-poly CROSS with the game's skeleton (SoldierRig's 19 joints) and
+# Stage 4: rig a low-poly character (CHAR, as in stage 1; CROSS by default) with the game's skeleton (SoldierRig's 19 joints) and
 # export him for Godot. Joint positions are found from the mesh itself (the crotch, the armpits,
 # the arm lines, the fingertips, the tops of the shoulders) plus standard body proportions; the
 # skin weights are Blender's automatic (bone heat) weights, so joints bend smoothly, then cleaned
 # up round the shoulders and chest (see below).
 import bpy, sys, os, json, math, mathutils
+NAME = os.environ.get("CHAR", "cross").upper()
 argv = sys.argv[sys.argv.index("--") + 1:]
 blend, out_glb, out_json = argv[0], argv[1], argv[2]
 out_game_json = argv[3] if len(argv) > 3 else None
 bpy.ops.wm.open_mainfile(filepath=blend)
-low = bpy.data.objects["CROSS_low"]
+low = bpy.data.objects[f"{NAME}_low"]
 me = low.data
 M = low.matrix_world
 V = [M @ v.co for v in me.vertices]
@@ -168,8 +169,8 @@ tails = {"Hips": "Spine", "Spine": "Chest", "Chest": "Neck", "Neck": "Head", "Cl
          "ShoulderL": "ElbowL", "ElbowL": "WristL", "LegHipR": "KneeR", "KneeR": "AnkleR",
          "LegHipL": "KneeL", "KneeL": "AnkleL"}
 # --- The armature.
-arm_data = bpy.data.armatures.new("CROSS_rig")
-rig = bpy.data.objects.new("CROSS_rig", arm_data)
+arm_data = bpy.data.armatures.new(f"{NAME}_rig")
+rig = bpy.data.objects.new(f"{NAME}_rig", arm_data)
 bpy.context.scene.collection.objects.link(rig)
 for o in bpy.context.selected_objects: o.select_set(False)
 bpy.context.view_layer.objects.active = rig

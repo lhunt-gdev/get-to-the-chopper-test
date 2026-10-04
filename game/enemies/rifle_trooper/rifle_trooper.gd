@@ -4,7 +4,9 @@ extends Node3D
 ## you're in (a red "!" and a laser dot on the road under you), then fires. Change lane before
 ## the shot, or be in cover, and he misses. He only shoots forward, down the route at you.
 ##
-## Placeholder art: boxes. The level places him and calls update() every physics frame.
+## He's the guard (user), his carbine in both hands (GuardRig): held low across him standing guard,
+## brought up into his shoulder and pointed at your lane while he aims. The level places him and
+## calls update() every physics frame.
 
 signal knocked_down
 ## He's started aiming at you (the "!").
@@ -17,8 +19,11 @@ signal wounded
 enum State { IDLE, AIMING, COOLDOWN, DOWN }
 enum Shot { NONE, MISSED, HIT }
 
-const COLOR := Color("8a93a3")  # light enough to read through the fog
 const LASER := Color("ff2a2a")
+## Where his blood pools once he's down: under his chest (he falls on his face, toward you).
+const POOL_AT := Vector3(0, 0.035, -1.2)
+## His chest (the plate carrier), where shots at him go and the blood bursts from.
+const CHEST := 1.35
 
 ## Route position: distance along the route, and across it (in his segment's lanes).
 var at: float = 0.0
@@ -37,6 +42,9 @@ var committed: bool = false
 
 var _timer: float = 0.0
 var _body: Node3D
+var _rig: GuardRig
+## In range, with a clear shot down the route at you: the rifle comes up while he aims.
+var _engaged := false
 var _warn: Label3D
 var _dot: MeshInstance3D
 var _tracer: MeshInstance3D
@@ -46,10 +54,8 @@ func _init(tuning: Tuning) -> void:
 	health = tuning.trooper_health
 	_body = Node3D.new()
 	add_child(_body)
-	_part(Vector3(0.55, 1.6, 0.35), Vector3(0, 0.8, 0), COLOR)
-	_part(Vector3(0.4, 0.3, 0.4), Vector3(0, 1.75, 0), COLOR.darkened(0.4))
-	_part(Vector3(0.1, 0.1, 0.8), Vector3(0.2, 1.3, -0.35), Color("1c1c1a"))  # rifle, pointing at you
-	_part(Vector3(0.58, 0.14, 0.38), Vector3(0, 1.2, 0), LASER.darkened(0.1))  # red chest band: "enemy"
+	_rig = GuardRig.new(GuardRifle.Kind.CARBINE)
+	_body.add_child(_rig)
 	var shadow := MeshInstance3D.new()
 	shadow.mesh = PsxMaterials.shadow_mesh(Vector2(0.8, 0.6))
 	shadow.material_override = PsxMaterials.shadow(false, tuning)
@@ -118,8 +124,19 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 	visible = is_active(alert) or state == State.DOWN
 	if not is_alive():
 		return Shot.NONE
+	var shot := _behave(delta, tuning, alert, player_d, player_x, in_cover, player_world, route_point)
+	if visible:
+		# Rifle up, pointed at your lane where you are, while he's aiming and just after a shot.
+		var up := _engaged and state != State.IDLE
+		_rig.animate(delta, {"aim": true, "target": route_point.call(player_d, aimed_x, 1.1)} if up else {})
+	return shot
+
+
+func _behave(delta: float, tuning: Tuning, alert: int, player_d: float, player_x: float,
+		in_cover: bool, player_world: Vector3, route_point: Callable) -> Shot:
 	var ahead := at - player_d
-	if not is_active(alert) or ahead < 1.0 or ahead > tuning.trooper_aim_range or not sight_clear:
+	_engaged = is_active(alert) and ahead >= 1.0 and ahead <= tuning.trooper_aim_range and sight_clear
+	if not _engaged:
 		# Out of range, you've run past him (he can't shoot behind him), or a wall is in the way.
 		if state == State.AIMING:
 			_stop_aiming()
@@ -144,7 +161,8 @@ func update(delta: float, tuning: Tuning, alert: int, player_d: float, player_x:
 				var hit := shot_hits(player_x, aimed_x, in_cover, tuning.lane_width)
 				fired.emit(hit)
 				var target: Vector3 = player_world + Vector3(0, 1.1, 0) if hit else route_point.call(player_d, aimed_x, 1.0)
-				_flash_tracer(global_transform * Vector3(0.2, 1.3, -0.8), target)
+				_rig.fire()
+				_flash_tracer(_rig.muzzle_position(), target)
 				return Shot.HIT if hit else Shot.MISSED
 		State.COOLDOWN:
 			if _timer <= 0.0:
@@ -158,11 +176,10 @@ func hit() -> void:
 		return
 	health -= 1
 	wounded.emit()
-	_body.scale = Vector3(1.15, 0.9, 1.15)
-	create_tween().tween_property(_body, "scale", Vector3.ONE, 0.12)
+	_rig.flinch()
 	# A mist of blood bursting from the front of his chest, up and out to the sides (you're toward
 	# his -Z), so you see it.
-	Blood.mist(self, Vector3(0, 1.25, -0.25), Vector3(0, 1.0, -0.35), get_instance_id() + health)
+	Blood.mist(self, Vector3(0, CHEST, -0.25), Vector3(0, 1.0, -0.35), get_instance_id() + health)
 	if health <= 0:
 		knock_down()
 
@@ -173,11 +190,20 @@ func knock_down() -> void:
 	state = State.DOWN
 	_stop_aiming()
 	knocked_down.emit()
+	# He falls on his face, toward you, the rifle dropping by his side; once he's down, blood spreads
+	# out under his chest and stays.
+	_rig.fall()
 	var tween := create_tween()
-	tween.tween_property(_body, "rotation:x", -PI / 2.0, 0.3).set_ease(Tween.EASE_IN)
-	tween.parallel().tween_property(_body, "position:y", 0.2, 0.3)
-	# Once he's down (he falls forward, toward you), blood spreads out under him and stays.
-	tween.tween_callback(func() -> void: Blood.pool(self, Vector3(0, 0.035, -0.8), 1.2, 2.2, get_instance_id()))
+	tween.tween_interval(GuardRig.FALL_TIME)
+	tween.tween_callback(func() -> void: Blood.pool(self, POOL_AT, 1.2, 2.2, get_instance_id()))
+
+
+## The run's over: he stops aiming, and a shot's kick and flash settle on their own (nothing poses
+## him any more).
+func stand_down() -> void:
+	_stop_aiming()
+	if is_alive():
+		_rig.pose_to({}, GuardRig.KICK_TIME + 0.2)
 
 
 func _stop_aiming() -> void:
@@ -192,16 +218,6 @@ func _flash_tracer(from: Vector3, to: Vector3) -> void:
 	_tracer.global_transform = Transform3D(Basis.looking_at(to - from) * Basis.from_scale(Vector3(1, 1, l)), (from + to) / 2.0)
 	_tracer.visible = true
 	get_tree().create_timer(0.07).timeout.connect(func() -> void: _tracer.visible = false)
-
-
-func _part(size: Vector3, pos: Vector3, color: Color) -> void:
-	var m := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	m.mesh = mesh
-	m.material_override = PsxMaterials.flat(color)
-	m.position = pos
-	_body.add_child(m)
 
 
 ## A box placed in world space (not moved by the trooper), hidden until used.

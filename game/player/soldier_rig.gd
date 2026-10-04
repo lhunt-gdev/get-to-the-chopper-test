@@ -10,7 +10,9 @@ extends Node3D
 ## collarbones, shoulders, elbows, wrists, hips, knees, ankles) at the skeleton's rest positions; each
 ## frame those nodes' transforms are copied onto the skeleton's bones. Faces -Z (away from the camera).
 
-## The model, rigged (exported from art_source/operative/tools/stage4_rig.py).
+## The model, rigged (exported from art_source/operative/tools/stage4_rig.py): CROSS by default.
+## Any character built by the same pipeline (art_source/operative/tools/build_character.sh) has the
+## same skeleton, so every pose here works on him too: e.g. the guard (GuardRig).
 const MODEL := preload("res://game/player/cross.glb")
 ## The skeleton's bones, parents before children, and each one's parent.
 const TREE := {
@@ -114,6 +116,13 @@ var _last_state := {}
 ## the model when built (see _measure_hand), so the hands can be posed exactly.
 var _hand_run := {}
 var _hand_palm := {}
+## ...and the middle of each glove (wrist frame): where a grip sits in the fist.
+var _hand_mid := {}
+## The measured gloves, per model (model path + side -> [run, palm, mid]): measured once, not for
+## every guard on the route.
+static var _hand_cache := {}
+var _model: PackedScene
+var _lens_file := ""
 var _meshes: Array[MeshInstance3D] = []
 var _materials: Array[Material] = []
 var _skeleton: Skeleton3D
@@ -127,8 +136,11 @@ var _rest := {}
 var _order: Array[int] = []
 
 
-func _init() -> void:
-	name = "CROSS"
+## model: which character (CROSS by default); lens_file: where his goggle lenses are (none: "").
+func _init(model: PackedScene = MODEL, lens_file: String = LENS_FILE, rig_name: String = "CROSS") -> void:
+	name = rig_name
+	_model = model
+	_lens_file = lens_file
 	_build()
 	scale = Vector3.ONE * SIZE
 
@@ -158,7 +170,7 @@ func _part(joint: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInst
 
 
 func _build() -> void:
-	var model: Node3D = MODEL.instantiate()
+	var model: Node3D = _model.instantiate()
 	add_child(model)
 	_skeleton = model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	_sk_xf = _in_rig(_skeleton)
@@ -264,6 +276,12 @@ func _build() -> void:
 ## palm-to-knuckles thickness of the fist; clearly thinner than its width), signed toward his thigh.
 ## In the wrist joint's frame the hand sits as on the model (the joints don't carry its rest turn).
 func _measure_hand(side: int) -> void:
+	var key := "%s%d" % [_model.resource_path, side]
+	if _hand_cache.has(key):
+		_hand_run[side] = _hand_cache[key][0]
+		_hand_palm[side] = _hand_cache[key][1]
+		_hand_mid[side] = _hand_cache[key][2]
+		return
 	var wb := _skeleton.find_bone("Wrist" + ("R" if side > 0 else "L"))
 	var rest: Transform3D = _rest[wb]
 	var origin: Vector3 = _sk_xf * rest.origin
@@ -287,6 +305,8 @@ func _measure_hand(side: int) -> void:
 	if pts.size() < 8:  # no glove found: a hand hanging down, palm in
 		_hand_run[side] = Vector3.DOWN
 		_hand_palm[side] = Vector3(-side, 0, 0)
+		_hand_mid[side] = Vector3(0, -0.09, 0)
+		_hand_cache[key] = [_hand_run[side], _hand_palm[side], _hand_mid[side]]
 		return
 	var mid := Vector3.ZERO
 	for q in pts:
@@ -307,6 +327,8 @@ func _measure_hand(side: int) -> void:
 	var palm := (u * cos(thin) + w * sin(thin)).normalized()
 	_hand_run[side] = run
 	_hand_palm[side] = -palm if palm.x * side > 0.0 else palm
+	_hand_mid[side] = mid
+	_hand_cache[key] = [_hand_run[side], _hand_palm[side], _hand_mid[side]]
 
 
 ## The pistol in his right hand (user): a low-poly sidearm (slide, frame, raked grip, trigger
@@ -413,10 +435,12 @@ func muzzle_position() -> Vector3:
 	return _muzzle.global_position if _muzzle.is_inside_tree() else global_position + Vector3.UP * 1.3
 
 
-## The lens positions from LENS_FILE (none if it's missing).
+## The lens positions from the lens file (none if there isn't one: the guard has no goggles).
 func _lenses() -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	var f := FileAccess.open(LENS_FILE, FileAccess.READ)
+	if _lens_file == "":
+		return out
+	var f := FileAccess.open(_lens_file, FileAccess.READ)
 	if f == null:
 		return out
 	var data = JSON.parse_string(f.get_as_text())

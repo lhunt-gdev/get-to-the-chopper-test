@@ -26,3 +26,6 @@ art_source/operative/work/
 # Blender backups and Python bytecode.
 *.blend1
 __pycache__/
+# The guard's source art, the same way (rebuilt by art_source/operative/tools/build_guard.sh).
+art_source/guard/guard-meshy.glb
+art_source/guard/work/
