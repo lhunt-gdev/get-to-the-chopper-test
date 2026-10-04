@@ -71,7 +71,7 @@ const THEMES := {
 	# ROOFTOPS (user reference): the office building's roof: cracked paving out to a low parapet,
 	# short lamp posts lighting the walkway, air-con units and ducts, a green electrical cabinet,
 	# raised roof blocks with ladders, a hazard band, a roof hut.
-	"rooftops": {"wall": "brick", "ambient": Color(0.1, 0.11, 0.17), "moon": Color(0.13, 0.15, 0.25), "lamps": "roof_posts", "snow": true,
+	"rooftops": {"wall": "brick", "ambient": Color(0.19, 0.21, 0.32), "moon": Color(0.21, 0.24, 0.4), "lamps": "roof_posts", "snow": true,
 			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "roof_paving", "no_walls": true,
 			"lip": 0.8, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "low_wall": true, "wide_roof": 5.0, "office_roof": true,
 			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "condenser",
@@ -79,7 +79,7 @@ const THEMES := {
 	# WATER TOWERS (user reference): the rooftops, with big rusty water tanks on steel stands either
 	# side, one pair joined by a pipe arching over the road; paving slabs, a chain-link railing along
 	# the edges, low lamp boxes; condensers for box cover, low pipe runs to jump.
-	"towers": {"wall": "brick", "ambient": Color(0.1, 0.11, 0.17), "moon": Color(0.13, 0.15, 0.25), "lamps": "bollards", "snow": true,
+	"towers": {"wall": "brick", "ambient": Color(0.19, 0.21, 0.32), "moon": Color(0.21, 0.24, 0.4), "lamps": "bollards", "snow": true,
 			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "roof_paving", "no_walls": true,
 			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "railing": true, "city_near": false, "towers": true,
 			"skins": {"barrier_looks": ["floor_pipe"], "pipe": "double_pipe", "box_look": "condenser",
@@ -87,28 +87,28 @@ const THEMES := {
 	# GANTRY (user reference): a steel catwalk bridge high over the city: grating, hazard-striped
 	# railings, portal frames overhead with floodlights, lit windows far below; a hazard-painted
 	# I-beam to jump, steel equipment cases for box cover.
-	"gantry": {"wall": "brick", "ambient": Color(0.09, 0.1, 0.15), "moon": Color(0.1, 0.12, 0.2), "lamps": "none", "snow": true,
+	"gantry": {"wall": "brick", "ambient": Color(0.17, 0.19, 0.285), "moon": Color(0.16, 0.19, 0.32), "lamps": "none", "snow": true,
 			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("3a3e40"), "height": 1.2, "ground": "grating", "no_walls": true,
 			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "bridge": true, "city_near": false,
 			"skins": {"barrier_looks": ["ibeam"], "pipe": "double_pipe", "box_look": "gantry_case",
 					"wall_looks": ["hvac"]}},
 	# SKYLIGHTS (user reference): a wider gravel roof lined with big pitched glass skylights, the
 	# warm-lit rooms below showing through; air-con boxes and vent stacks; condensers for box cover.
-	"skylights": {"wall": "brick", "ambient": Color(0.1, 0.11, 0.17), "moon": Color(0.13, 0.15, 0.25), "lamps": "none", "snow": true,
+	"skylights": {"wall": "brick", "ambient": Color(0.19, 0.21, 0.32), "moon": Color(0.21, 0.24, 0.4), "lamps": "none", "snow": true,
 			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "gravel", "no_walls": true,
 			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "wide_roof": 7.0, "skylights": true,
 			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "condenser",
 					"wall_looks": ["hvac"]}},
 	# ANTENNA FARM (user reference): the wider roof crowded with lattice antenna towers, satellite
 	# dishes and equipment cabinets, cable trays along the walkway, a chain-link fence at the edge.
-	"antennas": {"wall": "brick", "ambient": Color(0.1, 0.11, 0.17), "moon": Color(0.13, 0.15, 0.25), "lamps": "none", "snow": true,
+	"antennas": {"wall": "brick", "ambient": Color(0.19, 0.21, 0.32), "moon": Color(0.21, 0.24, 0.4), "lamps": "none", "snow": true,
 			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "roof_paving", "no_walls": true,
 			"lip": 0.35, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "wide_roof": 7.0, "railing": true, "antennas": true,
 			"skins": {"barrier_looks": ["cable_tray"], "pipe": "double_pipe", "box_look": "equip",
 					"wall_looks": ["hvac"]}},
 	# ROOF EDGE (user reference): a gravel roof along the building's very edge: a tall parapet with
 	# red warning lights on the city side, big air-con units and a roof hut on the wider other side.
-	"edge": {"wall": "brick", "ambient": Color(0.1, 0.11, 0.17), "moon": Color(0.13, 0.15, 0.25), "lamps": "none", "snow": true,
+	"edge": {"wall": "brick", "ambient": Color(0.19, 0.21, 0.32), "moon": Color(0.21, 0.24, 0.4), "lamps": "none", "snow": true,
 			"stair_wall": "roof_hut", "stair_door": "steel_door", "color": Color("6a4436"), "height": 1.2, "ground": "gravel", "no_walls": true,
 			"lip": 0.85, "sky": true, "fog": 0.012, "fog_color": Color("121828"), "parapet": true, "wide_roof": 6.0, "wide_side": 1,
 			"skins": {"barrier_looks": ["vent"], "pipe": "double_pipe", "box_look": "equip",
@@ -201,8 +201,8 @@ const THEMES := {
 	# the company logo lit on its wall, lifts, plants, sofas and a polished checker floor; the
 	# reception desk across two lanes and planters / sofas for box cover, speed gates to jump,
 	# a hanging banner to duck under, stone columns for cover walls.
-	"lobby": {"wall": "office", "wall_tex": "lobby_wall", "ceiling_tex": "lobby_ceiling", "ceiling_y": 9.0, "ambient": Color(0.2, 0.2, 0.23),
-			"lamps": "atrium", "fog_color": Color("100f12"), "stair_wall": "lobby_wall", "stair_door": "door", "color": Color("2a2c30"),
+	"lobby": {"wall": "office", "wall_tex": "lobby_wall", "ceiling_tex": "lobby_ceiling", "ceiling_y": 9.0, "ambient": Color(0.38, 0.38, 0.43),
+			"lamps": "atrium", "fog_color": Color("18171c"), "stair_wall": "lobby_wall", "stair_door": "door", "color": Color("2a2c30"),
 			"height": 9.0, "ground": "lobby_floor", "ceiling": true, "wall_decor": "lobby", "mezzanine": true,
 			"skins": {"barrier_looks": ["speedgate"], "pipe": "banner", "box_look": "lobby", "wall": "lobby_column"}},
 	# MAIN FLOOR EXIT (user reference): the way out at night. Glass walls between big granite pillars
@@ -210,15 +210,15 @@ const THEMES := {
 	# beamed ceiling, planters and benches along the glass; speed gates to jump, planters for box
 	# cover, a hanging green EXIT sign to duck under, granite pillars for cover walls; a glass front
 	# with sliding doors at the end.
-	"exit": {"wall": "office", "wall_tex": "exit_granite", "ceiling_tex": "exit_ceiling", "ambient": Color(0.15, 0.16, 0.2),
-			"lamps": "ceiling", "lamp_color": Color(0.82, 1.0, 0.9), "fog_color": Color("0c0e16"), "stair_wall": "exit_granite",
+	"exit": {"wall": "office", "wall_tex": "exit_granite", "ceiling_tex": "exit_ceiling", "ambient": Color(0.3, 0.32, 0.4),
+			"lamps": "ceiling", "lamp_color": Color(0.82, 1.0, 0.9), "fog_color": Color("12141e"), "stair_wall": "exit_granite",
 			"stair_door": "door", "color": Color("3a3e40"), "height": CEILING_Y, "ground": "exit_floor", "ceiling": true,
 			"wall_decor": "exit", "glass_walls": true, "pillar_every": 10, "pillar_tex": "exit_granite", "glass_front": true,
 			"skins": {"barrier_looks": ["speedgate"], "pipe": "exit_sign", "box_look": "planter", "wall": "exit_granite"}},
 	"gate": {"wall": "blocks", "color": Color("8a8470"), "height": 4.0, "ground": "asphalt"},
 	# HELIPAD (user reference): a wide rooftop pad at night, the landing ring and H, red edge lights,
 	# floodlight masts, a railing round the edge, supply crates; the chopper broadside on the pad.
-	"helipad": {"wall": "blocks", "ambient": Color(0.22, 0.26, 0.38), "moon": Color(0.3, 0.36, 0.55), "lamps": "pad", "snow": true,
+	"helipad": {"wall": "blocks", "ambient": Color(0.3, 0.355, 0.52), "moon": Color(0.38, 0.46, 0.7), "lamps": "pad", "snow": true,
 			"color": Color("5c5c55"), "height": 0.6, "ground": "helipad_slab", "open_deck": true},
 }
 ## The light out in an outdoor stretch of an indoor area (the LOADING DOCK's yard): night sky.
