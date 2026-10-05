@@ -317,6 +317,8 @@ var _frontend: Frontend
 ## The main menu is up (the camera sways slowly in front of you; no input reaches the game).
 var _menu_open := false
 var _menu_t := 0.0
+## Where the menu camera's sway had got to at START (the opening pan eases out of it: IntroCamera).
+var _pan_sway := 0.0
 ## SCREEN SHAKE setting.
 var _shake_on := true
 ## The swipe distance before the SWIPE setting scales it.
@@ -377,6 +379,7 @@ func _ready() -> void:
 	_frontend.menu_requested.connect(func() -> void:
 		get_tree().paused = false
 		_skip_title = false
+		GameState.abandon_run()  # (quit mid-run: the menu starts fresh)
 		get_tree().reload_current_scene())
 	_hud.pause_pressed.connect(_pause)
 	_build_sky()
@@ -419,6 +422,9 @@ func _ready() -> void:
 		if beat == "down":  # (he hits the ground)
 			_audio.play_at("fall", _player.to_global(Vector3(0.0, 0.3, -1.0)), 1.0, 0.04)
 			_audio.play_at("player_hit", _player.to_global(Vector3(0.0, 0.3, -1.0)), -6.0, 0.04))
+	# His gun check under the menu: the slide, the magazine, the slap, at his hands.
+	_player.ready_beat.connect(func(sound: String) -> void:
+		_audio.play_at(sound, _player.to_global(Vector3(0.0, 1.4, -0.35)), -3.0 if sound == "mag_slap" else -6.0, 0.04))
 	GameState.alert_changed.connect(_on_alert_changed.unbind(1))
 
 	_promote(_make_segment(_graph.start_id, 0.0, {}, Transform3D.IDENTITY))
@@ -454,6 +460,8 @@ func _begin_intro() -> void:
 	_menu_open = false
 	_frontend.hide_all()
 	_intro_left = tuning.intro_pan_time
+	_pan_sway = IntroCamera.sway(_menu_t)
+	_player.intro_pan = 0.0  # (his ready stance settles, then sets for the run as the camera comes round)
 	_hud.show_mission_title(String(_graph.mission().get("title", "")))
 
 
@@ -537,6 +545,7 @@ func start_run() -> void:
 func _physics_process(delta: float) -> void:
 	if _intro_left > 0.0:
 		_intro_left -= delta
+		_player.intro_pan = clampf(1.0 - _intro_left / tuning.intro_pan_time, 0.0, 1.0)
 		if _intro_left <= 0.0 and not _started:
 			start_run()  # the pan has ended behind the player: go
 	if GameState.run_active and _ko >= 0:
@@ -7818,9 +7827,9 @@ func _update_camera(delta: float) -> void:
 	if _menu_open:
 		# Behind the main menu: in front of you, swaying slowly from side to side.
 		_menu_t += delta
-		var sway := 0.7 * sin(_menu_t * 0.22)
-		eye_local = Vector3(x + sin(sway) * 3.3, 1.55, -cos(sway) * 3.3)
-		look_local = Vector3(x, 1.25, 0.0)
+		var at := IntroCamera.menu(IntroCamera.sway(_menu_t), x)
+		eye_local = at[0]
+		look_local = at[1]
 		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
 		_cam_base = _camera.global_transform
 		return
@@ -7833,13 +7842,11 @@ func _update_camera(delta: float) -> void:
 		return
 	if _intro_left > 0.0 and not _started:
 		# Opening pan: from in front of the player (looking back at them) round the side to the
-		# play camera behind them, where it ends exactly.
+		# play camera behind them, where it ends exactly (easing out of the menu's camera first).
 		var e := smoothstep(0.0, 1.0, 1.0 - _intro_left / tuning.intro_pan_time)
-		var angle := PI * e
-		var r := lerpf(3.0, 5.5, e * e)
-		eye_local = Vector3(x + sin(angle) * r * 0.75, lerpf(1.5, 3.4, e), -cos(angle) * r)
-		# Keep the player framed for most of the pan; only turn to look ahead at the very end.
-		look_local = Vector3(x, 1.3, 0.0).lerp(look_local, smoothstep(0.75, 1.0, e))
+		var at := IntroCamera.pan(e, x, _pan_sway, tuning.intro_from_menu, look_local)
+		eye_local = at[0]
+		look_local = at[1]
 		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
 		_cam_base = _camera.global_transform
 		return

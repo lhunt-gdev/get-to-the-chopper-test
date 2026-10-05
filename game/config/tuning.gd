@@ -74,6 +74,10 @@ enum TargetingMode {
 @export var start_offset: float = 6.0
 ## How long the opening camera pan takes, front of the player round to behind.
 @export var intro_pan_time: float = 3.5
+## How much of the opening pan (of its eased progress) eases out of where the menu camera's sway
+## had got to, so START doesn't cut to the front of him; after that it's exactly the pan the user
+## approved. 0: the cut.
+@export var intro_from_menu: float = 0.45
 
 @export_group("Capture")
 ## Missing the exit at a no-way-on end stops the player this far from the end.

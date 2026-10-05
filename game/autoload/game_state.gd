@@ -47,6 +47,13 @@ func set_alert(level: int) -> void:
 	alert_changed.emit(level)
 
 
+## Quit mid-run (QUIT TO MENU): dropped without an ending (nothing to show or save), so the menu
+## that reloads starts fresh, not with the old run still going under it.
+func abandon_run() -> void:
+	run_active = false
+	alert_level = MIN_ALERT
+
+
 ## The run's over, `into` metres into `at_node` (for the route map).
 func end_run(reason: StringName, at_node: StringName, into: float = 0.0) -> void:
 	if not run_active:

@@ -38,7 +38,7 @@ static func all_names() -> Array[String]:
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
 			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite", "thunk", "sniper_aim", "sniper_lock", "sniper_shot",
-			"minigun_spin", "minigun_fire", "gun_drop", "slowmo"]
+			"minigun_spin", "minigun_fire", "gun_drop", "slowmo", "slide_back", "slide_home", "mag_out", "mag_slap"]
 	for i in 3:
 		names.append("grunt_%d" % i)
 	for surface in SURFACES:
@@ -322,6 +322,44 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.normalize(0.75)
 			syn.loopify(0.02)
 			return syn.to_stream(true)
+		"slide_back":
+			# CROSS's press check under the menu: the slide eased back a little (a crisp click and a
+			# short metal scrape).
+			syn = Synth.create(0.22, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.03, 0.8, 9000.0, 2500.0, 0.0003, 30.0)
+			syn.tone(0.0, 0.08, 3400.0, 3300.0, 0.25, Synth.Wave.SQUARE, 0.0003, 25.0)
+			syn.noise(0.02, 0.12, 0.25, 5000.0, 1500.0, 0.01, 6.0)
+			syn.lowpass(8000.0)
+			syn.crush(9, 1)
+			syn.normalize(0.5)
+		"slide_home":
+			# ...and let home: a softer, lower click as it seats.
+			syn = Synth.create(0.18, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.04, 0.7, 6000.0, 1200.0, 0.0003, 25.0)
+			syn.tone(0.0, 0.06, 2200.0, 2100.0, 0.25, Synth.Wave.SQUARE, 0.0003, 30.0)
+			syn.tone(0.0, 0.05, 300.0, 200.0, 0.3, Synth.Wave.SINE, 0.0005, 30.0)
+			syn.lowpass(7000.0)
+			syn.crush(9, 1)
+			syn.normalize(0.45)
+		"mag_out":
+			# The magazine released into his palm: the catch's click, then it sliding out.
+			syn = Synth.create(0.25, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.02, 0.8, 8000.0, 2500.0, 0.0003, 35.0)
+			syn.tone(0.0, 0.05, 2800.0, 2700.0, 0.2, Synth.Wave.SQUARE, 0.0003, 30.0)
+			syn.noise(0.03, 0.1, 0.3, 4000.0, 800.0, 0.005, 10.0)
+			syn.lowpass(7000.0)
+			syn.crush(9, 1)
+			syn.normalize(0.45)
+		"mag_slap":
+			# Slapped home: a hard, flat clack with a little body (his palm on the base plate).
+			syn = Synth.create(0.25, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.05, 1.0, 5000.0, 600.0, 0.0003, 22.0)
+			syn.tone(0.0, 0.1, 180.0, 90.0, 0.6, Synth.Wave.SINE, 0.0005, 14.0)
+			syn.tone(0.0, 0.05, 2600.0, 2500.0, 0.25, Synth.Wave.SQUARE, 0.0003, 30.0)
+			syn.echo(0.05, 0.15, 0.15)
+			syn.lowpass(6500.0)
+			syn.crush(8, 1)
+			syn.normalize(0.6)
 		"thunk":
 			# A row of the end screen's tally landing (after Doom's): a short, heavy knock.
 			syn = Synth.create(0.18, SFX_RATE, seed_value)

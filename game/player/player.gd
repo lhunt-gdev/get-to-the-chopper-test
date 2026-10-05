@@ -35,10 +35,17 @@ var _rig: SoldierRig
 var _surrendered := false
 ## FIRE held: his right arm comes up and aims ahead (user). Set by the level.
 var aiming := false
+## The opening pan's progress (0..1; -1 before START), set by the level: his ready stance settles,
+## nods and sets as it goes round.
+var intro_pan := -1.0
+## The run has begun (seen once): before it, his ready stance under the menu; after it ends, standing.
+var _ran := false
 ## His death (user: "a momentum ragdoll", slowed a little): it has played out (the end screen can
 ## open), and the moments the level plays a sound for ("down": he hits the ground).
 signal died
 signal death_beat(beat: String)
+## A sound in his ready stance's gun check (user: "add them"; its name: SoldierRig.IDLE_SOUNDS).
+signal ready_beat(sound: String)
 ## Killed: his death's clock (s; slowed at first), how it started, whether he's down and whether
 ## it's over, and his pool of blood.
 var dying := false
@@ -55,6 +62,8 @@ func _ready() -> void:
 	hits_left = tuning.player_hits
 	_rig = SoldierRig.new()
 	add_child(_rig)
+	_rig.pose_set()  # (the set he springs into the run from: Retry and the bots, with no menu, too)
+	_rig.idle_beat.connect(func(sound: String) -> void: ready_beat.emit(sound))
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Shadow"
 	_shadow.mesh = PsxMaterials.shadow_mesh(Vector2(tuning.player_shadow_size, tuning.player_shadow_size * 0.8))
@@ -87,14 +96,18 @@ func _physics_process(delta: float) -> void:
 	_update_visuals()
 
 
-## The model's pose every frame (also before the run starts and after it ends, standing; dying,
-## his death).
+## The model's pose every frame (before the run starts, his ready stance; after it ends, standing;
+## dying, his death).
 func _process(delta: float) -> void:
 	if dying:
 		_die_step(delta)
 		return
+	if GameState.run_active:
+		_ran = true
 	var running := GameState.run_active and not halted and not in_cover and not standoff
 	_rig.animate(delta, {
+		"ready": not _ran,
+		"pan": intro_pan,
 		"run": _speed_mul if running else 0.0,
 		"airborne": is_airborne(),
 		"rising": _y_velocity > 0.0,

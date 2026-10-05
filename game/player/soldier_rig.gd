@@ -343,6 +343,7 @@ func _build_pistol() -> void:
 	pistol.position = PISTOL_AT
 	pistol.rotation.x = -PI / 2.0
 	pistol.scale = Vector3.ONE * GUN_SCALE
+	_pistol = pistol
 	var gun := Color("1c1c1e")
 	_slide = Node3D.new()
 	_slide.name = "Slide"
@@ -358,6 +359,13 @@ func _build_pistol() -> void:
 	pistol.add_child(_muzzle)
 	_muzzle.position = Vector3(0, 0.03, -0.16)
 	_build_flash()
+	if IDLE_MAG_DROP:
+		# The magazine, hidden in the grip until he drops it into his palm (the pistol looks the same).
+		_mag = Node3D.new()
+		_mag.name = "Magazine"
+		pistol.add_child(_mag)
+		_part(_mag, Vector3(0.024, 0.104, 0.036), Vector3(0, -0.002, 0), Color("2b2c30"))
+		_mag_at(0.0)
 
 
 ## The muzzle flash (user: "a cool looking flash, not just a box"), in the muzzle's space (the barrel
@@ -502,7 +510,9 @@ func _pose_stand() -> void:
 
 ## Every frame, from the player's state: `run` 0..1 (how fast, of full speed), `airborne` (and
 ## `rising`), `sliding`, `cover` ("", "crouch", "stand"), `stun` 0..1, `lean` (lane change, -1..1),
-## `surrender`, `aim` (FIRE held: the gun up).
+## `surrender`, `aim` (FIRE held: the gun up); before the run, `ready` (his ready stance under the
+## menu) and `pan` (the opening pan's progress once START is pressed, else -1). Out of the stance
+## the run grows from it: the stride at once from his set, the rest of him following.
 ## Joint signs (the model faces -Z): spine, neck, head: -x leans forward. Shoulders, leg hips:
 ## +x swings the limb forward. Elbows: +x bends the forearm up and forward. Knees: -x folds the
 ## shin back. Shoulder z: side * angle raises the arm out to its side.
@@ -510,6 +520,7 @@ func animate(delta: float, s: Dictionary) -> void:
 	_last_state = s
 	_flash(delta)
 	if s.get("surrender", false):
+		_idle_on = false
 		_pose_surrender()
 		# A shot just before the catch doesn't stay frozen on: the gun settles, the flash goes.
 		_aim = 0.0
@@ -520,7 +531,22 @@ func animate(delta: float, s: Dictionary) -> void:
 		_shrug()
 		_apply()
 		return
+	if s.get("ready", false):
+		_animate_ready(delta, float(s.get("pan", -1.0)))
+		return
 	var target_run: float = s.get("run", 0.0)
+	if _idle_on:
+		# Out of his ready stance (the run's begun): the stride starts at once, from his set, rear
+		# leg first (no glide while he's already moving), and the rest of him follows (below).
+		_idle_on = false
+		_launch_from = _pose_snapshot()
+		_launch_slide = _slide.position.z
+		_launch_mag = _mag_out
+		_launch_t = 0.0
+		_run = target_run
+		_phase = IDLE_LAUNCH_PHASE
+	if _launch_t >= 0.0:
+		_launch_t += delta
 	_run = move_toward(_run, target_run, delta * 4.0)
 	_phase = fmod(_phase + delta * TAU * 1.55 * maxf(target_run, 0.2), TAU)
 	_reset()
@@ -543,9 +569,596 @@ func animate(delta: float, s: Dictionary) -> void:
 		for side in [-1, 1]:
 			shoulders[side].rotation.z = side * 0.9 * stun
 	rotation.z = -float(s.get("lean", 0.0)) * 0.18  # into a lane change
+	if _launch_t >= 0.0:
+		# Out of the stance, not in one jump: legs and hips first, then the rest (before the aim, so
+		# FIRE still brings the gun up level and ahead on top).
+		var up := smoothstep(0.0, IDLE_LAUNCH_UPPER, _launch_t)
+		_pose_blend(_launch_from, smoothstep(0.0, IDLE_LAUNCH_LEGS, _launch_t), up)
 	_aim_and_recoil(delta, s.get("aim", false))
+	if _launch_t >= 0.0:
+		_slide.position.z = maxf(_slide.position.z, _launch_slide * (1.0 - smoothstep(0.0, IDLE_LAUNCH_SLIDE, _launch_t)))
+		_mag_at(_launch_mag * (1.0 - smoothstep(0.0, IDLE_LAUNCH_MAG, _launch_t)))
+		if _launch_t >= maxf(IDLE_LAUNCH_UPPER, IDLE_LAUNCH_MAG):
+			_launch_t = -1.0
 	_shrug()
 	_apply()
+
+# --- Ready under the menu ---------------------------------------------------------------------
+# (user: "an active stance, alarmed mode, he checks his gun and he's looking around ... his start
+# stance can't be standing still it will need to match the stance he has in this animation"). See
+# the decision log, "CROSS ready under the menu". CROSS only: GuardRig has its own animate().
+
+## His ready stance (rig units, radians; the sign rules are at animate): crouched, the hips down,
+## back a little, tipped forward and turned toward his rear foot, the spine and chest turning back
+## so his shoulders are square to the door; his gaze a touch down (from under his brow).
+const IDLE_DROP := 0.075
+const IDLE_HIPS_BACK := 0.02
+const IDLE_HIPS_TURN := -0.15
+const IDLE_HIPS_TIP := -0.08
+const IDLE_SPINE := -0.10
+const IDLE_CHEST := -0.04
+const IDLE_NECK := -0.08
+const IDLE_GAZE := -0.08
+## His feet (ankles, x and z) planted wide and staggered, the left ahead, the right turned out
+## (toe: + to his left); the ball of the foot (in the flat foot's frame) his rear heel lifts about.
+const IDLE_FEET := {-1: Vector2(-0.12, -0.15), 1: Vector2(0.15, 0.12)}
+const IDLE_TOES := {-1: 0.12, 1: -0.45}
+const IDLE_BALL := Vector3(0.0, -0.06, -0.17)
+## The pistol (from his chest, in its facing): a compressed low ready, both hands on it in front of
+## his belt, the muzzle IDLE_GUN_DIP down (41°: at the floor ahead, never at the camera in front of
+## him) and turned IDLE_GUN_YAW (34°) across to his left, canted IDLE_GUN_CANT (+ top to his left), so
+## both forearms run into his fists with each wrist only cocked a little toward the little finger, as
+## a real pistol grip has it (user: "Check his hand position/rotation it looks a little off": both
+## wrists were bent ~90° sideways). Up under his chin for the check (IDLE_CHECK: a little less
+## dipped and turned; its roll the R channel scaled, see _idle_roll); lifted a little at the alarm
+## (IDLE_ALARM, dipped IDLE_ALARM_DIP less: never pushed, which snapped his shoulder); drawn in low
+## for the set.
+const IDLE_GUN := Vector3(-0.061, -0.32, -0.49)
+const IDLE_GUN_DIP := 0.717
+const IDLE_GUN_YAW := 0.598
+const IDLE_GUN_CANT := 0.02
+const IDLE_CHECK := Vector3(-0.013, -0.139, -0.487)
+const IDLE_CHECK_DIP := 0.648
+const IDLE_CHECK_YAW := 0.185
+const IDLE_ALARM := Vector3(0.0, 0.03, 0.0)
+const IDLE_ALARM_DIP := 0.063
+const IDLE_SET_GUN := Vector3(-0.07, -0.439, -0.425)
+const IDLE_SET_DIP := 0.672
+const IDLE_SET_YAW := 0.65
+## The check's roll: the R channel times IDLE_ROLL_PRESS (the press check, top to his left: the
+## ejection port up) or IDLE_ROLL_MAG (rolled over onto its side, the magazine well toward his left
+## hand), plus IDLE_CHECK_ROLL over the whole check; and for the magazine check (from as the gun
+## starts to roll over) moved IDLE_MAG_AT, dipped IDLE_MAG_DIP more and turned IDLE_MAG_YAW more.
+const IDLE_ROLL_PRESS := 1.311
+const IDLE_ROLL_MAG := 1.699
+const IDLE_CHECK_ROLL := -0.066
+const IDLE_MAG_AT := Vector3(0.051, -0.052, 0.022)
+const IDLE_MAG_DIP := -0.044
+const IDLE_MAG_YAW := 0.387
+## How each hand sits on its forearm (rad; x: the forearm toward the thumb's side of the hand's line,
+## the hand cocked toward the little finger; y: toward the palm's side, the hand bent back): the gun
+## hand's (taken unrolled: rolling the gun turns the forearm, it doesn't swing the elbow round) and
+## the left's, at the ready and in the check. Each elbow goes where that puts it, as near as it can
+## (see _reach_clear).
+const IDLE_WRIST := Vector2(0.12, 0.32)
+const IDLE_WRIST_CHECK := Vector2(0.315, -0.175)
+const IDLE_WRIST_L := Vector2(0.138, 0.059)
+const IDLE_WRIST_L_CHECK := Vector2(0.286, 0.194)
+## Where the elbows may go: an arm raised no more than IDLE_RAISE_MOST (rad from hanging, his chest's
+## axes: under SHRUG_FROM, so his collarbones never lift), and the elbow and forearm kept out of his
+## vest (his chest's axes: its half-width down to y -0.2 and from y -0.35 down, its front's depth from
+## the chest's middle; its top and bottom), the elbow and forearm IDLE_LIMB thick (rig units: the
+## arm's own thickness less ~3 cm of give).
+const IDLE_RAISE_MOST := 0.885
+const IDLE_VEST := Vector3(0.17, 0.23, 0.245)
+const IDLE_VEST_Y := Vector2(0.05, -0.55)
+const IDLE_LIMB := Vector2(0.015, 0.01)
+## The left hand over the slide for the press check (pistol space): its middle at the slide's rear,
+## its run (across the slide toward the ejection port) and palm (down onto it).
+const IDLE_TOP_AT := Vector3(-0.01, 0.075, 0.04)
+const IDLE_TOP_RUN := Vector3(1.0, -0.114, 0.09)
+const IDLE_TOP_PALM := Vector3(0.128, -1.0, 0.113)
+## The support hand at the ready (pistol space): its fist's middle low on the grip's exposed left
+## panel over the gun hand's fingers, thumbs forward; its run IDLE_SUPPORT_CANT below the bore (-: a
+## little above it, along the frame) and its palm tipped IDLE_SUPPORT_TIP down onto the panel (the
+## support wrist then canted down, IDLE_WRIST_L).
+const IDLE_SUPPORT_AT := Vector3(-0.051, -0.037, 0.015)
+const IDLE_SUPPORT_CANT := -0.2
+const IDLE_SUPPORT_TIP := -0.538
+## ...and in the check (pistol axes, from the gun hand's middle): its run canted IDLE_CANT down, its
+## palm turned IDLE_PALM back and rolled IDLE_PALM_ROLL down from facing across, following
+## IDLE_SUPPORT_FOLLOW of the gun's roll. The most its wrist bends off its forearm (rad): past that
+## the hand turns toward the forearm.
+const IDLE_SUPPORT := Vector3(-0.044, 0.002, -0.008)
+const IDLE_CANT := 0.05
+const IDLE_PALM := 0.201
+const IDLE_PALM_ROLL := 0.113
+const IDLE_SUPPORT_FOLLOW := 0.017
+const IDLE_WRIST_MOST := 0.5
+## The loop (s), and its breaths and sways (whole numbers of them, so it wraps cleanly).
+const IDLE_LOOP := 16.0
+const IDLE_BREATHS := 6.0
+const IDLE_SWAYS := 2.0
+## START: he settles out of whatever he was doing (s; a pulled slide let go faster), then, as the
+## opening pan goes round (its progress 0..1), a nod and the sprinter's set: lower, forward, his
+## weight on the front foot, the rear heel up.
+const IDLE_SETTLE := 0.5
+const IDLE_SLIDE_GO := 0.06
+const IDLE_NOD_FROM := 0.36
+const IDLE_NOD_TO := 0.50
+const IDLE_NOD := 0.2
+const IDLE_SET_FROM := 0.46
+const IDLE_SET_TO := 0.74
+const IDLE_SET_DROP := 0.035
+const IDLE_SET_AHEAD := -0.07
+const IDLE_SET_LEAN := -0.07
+const IDLE_SET_HEEL := 0.3
+## Into the run: the stride's phase he starts at (the rear, right, leg drives through first), and
+## how long his legs and the rest of him take to leave the stance (s); the slide and the magazine
+## home.
+const IDLE_LAUNCH_PHASE := 1.7
+const IDLE_LAUNCH_LEGS := 0.15
+const IDLE_LAUNCH_UPPER := 0.30
+const IDLE_LAUNCH_SLIDE := 0.08
+const IDLE_LAUNCH_MAG := 0.15
+## The magazine dropped into his palm in the check and pushed home (user, 2026-10-05: "The optional
+## extras sound great, add them"): a magazine part hidden in the grip, so the pistol looks the same
+## otherwise.
+const IDLE_MAG_DROP := true
+const MAG_RAKE := -0.25
+
+## The loop, a channel at a time: [t (s), value, and how the segment arriving at it eases (0 or
+## none: smoothstep; 1 snap: fast out of a hold; 2 slap: fast into the key)]. G gaze yaw (+ his
+## left), P gaze pitch (+ up), B torso yaw (following the eyes), Tz head tilt (+ right ear up: the
+## listen), D extra sink (the startle), A the gun pushed toward the threat, H the gun up for the
+## check, R its roll (+ top to his left, the ejection port up), Y its yaw, X its extra dip, O pushed
+## out, L the left hand (0 support, 1 over the slide, 2 support, 3 cupped under the grip, 4 support
+## again), S the slide pulled back, M the magazine out, Kd the hand dropped for the slap, J the slap's
+## jolt, Ab the breath's size, W his weight onto the front foot.
+## 1-5 s the gun check (a press check, then the magazine slapped home); 5.4-9 s the room (the
+## window, a sweep to the high corner); 10 s the alarm over his right shoulder, the listen; 13-16 s
+## his weight forward, eyes to the floor ahead.
+const IDLE_KEYS := {
+	"G": [[0.0, 0.0], [1.00, 0.0], [1.50, 0.12], [2.85, 0.12], [3.30, 0.22], [4.50, 0.22], [4.66, 0.0, 1],
+		[5.40, 0.0], [5.65, 1.10, 1], [6.15, 1.10], [6.40, 0.95], [6.70, 0.95], [7.80, -0.80], [8.70, -0.80],
+		[9.15, 0.0], [10.00, 0.0], [10.20, -1.52, 1], [10.42, -1.45], [11.50, -1.45], [12.00, -0.35],
+		[12.50, -0.35], [12.85, 0.0], [13.60, 0.0], [14.20, 0.30], [14.80, 0.30], [15.40, 0.0], [16.0, 0.0]],
+	"P": [[0.0, -0.08], [1.00, -0.08], [1.50, -0.62], [2.05, -0.62], [2.25, -0.70], [2.65, -0.70],
+		[2.85, -0.62], [3.40, -0.62], [3.56, -0.75], [4.10, -0.75], [4.50, -0.62], [4.66, 0.0, 1], [4.90, -0.08],
+		[5.40, -0.08], [5.65, -0.05, 1], [6.15, -0.05], [6.40, -0.18], [6.70, -0.18], [7.80, 0.22], [8.70, 0.22],
+		[9.15, -0.08], [10.00, -0.08], [10.20, -0.02, 1], [11.50, -0.02], [12.00, -0.10], [12.85, -0.08],
+		[13.60, -0.08], [14.20, -0.22], [14.80, -0.22], [15.40, -0.08], [16.0, -0.08]],
+	"B": [[0.0, 0.0], [1.00, 0.0], [1.50, 0.08], [4.55, 0.08], [5.00, 0.0], [5.47, 0.0], [5.80, 0.42],
+		[6.20, 0.42], [6.45, 0.36], [6.78, 0.36], [7.88, -0.30], [8.75, -0.30], [9.20, 0.0], [10.04, 0.0],
+		[10.30, -0.55, 1], [11.50, -0.55], [12.05, -0.12], [12.50, -0.12], [12.90, 0.0], [13.70, 0.0],
+		[14.30, 0.10], [14.80, 0.10], [15.45, 0.0], [16.0, 0.0]],
+	"Tz": [[0.0, 0.0], [10.45, 0.0], [10.75, 0.07], [11.40, 0.07], [11.70, 0.0], [16.0, 0.0]],
+	"D": [[0.0, 0.0], [10.00, 0.0], [10.06, 0.012, 1], [10.25, 0.035], [11.50, 0.035], [12.10, 0.0], [16.0, 0.0]],
+	"A": [[0.0, 0.0], [10.02, 0.0], [10.20, 1.0, 1], [11.50, 1.0], [12.10, 0.0], [16.0, 0.0]],
+	"H": [[0.0, 0.0], [1.00, 0.0], [1.50, 1.0], [4.50, 1.0], [5.00, 0.0], [16.0, 0.0]],
+	"R": [[0.0, 0.0], [1.00, 0.0], [1.50, 0.6], [2.85, 0.6], [3.30, -0.95], [4.50, -0.95], [5.00, 0.0], [16.0, 0.0]],
+	"Y": [[0.0, 0.0], [1.00, 0.0], [1.50, 0.25], [2.85, 0.25], [3.30, 0.10], [4.50, 0.10], [5.00, 0.0], [16.0, 0.0]],
+	"X": [[0.0, 0.0], [2.85, 0.0], [3.30, 0.05], [4.50, 0.05], [5.00, 0.0], [16.0, 0.0]],
+	"O": [[0.0, 0.0], [2.85, 0.0], [3.25, 0.06], [4.50, 0.06], [5.00, 0.0], [16.0, 0.0]],
+	"L": [[0.0, 0.0], [1.50, 0.0], [1.85, 1.0], [2.80, 1.0], [3.15, 2.0], [3.17, 2.0], [3.40, 3.0],
+		[4.50, 3.0], [4.90, 4.0], [16.0, 4.0]],
+	"S": [[0.0, 0.0], [1.85, 0.0], [2.05, 0.022, 1], [2.65, 0.022], [2.80, 0.0], [16.0, 0.0]],
+	"M": [[0.0, 0.0], [3.40, 0.0], [3.56, 0.045, 1], [4.10, 0.045], [4.28, 0.010], [4.45, 0.010],
+		[4.49, 0.0, 2], [16.0, 0.0]],
+	"Kd": [[0.0, 0.0], [4.28, 0.0], [4.40, 0.06, 1], [4.49, 0.0, 2], [16.0, 0.0]],
+	"J": [[0.0, 0.0], [4.47, 0.0], [4.50, 0.012, 1], [4.67, 0.0], [16.0, 0.0]],
+	"Ab": [[0.0, 1.0], [10.02, 1.0], [10.25, 0.25], [11.50, 0.25], [11.90, 1.6], [13.10, 1.6], [13.90, 1.0], [16.0, 1.0]],
+	"W": [[0.0, 0.0], [13.40, 0.0], [14.20, 1.0], [15.00, 1.0], [15.70, 0.0], [16.0, 0.0]],
+}
+## The gun check's sounds (user: "add them"), at their moments in the loop (s): the slide eased back
+## and let home, the magazine out into his palm, the slap.
+const IDLE_SOUNDS := [[1.85, "slide_back"], [2.75, "slide_home"], [3.40, "mag_out"], [4.46, "mag_slap"]]
+## A moment of his gun check with a sound (its name: see IDLE_SOUNDS), as the loop passes it.
+signal idle_beat(sound: String)
+
+## Where every channel settles once START is pressed: eyes on the door, the gun at the ready,
+## breathing a little harder (psyched up).
+const IDLE_GO := {"G": 0.0, "P": IDLE_GAZE, "B": 0.0, "Tz": 0.0, "D": 0.0, "A": 0.0, "H": 0.0, "R": 0.0,
+	"Y": 0.0, "X": 0.0, "O": 0.0, "M": 0.0, "Kd": 0.0, "J": 0.0, "Ab": 1.3, "W": 0.0}
+
+## The stance's clocks (s): the loop's, the breath's (it keeps going after START) and since START
+## (-1: not pressed); the opening pan's progress (-1: not started); whether he's in the stance (the
+## run then grows out of it), and this frame's channels.
+var _idle_t := 0.0
+var _idle_b := 0.0
+var _idle_go := -1.0
+var _idle_pan := -1.0
+var _idle_on := false
+var _idle_c := {}
+## Into the run: how long since he left the stance (s; -1: not leaving it), the stance he left, and
+## the slide and magazine as they were.
+var _launch_t := -1.0
+var _launch_from: Array = []
+var _launch_slide := 0.0
+var _launch_mag := 0.0
+## His pistol, and its magazine (only with IDLE_MAG_DROP) and how far it's out.
+var _pistol: Node3D
+var _mag: Node3D
+var _mag_out := 0.0
+
+
+## In his ready stance this frame: the loop on (`pan` < 0), or START pressed and the opening pan
+## `pan` of the way round (settled, then the nod and the set).
+func _animate_ready(delta: float, pan: float) -> void:
+	_run = 0.0
+	_phase = IDLE_LAUNCH_PHASE
+	_launch_t = -1.0
+	_idle_pan = pan
+	if pan < 0.0:
+		_idle_go = -1.0
+		var was := _idle_t
+		_idle_t = fmod(_idle_t + delta, IDLE_LOOP)
+		if delta > 0.0:
+			_idle_sounds(was, _idle_t)
+	else:
+		_idle_go = 0.0 if _idle_go < 0.0 else _idle_go + delta  # (the loop's clock stops: no new beat starts)
+	_idle_b = fmod(_idle_b + delta, IDLE_LOOP)
+	_pose_ready_all(delta)
+
+
+func _pose_ready_all(delta: float) -> void:
+	var c := _idle_values()
+	_idle_c = c
+	_reset()
+	_pose_ready_body(c)
+	_aim_and_recoil(delta, false)  # (the kick and the flash settled, as ever)
+	_idle_arms(c)
+	_apply()  # (no _shrug: both arms are posed by _reach, which lifts its own collarbone)
+	_idle_on = true
+
+
+## The check's sounds the loop passed this frame, from `a` to `b` s (across the wrap too).
+func _idle_sounds(a: float, b: float) -> void:
+	for k in IDLE_SOUNDS:
+		var t: float = k[0]
+		if (k[1] == "mag_out" and not IDLE_MAG_DROP) or not (a < t and t <= b or b < a and (t > a or t <= b)):
+			continue
+		idle_beat.emit(k[1])
+
+
+## The set the opening pan ends on, as the pose he's built in: Retry and the bots (no menu, no pan)
+## spring into the run from it, as the pan's end does.
+func pose_set() -> void:
+	_idle_t = 0.0
+	_idle_b = 0.0
+	_idle_go = IDLE_SETTLE
+	_idle_pan = 1.0
+	_run = 0.0
+	_phase = IDLE_LAUNCH_PHASE
+	_pose_ready_all(0.0)
+
+
+static func _idle_ease(u: float, kind: int) -> float:
+	match kind:
+		1:
+			return 1.0 - (1.0 - u) * (1.0 - u)
+		2:
+			return u * u
+		_:
+			return u * u * (3.0 - 2.0 * u)
+
+
+## A channel's value at `t` (its keys: see IDLE_KEYS).
+static func _idle_curve(keys: Array, t: float) -> float:
+	if t <= keys[0][0]:
+		return keys[0][1]
+	for i in range(1, keys.size()):
+		var b: Array = keys[i]
+		if t < b[0]:
+			var a: Array = keys[i - 1]
+			var u := (t - float(a[0])) / (float(b[0]) - float(a[0]))
+			return lerpf(a[1], b[1], _idle_ease(u, int(b[2]) if b.size() > 2 else 0))
+	return keys[keys.size() - 1][1]
+
+
+## Every channel now; after START, eased to where it settles (a pulled slide let go first); "w" how
+## far settled, "set" how far into the set, "nod" the nod.
+func _idle_values() -> Dictionary:
+	var c := {}
+	for k in IDLE_KEYS:
+		c[k] = _idle_curve(IDLE_KEYS[k], _idle_t)
+	var w := 0.0
+	if _idle_go >= 0.0:
+		w = smoothstep(0.0, IDLE_SETTLE, _idle_go)
+		c["S"] = float(c["S"]) * (1.0 - smoothstep(0.0, IDLE_SLIDE_GO, _idle_go))
+		for k in IDLE_GO:
+			c[k] = lerpf(c[k], IDLE_GO[k], w)
+	c["w"] = w
+	if not IDLE_MAG_DROP:
+		c["M"] = 0.0
+	var pan := _idle_pan
+	c["set"] = smoothstep(IDLE_SET_FROM, IDLE_SET_TO, pan) if pan >= 0.0 else 0.0
+	c["nod"] = sin(PI * clampf((pan - IDLE_NOD_FROM) / (IDLE_NOD_TO - IDLE_NOD_FROM), 0.0, 1.0)) if pan >= 0.0 else 0.0
+	return c
+
+
+## His body in the stance: breathing and swaying a little, a turn spread down hips, spine and chest
+## (the eyes lead: head and neck take the rest of the gaze), his gaze held through the lean (as the
+## boss's brace does), his feet planted.
+func _pose_ready_body(c: Dictionary) -> void:
+	var st: float = c["set"]
+	var b := float(c["Ab"]) * sin(TAU * IDLE_BREATHS * _idle_b / IDLE_LOOP)
+	var sway := 0.012 * sin(TAU * IDLE_SWAYS * _idle_b / IDLE_LOOP)
+	var turn: float = c["B"]
+	var gaze: float = c["G"]
+	var pitch: float = float(c["P"]) - IDLE_NOD * float(c["nod"])
+	var sink: float = c["D"]
+	var weight: float = c["W"]
+	hips.position = Vector3(lerpf(sway, -0.02, st) - 0.015 * weight,
+			_hip_y - IDLE_DROP - sink - IDLE_SET_DROP * st + 0.004 * b,
+			IDLE_HIPS_BACK - 0.03 * weight + IDLE_SET_AHEAD * st)
+	hips.rotation = Vector3(IDLE_HIPS_TIP - 0.02 * sink / 0.035, IDLE_HIPS_TURN + 0.2 * turn, 0.0)
+	spine.rotation = Vector3(IDLE_SPINE + IDLE_SET_LEAN * st, -0.55 * IDLE_HIPS_TURN + 0.3 * turn, 0.0)
+	chest.rotation = Vector3(IDLE_CHEST + 0.018 * b - 0.02 * st, -0.45 * IDLE_HIPS_TURN + 0.5 * turn, 0.0)
+	neck.rotation = Vector3(IDLE_NECK + 0.3 * minf(0.0, pitch - IDLE_GAZE), 0.3 * (gaze - turn), 0.0)
+	head.rotation = Vector3(pitch - (hips.rotation.x + spine.rotation.x + chest.rotation.x + neck.rotation.x),
+			0.7 * (gaze - turn), float(c["Tz"]))
+	for side in [-1, 1]:
+		var f: Vector2 = IDLE_FEET[side]
+		var toe: float = IDLE_TOES[side]
+		_plant_ball(side, Vector3(f.x, (_ankle_rest[side] as Vector3).y, f.y), toe, IDLE_SET_HEEL * st if side > 0 else 0.0)
+
+
+## A foot planted (the ankle where it stands flat, turned out by `toe`), its heel lifted `heel` rad
+## about the ball of the foot, which stays where it stood.
+func _plant_ball(side: int, ankle_flat: Vector3, toe: float, heel: float) -> void:
+	var turn := Basis(Vector3.UP, toe)
+	if heel == 0.0:
+		_plant(side, ankle_flat, turn * Vector3.FORWARD, toe)
+		return
+	var lifted := turn * Basis(Vector3.RIGHT, -heel)
+	_plant(side, ankle_flat + turn * IDLE_BALL - lifted * IDLE_BALL, turn * Vector3.FORWARD, toe)
+	var an: Node3D = ankles[side]
+	var flat := an.get_node(String(an.name) + "Flat") as Node3D
+	an.basis = _in_rig(knees[side]).basis.inverse() * lifted * flat.basis.inverse()
+
+
+## Where his pistol goes in the stance (rig space): with his chest's facing (its turn only), its
+## barrel's dip set in the world, so it stays pointed at the floor whatever his lean or breath.
+func idle_gun(c: Dictionary) -> Transform3D:
+	var ch := _in_rig(chest)
+	var back := ch.basis.z
+	var facing := Basis(Vector3.UP, atan2(back.x, back.z))
+	var h: float = c["H"]
+	var a: float = c["A"]
+	var st: float = c["set"]
+	# into the magazine check: from as the press check's roll (R 0.6) starts over to the other side (-0.95)
+	var mg := clampf((0.6 - float(c["R"])) / 1.55, 0.0, 1.0) * h
+	var off := IDLE_GUN.lerp(IDLE_CHECK, h) + IDLE_MAG_AT * mg + IDLE_ALARM * a + Vector3(0.6, 0.0, -1.0) * float(c["O"])
+	off = off.lerp(IDLE_SET_GUN, st)
+	var dip := lerpf(IDLE_GUN_DIP, IDLE_CHECK_DIP, h) + IDLE_MAG_DIP * mg + float(c["X"]) - IDLE_ALARM_DIP * a
+	dip = lerpf(dip, IDLE_SET_DIP, st)
+	var yaw := lerpf(IDLE_GUN_YAW, IDLE_CHECK_YAW, h) + IDLE_MAG_YAW * mg + float(c["Y"])
+	yaw = lerpf(yaw, IDLE_SET_YAW, st)
+	var at := ch.origin + facing * off + Vector3.UP * float(c["J"])
+	return Transform3D(facing * Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -dip) * Basis(Vector3.BACK, _idle_roll(c)), at)
+
+
+## The gun's roll about its barrel in the stance (rad, + top to his left): canted at the ready, the R
+## channel scaled in the check.
+static func _idle_roll(c: Dictionary) -> float:
+	var r: float = c["R"]
+	var h: float = c["H"]
+	return IDLE_GUN_CANT * (1.0 - h) + r * (IDLE_ROLL_PRESS if r > 0.0 else IDLE_ROLL_MAG) + IDLE_CHECK_ROLL * h
+
+
+## Both hands on the pistol: the right holding it where it goes; the left in its hold, moving between
+## holds hand-first (the hand's place and turn blended, the arm reaching for that), settled straight
+## back onto the grip after START (a check caught halfway is broken off going forward, never played
+## back through the other holds). Each elbow where its forearm runs into the hand, clear of his vest
+## and under the shrug (_reach_clear).
+func _idle_arms(c: Dictionary) -> void:
+	var ch := _in_rig(chest)
+	var gun := idle_gun(c)
+	var pl := _pistol.transform
+	var wb := gun.basis * pl.basis.orthonormalized().inverse()
+	var at := gun.origin - wb * pl.origin
+	var h: float = c["H"]
+	# (the elbow from the gun hand as it would be unrolled: rolling the gun turns the forearm, it
+	# doesn't swing the elbow round)
+	var wb0 := gun.basis * Basis(Vector3.BACK, -_idle_roll(c)) * pl.basis.orthonormalized().inverse()
+	_reach_clear(1, Transform3D(wb, at), _fore_at(1, wb0, at, IDLE_WRIST.lerp(IDLE_WRIST_CHECK, h)))
+	var hold: float = c["L"]
+	if hold >= 4.0:
+		hold = 0.0  # (4 is the support hold again: the loop wraps onto 0)
+	var i := clampi(int(floor(hold)), 0, 3)
+	var f := clampf(hold - i, 0.0, 1.0)
+	var lh := _left_hold(i, c, ch)
+	if f > 0.0001:
+		lh = _hold_lerp(lh, _left_hold(i + 1, c, ch), f)
+	var w: float = c["w"]
+	if w > 0.0001 and not (f <= 0.0001 and i % 2 == 0):
+		lh = _hold_lerp(lh, _left_hold(0, c, ch), w)
+	_left_arm(lh, IDLE_WRIST_L.lerp(IDLE_WRIST_L_CHECK, h))
+	_slide.position.z = maxf(_slide.position.z, float(c["S"]))
+	_mag_at(float(c["M"]))
+
+
+## Two hand holds [the hand's turn, where its middle goes] blended (the turn slerped).
+static func _hold_lerp(a: Array, b: Array, f: float) -> Array:
+	var q := Quaternion(a[0] as Basis).slerp(Quaternion(b[0] as Basis), f)
+	return [Basis(q), (a[1] as Vector3).lerp(b[1], f)]
+
+
+## The left hand's hold `state` on the pistol where it is now: [the hand's turn, where its middle
+## goes] (rig space). 0, 2: support (at the ready its fist low on the grip's left panel over the gun
+## hand's fingers; in the check alongside it); 1: over the slide's rear, palm down, riding it back;
+## 3: cupped under the magazine's foot, dropped for the slap.
+func _left_hold(state: int, c: Dictionary, ch: Transform3D) -> Array:
+	var pr := _in_rig(_pistol)
+	var pb := pr.basis.orthonormalized()
+	var at: Vector3
+	var run: Vector3
+	var palm: Vector3
+	match state:
+		1:
+			at = pr * (IDLE_TOP_AT + Vector3(0.0, 0.0, float(c["S"])))
+			run = pb * IDLE_TOP_RUN
+			palm = pb * IDLE_TOP_PALM
+		3:
+			var axis := Basis(Vector3.RIGHT, MAG_RAKE) * Vector3.DOWN
+			var base := Vector3(0.0, -0.05, 0.012) + axis * (0.058 + float(c["M"]) + 0.03)
+			at = pr * base + Vector3.DOWN * float(c["Kd"])
+			palm = -(pb * axis).normalized()
+			run = at - _in_rig(shoulders[-1]).origin  # (on from where his forearm comes: below)
+		_:
+			var h: float = c["H"]
+			var r_run := pb * Vector3(0.0, -sin(IDLE_SUPPORT_CANT), -cos(IDLE_SUPPORT_CANT))
+			var r_palm := pb * Vector3(cos(IDLE_SUPPORT_TIP), sin(IDLE_SUPPORT_TIP), 0.0)
+			var at_ready := [_frame(r_run, r_palm) * _frame(_hand_run[-1], _hand_palm[-1]).inverse(), pr * IDLE_SUPPORT_AT]
+			if h <= 0.0001:
+				return at_ready
+			var wr := _in_rig(wrists[1])
+			var k_run := pb * Vector3(0.0, -sin(IDLE_CANT), -cos(IDLE_CANT))
+			var k_palm := (pb * Vector3(cos(IDLE_PALM), 0.0, sin(IDLE_PALM))).rotated(k_run.normalized(),
+					IDLE_PALM_ROLL + (1.0 - IDLE_SUPPORT_FOLLOW) * (_idle_roll(c) - IDLE_GUN_CANT * (1.0 - h)))
+			var in_check := [_frame(k_run, k_palm) * _frame(_hand_run[-1], _hand_palm[-1]).inverse(),
+					wr * (_hand_mid[1] as Vector3) + pb * IDLE_SUPPORT]
+			return _hold_lerp(at_ready, in_check, h)
+	return [_frame(run, palm) * _frame(_hand_run[-1], _hand_palm[-1]).inverse(), at]
+
+
+## The left arm reaching for a hold (its elbow as _reach_clear puts it, its hand set `off` its
+## forearm as IDLE_WRIST_L), its wrist kept within IDLE_WRIST_MOST of its forearm: past that the hand
+## turns toward the forearm.
+func _left_arm(lh: Array, off: Vector2) -> void:
+	var raw: Basis = lh[0]
+	var at: Vector3 = lh[1]
+	var mid := _hand_mid[-1] as Vector3
+	var hand := raw
+	for k in 4:
+		var wat := at - hand * mid
+		_reach_clear(-1, Transform3D(hand, wat), _fore_at(-1, hand, wat, off))
+		if k == 3:
+			break
+		# (each time from the hold itself, toward the forearm as the last reach left it: not on top
+		# of a first reach that may have had nowhere allowed to put the elbow, whose forearm can
+		# jump from one frame to the next)
+		var fore := (_in_rig(wrists[-1]).origin - _in_rig(elbows[-1]).origin).normalized()
+		var r := (raw * (_hand_run[-1] as Vector3)).normalized()
+		var bend := fore.angle_to(r)
+		var want := raw if bend <= IDLE_WRIST_MOST else Basis(r.cross(fore).normalized(), bend - IDLE_WRIST_MOST) * raw
+		if want.is_equal_approx(hand):
+			break
+		hand = want
+
+
+## Where `side`'s elbow would best go (rig space) for its forearm to run into the hand `hand` (its
+## wrist joint at `at`), set off `off` (see IDLE_WRIST): the forearm's length back along that line.
+func _fore_at(side: int, hand: Basis, at: Vector3, off: Vector2) -> Vector3:
+	var run := (hand * (_hand_run[side] as Vector3)).normalized()
+	var palm := (hand * (_hand_palm[side] as Vector3)).normalized()
+	var thumb := (side * run.cross(palm)).normalized()
+	var fore := (run + thumb * tan(off.x) + palm * tan(off.y)).normalized()
+	return at - fore * (wrists[side] as Node3D).position.length()
+
+
+## `side`'s arm reaching for `target` (the wrist joint's place and the hand's turn), its forearm
+## running as near the line from `want` (where its elbow would best be, rig space) as it can with the
+## arm raised no more than IDLE_RAISE_MOST and the elbow and forearm clear of his vest: round the
+## circle the elbow can be on (about the shoulder-to-wrist line), the least of (the forearm's angle
+## off that line)^2 + 1e5 (how badly it breaks those)^2, on a ring of 24 and then narrowed down. (Soft,
+## so the elbow slides along the edge of what's allowed rather than jumping.)
+func _reach_clear(side: int, target: Transform3D, want: Vector3) -> void:
+	var chi := _in_rig(chest).orthonormalized().affine_inverse()
+	var s := chi * (_in_rig(clavicles[side]) * (shoulders[side] as Node3D).position)
+	var w := chi * target.origin
+	var fore := (w - chi * want).normalized()
+	var l1 := (elbows[side] as Node3D).position.length()
+	var l2 := (wrists[side] as Node3D).position.length()
+	var d := w - s
+	var n := clampf(d.length(), absf(l1 - l2) + 0.001, (l1 + l2) * 0.995)
+	var u := d.normalized()
+	var along := (l1 * l1 - l2 * l2 + n * n) / (2.0 * n)
+	var r := sqrt(maxf(l1 * l1 - along * along, 0.0))
+	var c := s + u * along
+	var v1 := chi * want - s
+	v1 -= u * v1.dot(u)
+	if v1.length() < 0.001:
+		v1 = Vector3.DOWN - u * Vector3.DOWN.dot(u)
+	v1 = v1.normalized()
+	var v2 := u.cross(v1)
+	var best := 0.0
+	var least := INF
+	for k in 24:
+		var phi := -PI + TAU * k / 24.0
+		var f := _elbow_cost(s, c + r * (v1 * cos(phi) + v2 * sin(phi)), w, fore)
+		if f < least:
+			least = f
+			best = phi
+	var lo := best - TAU / 24.0
+	var hi := best + TAU / 24.0
+	for it in 14:
+		var m1 := lerpf(lo, hi, 0.382)
+		var m2 := lerpf(lo, hi, 0.618)
+		if _elbow_cost(s, c + r * (v1 * cos(m1) + v2 * sin(m1)), w, fore) < _elbow_cost(s, c + r * (v1 * cos(m2) + v2 * sin(m2)), w, fore):
+			hi = m2
+		else:
+			lo = m1
+	best = (lo + hi) * 0.5
+	_reach(side, target, chi.basis.inverse() * (c + r * (v1 * cos(best) + v2 * sin(best)) - s))
+
+
+## What an elbow at `e` costs _reach_clear (his chest's frame; the shoulder at `s`, the wrist at
+## `w`, the line the forearm would best run along `fore`).
+func _elbow_cost(s: Vector3, e: Vector3, w: Vector3, fore: Vector3) -> float:
+	var off := (w - e).angle_to(fore)
+	return off * off + 1e5 * pow(_elbow_bad(s, e, w), 2.0)
+
+
+## How badly an elbow at `e` breaks the rules (0: not at all; his chest's frame, the shoulder at
+## `s`, the wrist at `w`): the arm raised past IDLE_RAISE_MOST (rad; ten times over: that one
+## must hold, it's the shrug), the elbow or its forearm into his vest (rig units).
+func _elbow_bad(s: Vector3, e: Vector3, w: Vector3) -> float:
+	var bad := 10.0 * maxf(0.0, (e - s).angle_to(Vector3.DOWN) - IDLE_RAISE_MOST)
+	bad += maxf(0.0, _in_vest(e, IDLE_LIMB.x))
+	for k in 3:
+		bad += maxf(0.0, _in_vest(e.lerp(w, (k + 1) / 4.0), IDLE_LIMB.y))
+	return bad
+
+
+## How far `q` (his chest's frame), `thick` round it, is inside his vest (rig units; < 0 clear of
+## it): a rounded box (a superellipse across), narrower above y -0.2 than below -0.35.
+func _in_vest(q: Vector3, thick: float) -> float:
+	if q.y > IDLE_VEST_Y.x or q.y < IDLE_VEST_Y.y:
+		return -1.0
+	var a := lerpf(IDLE_VEST.x, IDLE_VEST.y, clampf((-0.2 - q.y) / 0.15, 0.0, 1.0))
+	var k := pow(pow(absf(q.x) / a, 6.0) + pow(absf(q.z) / IDLE_VEST.z, 6.0), 1.0 / 6.0)
+	return (1.0 - k) * minf(a, IDLE_VEST.z) + thick
+
+
+## The magazine `out` (rig units) along the grip (only with IDLE_MAG_DROP; seated, it's hidden in it).
+func _mag_at(out: float) -> void:
+	_mag_out = out
+	if _mag == null:
+		return
+	_mag.basis = Basis(Vector3.RIGHT, MAG_RAKE)
+	_mag.position = Vector3(0.0, -0.05, 0.012) + _mag.basis * Vector3(0.0, -out, 0.0)
+
+
+## Every joint's turn and the hips' place, to blend out of (into the run).
+func _pose_snapshot() -> Array:
+	var out: Array = [hips.position]
+	for j in _all_joints():
+		out.append(j.quaternion)
+	return out
+
+
+## From a snapshot toward the pose now: the hips and legs `legs` of the way, the rest `upper`.
+func _pose_blend(from: Array, legs: float, upper: float) -> void:
+	hips.position = (from[0] as Vector3).lerp(hips.position, legs)
+	var js := _all_joints()
+	for i in js.size():
+		var j := js[i]
+		var w := legs if (j == hips or j in leg_hips.values() or j in knees.values() or j in ankles.values()) else upper
+		if w < 1.0:
+			j.quaternion = (from[i + 1] as Quaternion).slerp(j.quaternion, w)
+
 
 
 ## After the pose (which only turns the shoulders): the collarbones lift with an arm raised high, the
@@ -839,6 +1452,9 @@ func death_start(opts: Dictionary = {}) -> Dictionary:
 	_kick = 0.0
 	if _slide != null:
 		_slide.position.z = 0.0  # (the pistol's slide forward again)
+	_mag_at(0.0)
+	_idle_on = false
+	_launch_t = -1.0
 	var from := {"hips": hips.position, "joints": joints, "prop": _death_prop_from(), "opts": opts}
 	var pts := _rag_points()
 	var roots := _rag_roots()

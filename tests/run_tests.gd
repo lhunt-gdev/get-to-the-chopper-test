@@ -34,6 +34,8 @@ func _run() -> void:
 	_test_boss_ko()
 	_test_cross_death()
 	_test_end_typing()
+	_test_cross_ready()
+	_test_intro_camera()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -604,6 +606,444 @@ func _test_end_typing() -> void:
 	_check(order_ok and mid and ty.is_done() and shown["a"] == 16 and shown["b"] == 10 and ticks[0] > 0,
 			"end screen: the title types out, then the subtitle; a tap shows them at once")
 	ty.queue_free()
+
+
+## CROSS ready under the menu (user: "an active stance, alarmed mode, he checks his gun and he's
+## looking around ... his start stance can't be standing still it will need to match the stance he
+## has in this animation"): the same moment, the same pose; the loop with no joint jumping, his feet
+## planted, nothing through the floor, his arms under the shrug; the pistol never at the camera (the
+## menu's, the pan's, or catching up after a skip); the gun check; the looking around big enough to
+## see on a phone, framed between the title and the buttons; START settling him into the set; the
+## run growing out of it rear leg first with no joint jumping, from any moment (and from the set
+## Retry and the bots start in), then exactly the run; his standing pose as before.
+func _test_cross_ready() -> void:
+	var dt := 1.0 / 60.0
+	var tt := Tuning.new()
+	var play_look := Vector3(0.0, 1.0, -10.0)
+	# The same moment, the same pose.
+	var r := _rd_rig()
+	_rd_at(r, 2.3)
+	var a := _rd_str(r)
+	_rd_at(r, 11.0)
+	_rd_at(r, 2.3)
+	var x := _rd_rig()
+	var y := _rd_rig()
+	for k in 400:
+		x.animate(dt, {"ready": true})
+		y.animate(dt, {"ready": true})
+	_check(a == _rd_str(r) and _rd_str(x) == _rd_str(y), "CROSS ready: the same moment, the same pose (no randomness)")
+	x.queue_free()
+	y.queue_free()
+
+	# Twice round the loop (across where it wraps).
+	var lp := _rd_rig()
+	lp.animate(0.0, {"ready": true})
+	var prev := _rd_snap(lp)
+	var worst := 0.0
+	var hips := 0.0
+	var feet := 0.0
+	var flat := 1.0
+	var low := INF
+	var raised := 0.0
+	var clear := 180.0
+	var dip := 90.0
+	var head_y := 0.0
+	var neck_y := 0.0
+	var turn := 0.0
+	var look := [0.0, 0.0]
+	var lens := [INF, -INF, INF]  # (x least and most at sway 0, y least at any sway: 480 high)
+	var lens_x0 := 0.0
+	var gun_px := -INF  # (lowest of the pistol and both hands on screen in the check: 480 and 585)
+	var rest_px := [-INF, -INF]  # (both hands at the ready, the whole loop outside the check: 480, 585)
+	var steps := []  # (each joint's turn, the last two frames: for a pop a frame long)
+	var pops := []
+	var wrist := [0.0, 0.0, 0.0]  # (worst bend off the forearm, deg: either hand at the ready, the gun hand and the left in the check)
+	var vest := -INF  # (deepest an elbow or forearm goes into his vest, rig units)
+	for f in int(2.0 * SoldierRig.IDLE_LOOP / dt) + 2:
+		lp.animate(dt, {"ready": true})
+		var now := _rd_snap(lp)
+		worst = maxf(worst, _rd_step(prev, now))
+		hips = maxf(hips, (prev[0] as Vector3).distance_to(now[0]))
+		# A pop: a joint turning in one frame more than twice what it turns the frames either side
+		# (a snapped head eases out, so it doesn't count; a joint jumping does).
+		var turns := []
+		for k in range(1, now.size()):
+			turns.append((prev[k] as Quaternion).angle_to(now[k]))
+		steps.append(turns)
+		if steps.size() > 3:
+			steps.pop_front()
+		if steps.size() == 3:
+			for k in turns.size():
+				var m: float = steps[1][k]
+				if m > 0.08 and m > 2.0 * maxf(steps[0][k], steps[2][k]):
+					pops.append("%s %.3f at %.2f s" % [lp._all_joints()[k].name, m, lp._idle_t - dt])
+		prev = now
+		for side in [-1, 1]:
+			var f2: Vector2 = SoldierRig.IDLE_FEET[side]
+			feet = maxf(feet, lp._in_rig(lp.ankles[side]).origin.distance_to(Vector3(f2.x, (lp._ankle_rest[side] as Vector3).y, f2.y)))
+			flat = minf(flat, _rd_sole(lp, side).y.dot(Vector3.UP))
+			raised = maxf(raised, _rd_raise(lp, side))
+		for p in lp._rag_points():
+			low = minf(low, (p as Vector3).y * SoldierRig.SIZE)
+		var s := -0.7
+		while s <= 0.7001:
+			clear = minf(clear, _rd_clear(lp, IntroCamera.menu(s, 0.0)[0]))
+			s += 0.05
+		dip = minf(dip, _rd_dip(lp))
+		head_y = maxf(head_y, absf(lp.head.rotation.y))
+		neck_y = maxf(neck_y, absf(lp.neck.rotation.y))
+		turn = maxf(turn, absf(lp.hips.rotation.y + lp.spine.rotation.y + lp.chest.rotation.y))
+		var fwd := lp._in_rig(lp.head).basis * Vector3.FORWARD
+		var yaw := atan2(-fwd.x, -fwd.z)
+		look = [maxf(look[0], yaw), minf(look[1], yaw)]
+		var lz := _rd_lenses(lp)
+		var mid: Vector3 = ((lz[0] as Vector3) + (lz[1] as Vector3)) / 2.0
+		var px := _rd_screen(mid, 0.0, 480.0)
+		if f == 0:
+			lens_x0 = px.x
+		lens = [minf(lens[0], px.x), maxf(lens[1], px.x), lens[2]]
+		for sw in [-0.7, 0.0, 0.7]:
+			for l in _rd_lenses(lp):
+				lens[2] = minf(lens[2], _rd_screen(l, sw, 480.0).y)
+		var t := lp._idle_t
+		if t > 1.0 and t < 5.0:
+			wrist = [wrist[0], maxf(wrist[1], _rd_bend(lp, 1)), maxf(wrist[2], _rd_bend(lp, -1))]
+		else:
+			wrist[0] = maxf(wrist[0], maxf(_rd_bend(lp, 1), _rd_bend(lp, -1)))
+		var chi := lp._in_rig(lp.chest).orthonormalized().affine_inverse()
+		for side in [-1, 1]:
+			var el := chi * lp._in_rig(lp.elbows[side]).origin
+			var wr := chi * lp._in_rig(lp.wrists[side]).origin
+			for k in 4:
+				vest = maxf(vest, lp._in_vest(el.lerp(wr, k / 4.0), SoldierRig.IDLE_LIMB.x if k == 0 else SoldierRig.IDLE_LIMB.y))
+		if (t > 1.6 and t < 4.4) or t < 1.0 or t > 5.0:
+			var hands := [_rd_hand(lp, -1), _rd_hand(lp, 1)]
+			var gun_at := _rd_world(lp, lp._in_rig(lp._pistol).origin)
+			for sw in [-0.7, 0.0, 0.7]:
+				for hi in 2:
+					var h := 480.0 if hi == 0 else 585.0
+					if t > 1.6 and t < 4.4:
+						for p in hands + [gun_at]:
+							gun_px = maxf(gun_px, _rd_screen(p, sw, h).y)
+					elif t < 1.0 or t > 5.0:
+						for p in hands:
+							rest_px[hi] = maxf(rest_px[hi], _rd_screen(p, sw, h).y)
+	# The wrap itself.
+	_rd_at(lp, SoldierRig.IDLE_LOOP - dt)
+	var before := _rd_snap(lp)
+	lp.animate(dt, {"ready": true})
+	var wrap := _rd_step(before, _rd_snap(lp))
+	_check(worst < 0.25 and wrap < 0.05 and hips < 0.01 and pops.is_empty(),
+			"CROSS ready: loops with no joint jumping (worst %.3f rad a frame, %.3f at the wrap; pops: %s)" % [worst, wrap, pops])
+	_check(feet < 0.01 and flat > 0.999 and low > -0.03,
+			"CROSS ready: his feet planted and flat, nothing through the floor (off %.4f, flat %.4f, lowest %.3f m)" % [feet, flat, low])
+	_check(raised < SoldierRig.SHRUG_FROM, "CROSS ready: his arms never raised past the shrug (%.2f rad)" % raised)
+	_check(clear > 35.0 and dip > 35.0, "CROSS ready: the pistol never at the menu's camera (user; %.1f° off at closest, %.1f° down at least)" % [clear, dip])
+	_check(look[0] > 1.0 and look[1] < -1.3 and head_y < 0.8 and neck_y < 0.35 and turn < 0.6,
+			"CROSS ready: he looks around, far each way (user; %.2f / %.2f rad), no neck or waist wringing (%.2f, %.2f, %.2f)" % [look[0], look[1], head_y, neck_y, turn])
+	_check(lens[1] - lens_x0 > 18.0 and lens_x0 - lens[0] > 18.0 and lens[2] > 168.0,
+			"CROSS ready: his eyes sweep far enough to see on a phone (%+.0f / %+.0f px), under the title (y %.0f)" % [lens[1] - lens_x0, lens[0] - lens_x0, lens[2]])
+	_check(gun_px < 290.0 and rest_px[0] < 290.0 and rest_px[1] < 315.0,
+			"CROSS ready: the gun check above the menu's buttons (y %.0f; START's top at 290); his hands at the ready above them on a 480-high screen (y %.0f), on a tall phone at most just behind START's top edge (y %.0f)" % [gun_px, rest_px[0], rest_px[1]])
+	_check(wrist[0] < 30.0 and wrist[1] < 64.0 and wrist[2] < 37.0 and vest < 0.025,
+			"CROSS ready: his wrists within a real wrist's range (user: \"his hand position/rotation it looks a little off\"): at the ready %.0f° off the forearm (was ~90°), in the check the gun hand %.0f° and the left %.0f°; elbows clear of his vest (%.3f)" % [wrist[0], wrist[1], wrist[2], vest])
+	lp.queue_free()
+
+	# The check's sounds (user: "add them"): each once a loop, in order, as the loop passes it.
+	var heard := []
+	var sn := _rd_rig()
+	sn.idle_beat.connect(func(sound: String) -> void: heard.append(sound))
+	for f in int(SoldierRig.IDLE_LOOP / dt) + 2:
+		sn.animate(dt, {"ready": true})
+	_check(heard == ["slide_back", "slide_home", "mag_out", "mag_slap"], "CROSS ready: the check's sounds, each once a loop, in order (user: \"add them\"): %s" % [heard])
+	sn.queue_free()
+
+	# The gun check: the slide eased back, his left hand over it, his eyes on it, the gun up under
+	# his chin; the slap (his hand up into the grip, the gun jolting); both hands on it at rest.
+	_rd_at(r, 2.3)
+	var slide := r._slide.position.z
+	var pr := r._in_rig(r._pistol)
+	var top := pr * (SoldierRig.IDLE_TOP_AT + Vector3(0.0, 0.0, r._slide.position.z))
+	var left := r._in_rig(r.wrists[-1]) * (r._hand_mid[-1] as Vector3)
+	var eyes := (r._in_rig(r.head).basis * Vector3.FORWARD).normalized()
+	var high := pr.origin.y * SoldierRig.SIZE
+	var press := slide >= 0.02 and left.distance_to(top) < 0.06 and eyes.y < -0.5 and high > 1.4 and high < 1.55
+	_rd_at(r, 4.40)
+	var hand_low := _rd_hand(r, -1).y
+	_rd_at(r, 4.46)
+	var gun_was := r._in_rig(r._pistol).origin.y
+	_rd_at(r, 4.50)
+	var slap := _rd_hand(r, -1).y - hand_low > 0.05 and (r._in_rig(r._pistol).origin.y - gun_was) * SoldierRig.SIZE > 0.008
+	_rd_at(r, 0.5)
+	var both := _rd_hand(r, -1).distance_to(_rd_hand(r, 1)) < 0.08
+	_check(press and slap and both, "CROSS ready: he checks his gun (user): the press check (slide %.3f, hand %.3f off, eyes %.2f, gun %.2f m up), the slap, both hands on it" % [
+			slide, left.distance_to(top), eyes.y, high])
+
+	# START at every half second of the loop: he settles (never jumping, the slide let go at once,
+	# eyes and hands back on the door and the grip by 0.5 s) and sets as the pan goes round, the
+	# pistol off every pan camera (the cut and the eased start); the set lower, forward, the rear
+	# heel up about the ball of his foot.
+	var base := _rd_rig()
+	_rd_at(base, 0.0)
+	var settle := 0.0
+	var settle_ok := true
+	var pan_clear := 180.0
+	var set_ok := true
+	for i in 32:
+		var st := _rd_rig()
+		_rd_at(st, i * 0.5)
+		var p0 := _rd_snap(st)
+		for k in 210:
+			var u := (k + 1) / 210.0
+			st.animate(dt, {"ready": true, "pan": u})
+			var now := _rd_snap(st)
+			settle = maxf(settle, _rd_step(p0, now))
+			p0 = now
+			if k == 5:
+				settle_ok = settle_ok and st._slide.position.z < 0.001
+			if k == 31:
+				var fw := (st._in_rig(st.head).basis * Vector3.FORWARD).normalized()
+				settle_ok = settle_ok and absf(atan2(-fw.x, -fw.z)) < 0.1 and float(st._idle_c["w"]) > 0.999
+			var e := smoothstep(0.0, 1.0, u)
+			for s0 in [-0.7, 0.0, 0.7]:
+				for fm in [0.0, tt.intro_from_menu]:
+					pan_clear = minf(pan_clear, _rd_clear(st, IntroCamera.pan(e, 0.0, s0, fm, play_look)[0]))
+		var ball := Vector3(SoldierRig.IDLE_FEET[1].x, (st._ankle_rest[1] as Vector3).y, SoldierRig.IDLE_FEET[1].y) + Basis(Vector3.UP, SoldierRig.IDLE_TOES[1]) * SoldierRig.IDLE_BALL
+		var ank := st._in_rig(st.ankles[1]).origin
+		var now_ball := ank + _rd_sole(st, 1) * SoldierRig.IDLE_BALL
+		set_ok = set_ok and st.hips.position.y < base.hips.position.y - 0.025 and st.hips.position.z < base.hips.position.z - 0.06 \
+				and ank.y > (st._ankle_rest[1] as Vector3).y + 0.03 and now_ball.distance_to(ball) < 0.01
+		st.queue_free()
+	_check(settle < 0.25 and settle_ok and set_ok, "CROSS ready: START settles him (never jumping: %.3f rad) and sets him for the run as the camera comes round" % settle)
+	_check(pan_clear > 35.0, "CROSS ready: the pistol never at the opening pan's camera (%.1f° off at closest)" % pan_clear)
+
+	# A tap that skips the pan, then the camera catching up as he runs: the pistol never at it.
+	var skip_clear := 180.0
+	for s0 in [-0.7, 0.7]:
+		for t0 in [1.95, 3.7, 4.44, 10.3]:
+			for skip in [0.02, 0.3, 1.2, 2.5]:
+				var sk := _rd_rig()
+				_rd_at(sk, t0)
+				var cam := Transform3D()
+				for k in int(round(skip * 60.0)):
+					var u := (k + 1) / 210.0
+					sk.animate(dt, {"ready": true, "pan": u})
+					var c := IntroCamera.pan(smoothstep(0.0, 1.0, u), 0.0, s0, tt.intro_from_menu, play_look)
+					cam = Transform3D(Basis.IDENTITY, c[0]).looking_at(c[1], Vector3.UP)
+					skip_clear = minf(skip_clear, _rd_clear(sk, cam.origin))
+				var d := 0.0
+				for k in 60:
+					d += tt.run_speed * dt
+					sk.position = Vector3(0.0, 0.0, -d)
+					sk.animate(dt, {"run": 1.0})
+					var target := Transform3D(Basis.IDENTITY, Vector3(0.0, 3.4, 5.5 - d)).looking_at(Vector3(0.0, 1.0, -10.0 - d), Vector3.UP)
+					cam = cam.interpolate_with(target, clampf(dt * 8.0, 0.0, 1.0))
+					skip_clear = minf(skip_clear, _rd_clear(sk, cam.origin))
+				sk.queue_free()
+	_check(skip_clear > 35.0, "CROSS ready: the pistol never at the camera catching up after a skipped pan (%.1f° off at closest)" % skip_clear)
+
+	# Into the run (user: "his start stance can't be standing still"): from 16 moments of the loop,
+	# the check, the alarm, mid-settle, mid-set, the pan's end and the set Retry and the bots start
+	# in: the stride at once, his rear (right) foot up first, no joint jumping, the slide home, then
+	# exactly the run; FIRE still brings the gun up level and straight ahead.
+	var starts := []
+	for i in 16:
+		starts.append([float(i), -1])
+	starts.append_array([[1.95, -1], [3.7, -1], [4.44, -1], [7.25, -1], [10.3, -1], [1.95, 12], [3.7, 126], [10.3, 210], [0.0, -2]])
+	var launch := 0.0
+	var launch_ok := true
+	var let_go := 0.0
+	var fire := 0.0
+	for st in starts:
+		var g := _rd_rig()
+		if int(st[1]) == -2:
+			g.pose_set()
+		else:
+			_rd_at(g, float(st[0]))
+			for k in int(st[1]):
+				g.animate(dt, {"ready": true, "pan": (k + 1) / 210.0})
+		var p0 := _rd_snap(g)
+		for k in 36:
+			g.animate(dt, {"run": 1.0})
+			var now := _rd_snap(g)
+			launch = maxf(launch, _rd_step(p0, now))
+			p0 = now
+			if k == 0:
+				launch_ok = launch_ok and is_equal_approx(g._run, 1.0)
+			if k == 5:
+				launch_ok = launch_ok and g._in_rig(g.ankles[1]).origin.y > g._in_rig(g.ankles[-1]).origin.y and g._slide.position.z < 0.001
+		var plain := SoldierRig.new()
+		root.add_child(plain)
+		plain._phase = g._phase
+		plain._run = g._run
+		g.animate(dt, {"run": 1.0})
+		plain.animate(dt, {"run": 1.0})
+		var ga := _rd_snap(g)
+		var pa := _rd_snap(plain)
+		for k in range(1, ga.size()):
+			let_go = maxf(let_go, (Basis(ga[k] as Quaternion).get_euler() - Basis(pa[k] as Quaternion).get_euler()).abs().length())
+		plain.queue_free()
+		g.queue_free()
+		var q := _rd_rig()
+		if int(st[1]) == -2:
+			q.pose_set()
+		else:
+			_rd_at(q, float(st[0]))
+		for k in 6:
+			q.animate(dt, {"run": 1.0})
+		q.animate(dt, {"run": 1.0, "aim": true})
+		q.recoil()
+		fire = maxf(fire, rad_to_deg((q._in_rig(q._muzzle).basis * Vector3.FORWARD).angle_to(Vector3.FORWARD)))
+		q.queue_free()
+	_check(launch < 0.25 and launch_ok and let_go < 0.001 and fire < 2.0,
+			"CROSS springs into the run from his stance, rear leg first, no joint jumping (user: %.3f rad, was 0.870 from standing), then exactly the run; FIRE level ahead (%.1f°)" % [launch, fire])
+
+	# His standing pose as before (wall cover, the boss standoff, after the run): a rig never in the
+	# stance stands exactly as it did.
+	var sd := SoldierRig.new()
+	root.add_child(sd)
+	sd.animate(dt, {"run": 0.0})
+	var got := _rd_snap(sd)
+	sd._reset()
+	sd._pose_stand()
+	sd._shrug()
+	var want := _rd_snap(sd)
+	var same := not sd._idle_on
+	for k in range(1, got.size()):
+		same = same and (got[k] as Quaternion).is_equal_approx(want[k])
+	_check(same and (got[0] as Vector3).is_equal_approx(want[0]), "CROSS ready: his standing pose (wall cover, the standoff, after the run) as before")
+	sd.queue_free()
+	base.queue_free()
+	r.queue_free()
+
+
+## The camera before the run (IntroCamera): START doesn't cut (the pan starts exactly where the
+## menu's camera was and eases onto the approved path), then exactly the pan the user approved
+## ("keep the current values"), never turning back, ending exactly on the play camera.
+func _test_intro_camera() -> void:
+	var tt := Tuning.new()
+	var play := Vector3(0.0, 1.0, -10.0)
+	var fm := tt.intro_from_menu
+	var no_cut := fm > 0.0
+	for i in 41:
+		var s := -0.7 + i * 0.035
+		var p := IntroCamera.pan(0.0, 0.0, s, fm, play)
+		var m := IntroCamera.menu(s, 0.0)
+		no_cut = no_cut and (p[0] as Vector3).distance_to(m[0]) < 1e-4 and (p[1] as Vector3).distance_to(m[1]) < 1e-4
+	_check(no_cut, "the opening pan: START doesn't cut, it starts exactly where the menu's camera was")
+	var approved := true
+	for e in [0.0, 0.25, 0.5, 0.75, 1.0]:
+		var angle: float = PI * e
+		var rr := lerpf(3.0, 5.5, e * e)
+		var eye := Vector3(sin(angle) * rr * 0.75, lerpf(1.5, 3.4, e), -cos(angle) * rr)
+		var at := Vector3(0.0, 1.3, 0.0).lerp(play, smoothstep(0.75, 1.0, e))
+		var p := IntroCamera.pan(e, 0.0, 0.6, 0.0, play)
+		approved = approved and (p[0] as Vector3).distance_to(eye) < 1e-4 and (p[1] as Vector3).distance_to(at) < 1e-4
+	for s in [-0.7, 0.0, 0.7]:
+		for k in 66:
+			var e := fm + k * (1.0 - fm) / 65.0
+			var a := IntroCamera.pan(e, 0.0, s, fm, play)
+			var b := IntroCamera.pan(e, 0.0, s, 0.0, play)
+			approved = approved and (a[0] as Vector3).distance_to(b[0]) < 1e-4 and (a[1] as Vector3).distance_to(b[1]) < 1e-4
+	var end := IntroCamera.pan(1.0, 0.0, 0.5, fm, play)
+	approved = approved and (end[0] as Vector3).distance_to(Vector3(0.0, 3.4, 5.5)) < 1e-4 and (end[1] as Vector3).distance_to(play) < 1e-4
+	var forward := true
+	for s in [-0.7, 0.0, 0.7]:
+		var last := -INF
+		for k in 100:
+			var p := IntroCamera.pan(k / 100.0, 0.0, s, fm, play)
+			var ang := atan2((p[0] as Vector3).x, -(p[0] as Vector3).z)
+			forward = forward and ang >= last - 1e-5
+			last = ang
+	_check(approved and forward, "the opening pan: then exactly the approved path (user: \"keep the current values\"), never turning back, ending on the play camera")
+
+
+func _rd_rig() -> SoldierRig:
+	var r := SoldierRig.new()
+	root.add_child(r)
+	return r
+
+
+## The stance at `t` s into its loop (and its breath), held there.
+func _rd_at(r: SoldierRig, t: float) -> void:
+	r._idle_t = t
+	r._idle_b = t
+	r._idle_go = -1.0
+	r.animate(0.0, {"ready": true})
+
+
+func _rd_snap(r: SoldierRig) -> Array:
+	var out: Array = [r.hips.position]
+	for j in r._all_joints():
+		out.append(j.quaternion)
+	return out
+
+
+func _rd_str(r: SoldierRig) -> String:
+	return str(_rd_snap(r)) + str(r._slide.position)
+
+
+func _rd_step(a: Array, b: Array) -> float:
+	var worst := 0.0
+	for k in range(1, a.size()):
+		worst = maxf(worst, (a[k] as Quaternion).angle_to(b[k]))
+	return worst
+
+
+func _rd_sole(r: SoldierRig, side: int) -> Basis:
+	var an: Node3D = r.ankles[side]
+	return r._in_rig(an.get_node(String(an.name) + "Flat")).basis.orthonormalized()
+
+
+## How far an arm is raised (rad from straight down, in his chest's axes), as the shrug measures it.
+func _rd_raise(r: SoldierRig, side: int) -> float:
+	var arm_in: Node3D = r.elbows[side].get_parent()
+	var arm: Vector3 = r.clavicles[side].basis * (r.shoulders[side].basis * (arm_in.basis * (r.elbows[side] as Node3D).position))
+	return acos(clampf(-arm.normalized().y, -1.0, 1.0))
+
+
+## How far `side`'s hand is bent off the line of its forearm (deg).
+func _rd_bend(r: SoldierRig, side: int) -> float:
+	var el := r._in_rig(r.elbows[side]).origin
+	var wr := r._in_rig(r.wrists[side])
+	return rad_to_deg((wr.origin - el).angle_to(wr.basis * (r._hand_run[side] as Vector3)))
+
+
+func _rd_world(r: SoldierRig, p: Vector3) -> Vector3:
+	return p * SoldierRig.SIZE + r.position
+
+
+func _rd_hand(r: SoldierRig, side: int) -> Vector3:
+	return _rd_world(r, r._in_rig(r.wrists[side]) * (r._hand_mid[side] as Vector3))
+
+
+func _rd_lenses(r: SoldierRig) -> Array:
+	var out := []
+	for n in r.head.get_children():
+		if n is MeshInstance3D:
+			out.append(_rd_world(r, r._in_rig(n).origin))
+	return out
+
+
+## How far the barrel points from a camera at `eye` (degrees).
+func _rd_clear(r: SoldierRig, eye: Vector3) -> float:
+	var m := r._in_rig(r._muzzle)
+	return rad_to_deg((m.basis * Vector3.FORWARD).angle_to(eye - _rd_world(r, m.origin)))
+
+
+## How far the barrel points down (degrees).
+func _rd_dip(r: SoldierRig) -> float:
+	var b := (r._in_rig(r._muzzle).basis * Vector3.FORWARD).normalized()
+	return rad_to_deg(asin(clampf(-b.y, -1.0, 1.0)))
+
+
+## A point (him at the origin) on the menu's camera swayed `s`, on a 270 x `h` phone screen (px).
+func _rd_screen(p: Vector3, s: float, h: float) -> Vector2:
+	var c := IntroCamera.menu(s, 0.0)
+	var cam := Transform3D(Basis.IDENTITY, c[0]).looking_at(c[1], Vector3.UP)
+	var q := cam.affine_inverse() * p
+	var f := (h / 2.0) / tan(deg_to_rad(35.0))
+	return Vector2(135.0 + q.x / -q.z * f, h / 2.0 - q.y / -q.z * f)
 
 
 ## The Sniper (user design; LOCKED roster: a timed movement threat you dodge): his hit rule, a

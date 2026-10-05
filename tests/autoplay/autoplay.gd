@@ -10,6 +10,11 @@ extends Node
 ##                  death=ok end=typed
 ##   naive_skip   - as naive, but taps the end screen while it's typing: everything at once
 ##                  (end=skipped)
+##   menu_start   - as ground, but through the real main menu: START pressed 2.3 s in (mid gun
+##                  check), the opening pan, then the run. It watches CROSS's ready stance hand
+##                  over to the run: RESULT ends intro=ok (no joint jumping, the pistol never at
+##                  the camera, no camera cut, never standing, control at the pan's end)
+##   intro_skip   - as menu_start, but taps 0.3 s into the pan to skip it (control at once)
 ##   ground       - keeps to the middle lanes: straight on through the main floor to the EXIT
 ##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
 ##                  (open at alert 1), through the underground to the STORM DRAIN's ladder up
@@ -77,6 +82,10 @@ var _boss_hidden := false
 ## naive / naive_skip: watching his death and the end screen, and what it found.
 var _death := {}
 var _death_report := ""
+## menu_start / intro_skip: watching the menu, START, the pan and the run's first second, and what
+## it found.
+var _intro := {}
+var _intro_report := ""
 ## The boss's KO replay: the chopper's clock and our distance as it started (and our distance as it
 ## last showed), its frames and those with the boss out of view, and the verdict once it's over.
 var _ko_from := {}
@@ -138,11 +147,15 @@ func _ready() -> void:
 		"ground_loud", "ground_alarms", "squad_caught":
 			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 	_level = LEVEL.instantiate()
-	_level.boss_seed = absi(hash(scenario)) % 100000
+	# (menu_start and intro_skip run the ground route: the same boss)
+	_level.boss_seed = absi(hash("ground" if scenario in ["menu_start", "intro_skip"] else scenario)) % 100000
 	add_child(_level)
 	_player = _level.get_node("Player")
 	GameState.run_ended.connect(_on_end)
-	_level.start_run()
+	if scenario in ["menu_start", "intro_skip"]:
+		_intro = {"f": 0}  # (the main menu is up: START comes in _watch_intro)
+	else:
+		_level.start_run()
 	get_tree().create_timer(200.0).timeout.connect(func() -> void: _report("timeout"))
 
 
@@ -395,6 +408,7 @@ func _on_end(reason: StringName) -> void:
 
 ## naive / naive_skip: his death, then the end screen, frame by frame.
 func _process(_delta: float) -> void:
+	_watch_intro()
 	if _death.is_empty() or _death.has("done"):
 		return
 	var d := _death
@@ -516,8 +530,51 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report)
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _intro_report)
 	get_tree().quit()
+
+
+## menu_start / intro_skip, every frame from the menu to a second into the run: START 2.3 s in
+## (mid gun check); intro_skip taps 0.3 s into the pan. Checks: no joint jumping (from his second
+## frame: the first replaces the set he's built in before it's drawn), the pistol never at the
+## camera, the camera never cutting, never standing before the run, and control when it should come
+## (LOCKED: "short beats, control back immediately").
+func _watch_intro() -> void:
+	if _intro.is_empty() or _intro.has("done"):
+		return
+	var d := _intro
+	d["f"] += 1
+	var f: int = d["f"]
+	var rig: SoldierRig = _player._rig
+	if f == 138:
+		_level._frontend.start_requested.emit()
+		d["start"] = f
+	if scenario == "intro_skip" and d.has("start") and f == int(d["start"]) + 18:
+		_level._on_tap(Vector2(135, 240))
+	if GameState.run_active and not d.has("run"):
+		d["run"] = f
+	var now: Array = [rig.hips.position]
+	for j in rig._all_joints():
+		now.append(j.quaternion)
+	if f > 2:
+		for k in range(1, now.size()):
+			d["step"] = maxf(float(d.get("step", 0.0)), (d["prev"][k] as Quaternion).angle_to(now[k]))
+		if not d.has("run"):
+			d["cam"] = maxf(float(d.get("cam", 0.0)), (d["eye"] as Vector3).distance_to(_level._camera.global_position))
+	d["prev"] = now
+	d["eye"] = _level._camera.global_position
+	if not d.has("run") and not rig._idle_on:
+		d["stood"] = int(d.get("stood", 0)) + 1
+	var m := rig._muzzle.global_transform
+	d["gun"] = minf(float(d.get("gun", 180.0)), rad_to_deg((-m.basis.z).angle_to(_level._camera.global_position - m.origin)))
+	if not d.has("run") or f < int(d["run"]) + 60:
+		return
+	d["done"] = true
+	var want := int(round(_player.tuning.intro_pan_time * 60.0)) if scenario == "menu_start" else 18
+	var took := int(d["run"]) - int(d.get("start", 0))
+	var ok: bool = float(d["step"]) < 0.25 and float(d["gun"]) > 35.0 and float(d["cam"]) < 0.25 and not d.has("stood") and absi(took - want) <= 1
+	_intro_report = " intro=ok" if ok else " intro=bad(step %.2f, gun %.0f, cam %.2f m, stood %d, control after %d frames)" % [
+			d["step"], d["gun"], d["cam"], d.get("stood", 0), took]
 
 
 ## tunnel_alarm only shoots MAIN FLOOR's box (the one that can lift the TUNNEL door).
