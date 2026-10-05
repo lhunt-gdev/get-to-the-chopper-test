@@ -35,6 +35,18 @@ var _rig: SoldierRig
 var _surrendered := false
 ## FIRE held: his right arm comes up and aims ahead (user). Set by the level.
 var aiming := false
+## His death (user: "a momentum ragdoll", slowed a little): it has played out (the end screen can
+## open), and the moments the level plays a sound for ("down": he hits the ground).
+signal died
+signal death_beat(beat: String)
+## Killed: his death's clock (s; slowed at first), how it started, whether he's down and whether
+## it's over, and his pool of blood.
+var dying := false
+var _death_t := -1.0
+var _death_from := {}
+var _death_down := false
+var _death_over := false
+var _pool: MeshInstance3D
 
 
 func _ready() -> void:
@@ -75,8 +87,12 @@ func _physics_process(delta: float) -> void:
 	_update_visuals()
 
 
-## The model's pose every frame (also before the run starts and after it ends, standing).
+## The model's pose every frame (also before the run starts and after it ends, standing; dying,
+## his death).
 func _process(delta: float) -> void:
+	if dying:
+		_die_step(delta)
+		return
 	var running := GameState.run_active and not halted and not in_cover and not standoff
 	_rig.animate(delta, {
 		"run": _speed_mul if running else 0.0,
@@ -159,6 +175,37 @@ func is_stunned() -> bool:
 	return _stun_left > 0.0
 
 
+## Killed (the run's already over): he goes limp mid-stride and his run carries him on, as far as
+## the way ahead is clear (`free_ahead`, m: the barrier he hit, the dog, cover, a shut door), then
+## down on his front in his blood (SoldierRig.pose_death); no room, knocked back onto his back;
+## mid-slide, slumped back and skidding on (SoldierRig.fall_for). In the air, he comes down first.
+func die(free_ahead: float) -> void:
+	if dying:
+		return
+	dying = true
+	aiming = false
+	var moving := not (in_cover or standoff or halted or _stun_left > 0.0)
+	var speed := tuning.run_speed * _speed_mul if moving else 0.0
+	var fall := SoldierRig.fall_for(speed, free_ahead, is_sliding(), tuning)
+	var travel: float = fall["travel"]
+	var back: bool = fall["back"]
+	var lift := jump_y
+	jump_y = 0.0
+	_y_velocity = 0.0
+	_slide_left = 0.0
+	_rig.position.y = 0.0
+	_death_from = _rig.death_start({"travel": travel / SoldierRig.SIZE, "lift": lift / SoldierRig.SIZE, "room": free_ahead / SoldierRig.SIZE,
+			"back": back, "slide": fall["slide"], "lean": _rig.rotation.z})
+	_shadow.scale = Vector3.ONE
+	_death_t = 0.0
+	# The killing hit bursts out of his back (they shoot from ahead), and his blood will spread from
+	# under his chest where he lands (behind his hips, on his back with his feet ahead).
+	Blood.mist(self, Vector3(0.0, 1.3 + lift, 0.1), Vector3(0.0, 0.4, 1.0), 7)
+	var chest_z := travel + 0.45 if back else (-travel + 0.45 if fall["slide"] else -travel - 0.55)
+	_pool = Blood.pool_at(self, Vector3(0.0, 0.03, chest_z), tuning.death_pool, 11)
+	Blood.set_spread(_pool, 0.0)
+
+
 ## Returns true if the hit landed (not while briefly invulnerable after the last one).
 func take_hit() -> bool:
 	if _invulnerable > 0.0 or hits_left <= 0:
@@ -177,6 +224,35 @@ func surrender() -> void:
 	_slide_left = 0.0
 	_surrendered = true
 	_update_visuals()
+
+
+## His death, a frame on: slowed a little (user: about half speed at first, back to normal as he
+## hits the ground), his blood spreading once he's down; then it's over (died).
+func _die_step(delta: float) -> void:
+	_rig.tick_flash(delta)
+	var end := _rig.death_end()
+	var land := _rig.death_land()
+	if _death_t < end:
+		var rate := lerpf(tuning.death_slow, 1.0, smoothstep(0.0, land, _death_t))
+		_death_t = minf(_death_t + delta * rate, end)
+		_rig.pose_death(_death_t, _death_from)
+		if _shadow.visible:
+			# His shadow goes with him as he's carried on.
+			var at := to_local(_rig.global_transform * _rig._in_rig(_rig.hips).origin)
+			_shadow.position = Vector3(at.x, 0.03, at.z)
+		if not _death_down and _death_t >= land:
+			_death_down = true
+			_shadow.visible = false  # (his blood, not his shadow, under him now)
+			death_beat.emit("down")
+		Blood.set_spread(_pool, (_death_t - land) / maxf(end - land - 0.2, 0.1))
+	elif not _death_over:
+		_death_over = true
+		died.emit()
+
+
+## His death has played out.
+func is_dead() -> bool:
+	return _death_over
 
 
 ## A shot: the pistol kicks.

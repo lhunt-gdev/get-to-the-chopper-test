@@ -24,7 +24,9 @@ expect() {  # scenario, expected substring(s): every one must be in its RESULT l
 G="MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD"
 U="MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SERVICE TUNNEL > BOILER ROOM > SEWER > PUMP STATION > STORM DRAIN > HELIPAD"
 R="MAIN FLOOR LOBBY > ROOFTOPS > WATER TOWERS > GANTRY > SKYLIGHTS > ANTENNA FARM > ROOF EDGE"
-expect naive       "reason=killed"
+expect naive       "reason=killed" "death=ok end=typed"
+# Killed, then a tap on the end screen while it types: everything at once.
+expect naive_skip  "reason=killed" "death=ok end=skipped"
 expect ground      "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/0 runner=1/0" "boss=1/0/" "ko=3/0/ok"
 expect tunnel_quiet "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=13" "boss=1/0/" "ko=3/0/ok"
 expect tunnel_loud "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15" "boss=1/0/" "ko=3/0/ok"

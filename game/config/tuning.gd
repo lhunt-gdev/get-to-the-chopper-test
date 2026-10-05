@@ -252,3 +252,18 @@ var fire_on_left := false
 ## the FIRE you're holding as he dies doesn't).
 @export var boss_ko_slow: Vector3 = Vector3(0.33, 0.5, 0.55)
 @export var boss_ko_skip_after: float = 0.6
+
+@export_group("Death")
+## CROSS's death (user: a momentum ragdoll, slowed a little): how slow it starts (a share of normal
+## speed, back to normal as he hits the ground), how far his run carries him (m per m/s he was
+## running, and at most), the size of his pool of blood (m), and how long he lies still before the
+## end screen opens (s).
+@export var death_slow: float = 0.5
+@export var death_carry: float = 0.16
+@export var death_carry_max: float = 2.0
+@export var death_pool: float = 1.1
+@export var death_hold: float = 0.4
+## Less clear way ahead than this (m) and he can't go over forwards: he's knocked back onto his back
+## instead, at least this far (m; further if his boots would still reach what's in front of him).
+@export var death_room: float = 1.5
+@export var death_knock_back: float = 0.5

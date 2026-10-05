@@ -3,16 +3,22 @@ extends Control
 ## The end screen's tally (user, after DOS Doom's end-of-level screen): the run's numbers count up
 ## one row at a time, a tick for each step and a thunk as each row lands; skip() (a tap) shows
 ## them all. Plain counts (user): no "of N" totals, which would give away what's left to find.
+## Each row's label types out first (user: "the text in this screen to type in"), then its number
+## counts up from 0, never too fast to see ("the numbers to count up"), or its word types out.
 
-## Each count step plays a tick; each row's last step plays a thunk.
+## Each count step plays a tick; each row's last step plays a thunk; each letter typed, a typed.
 signal ticked
 signal landed
+signal typed
 
 const ROW_H := 12.0
-## Seconds per count step, the pause after a row lands, and the most steps a row takes.
+## Seconds per count step, the pause after a row lands, and the most steps a row takes. The least
+## time a count takes (a 1 rolls 0, 1), and the seconds per letter typed.
 const STEP := 0.055
-const PAUSE := 0.22
+const PAUSE := 0.15
 const MAX_STEPS := 12
+const MIN_COUNT := 0.35
+const TYPE_STEP := 0.018
 const ALERT_NAMES := {1: "SNEAKING", 2: "CAUTION", 3: "ALERT"}
 const ALERT_COLORS := {1: UiKit.GREEN, 2: UiKit.AMBER, 3: UiKit.RED}
 
@@ -24,6 +30,11 @@ var _row := 0
 var _step := 0
 var _wait := 0.0
 var _done := false
+## Letters of this row's label typed, and of its word (a text row); whether its count has begun
+## (its 0 shows a count's step first).
+var _typed := 0
+var _word := 0
+var _counting := false
 ## Whether the first row has started (nothing shows before, while the route map draws in).
 var _started := false
 
@@ -93,7 +104,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _done:
 		return
-	_wait -= delta
+	_wait -= delta / maxf(Engine.time_scale, 0.01)  # (real time, whatever the game's speed)
 	if _wait <= 0.0 and not _started:
 		_started = true
 		queue_redraw()
@@ -102,18 +113,50 @@ func _process(delta: float) -> void:
 
 
 func _advance() -> void:
-	var steps := steps_of(rows[_row])
+	var row: Array = rows[_row]
+	var label: String = row[0]
+	queue_redraw()
+	if _typed < label.length():
+		_type(label, _typed)
+		_typed += 1
+		return
+	if String(row[1]) == "text":
+		var word := fit_value(label, String(row[2]), size.x)
+		if _word < word.length():
+			_type(word, _word)
+			_word += 1
+			return
+		_land()
+		return
+	var steps := steps_of(row)
+	if not _counting:
+		_counting = true
+		_wait += maxf(STEP, MIN_COUNT / steps) if steps > 0 else 0.0
+		return
 	_step += 1
 	if _step < steps:
 		ticked.emit()
-		_wait += STEP
+		_wait += maxf(STEP, MIN_COUNT / steps)
 	else:
-		landed.emit()
-		_row += 1
-		_step = 0
-		_wait += PAUSE
-		_done = _row >= rows.size()
-	queue_redraw()
+		_land()
+
+
+## A letter typed (the space between words is typed silently).
+func _type(text: String, i: int) -> void:
+	if text[i] != " ":
+		typed.emit()
+	_wait += TYPE_STEP
+
+
+func _land() -> void:
+	landed.emit()
+	_row += 1
+	_step = 0
+	_typed = 0
+	_word = 0
+	_counting = false
+	_wait += PAUSE
+	_done = _row >= rows.size()
 
 
 ## Show every row's final number at once (a tap on the end screen).
@@ -138,9 +181,17 @@ func _draw() -> void:
 	for i in mini(_row + 1, rows.size()):
 		var row: Array = rows[i]
 		var y := i * ROW_H + 7.0
-		draw_string(f, Vector2(0, y), row[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+		var now := i == _row
+		var label: String = row[0]
+		draw_string(f, Vector2(0, y), label.substr(0, _typed) if now else label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+		if now and _typed < label.length():
+			continue  # (its value once its label's typed)
+		if String(row[1]) == "text":
+			# A word types out from where it ends up (right-aligned), so it doesn't slide as it grows.
+			var word := fit_value(label, String(row[2]), size.x)
+			var at := size.x - f.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+			draw_string(f, Vector2(at, y), word.substr(0, _word) if now else word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, row[3])
+			continue
 		var steps := steps_of(row)
-		var text := fit_value(row[0], value_text(row, steps if i < _row else _step, steps), size.x)
-		if i == _row and _step == 0 and steps == 0:
-			continue  # a text row shows when it lands
+		var text := fit_value(label, value_text(row, steps if i < _row else _step, steps), size.x)
 		draw_string(f, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_RIGHT, size.x, 8, row[3])

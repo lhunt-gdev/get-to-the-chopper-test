@@ -32,6 +32,8 @@ func _run() -> void:
 	_test_snipers()
 	_test_boss()
 	_test_boss_ko()
+	_test_cross_death()
+	_test_end_typing()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -439,6 +441,169 @@ func _test_boss_ko() -> void:
 	_check(under_rotor, "boss KO: the cameras stay under the chopper's rotor")
 	_check(total <= 10.0, "boss KO: about 9 s in all (%.1f; LOCKED: cinematic beats short; the bots check the tap to skip)" % total)
 	boss.queue_free()
+
+
+## CROSS's death (user: "a momentum ragdoll", slowed a little): from running, standing, in the air,
+## short of a crate, blocked (and right at the barrier he hit) and sliding, he ends face down where
+## his momentum (and the way ahead) carries him, or on his back (knocked back, or slumped from a
+## slide); none of him through the ground or ever into what's in front of him, no joint flipping
+## round, lying still; his pistol on the ground, not past what's in front of him; the same at the
+## same moment; about 2.5 s to the end screen. How he falls is the game's own (SoldierRig.fall_for).
+func _test_cross_death() -> void:
+	var tt := Tuning.new()
+	# [name, lift m, pose, speed m/s, room m]
+	var cases := [["running", 0.0, "run", 11.0, 99.0], ["standing", 0.0, "stand", 0.0, 99.0], ["in the air", 0.9, "jump", 11.0, 99.0],
+			["short of a crate", 0.0, "run", 11.0, 1.8], ["blocked", 0.0, "run", 11.0, 0.9], ["at the barrier", 0.0, "run", 11.0, 0.05],
+			["sliding", 0.0, "slide", 11.0, 99.0], ["sliding, a dog ahead", 0.0, "slide", 11.0, 1.5]]
+	var all_ok := true
+	var worst := ""
+	for c in cases:
+		var r := SoldierRig.new()
+		root.add_child(r)
+		for f in 30:
+			r.animate(1.0 / 60.0, {"run": 1.0 if c[2] == "run" else 0.0, "sliding": c[2] == "slide", "airborne": c[2] == "jump", "aim": true})
+		var fall := SoldierRig.fall_for(float(c[3]), float(c[4]), c[2] == "slide", tt)
+		var back: bool = fall["back"]
+		var face_up: bool = back or fall["slide"]
+		var travel: float = fall["travel"]
+		var from := r.death_start({"travel": travel / SoldierRig.SIZE, "lift": float(c[1]) / SoldierRig.SIZE, "room": float(c[4]) / SoldierRig.SIZE,
+				"back": back, "slide": fall["slide"]})
+		var end := r.death_end()
+		var land := r.death_land()
+		var lowest := INF
+		var step := 0.0
+		var was := []
+		var lying := []
+		var moved := 0.0
+		var t := 0.0
+		var real := 0.0
+		var pistol_low := INF
+		# How far forward any of him reaches (each point's own size): as he was hit, all through his fall
+		# (never further into what's in front of him than he already was) and once he's down.
+		var start_ahead := _reach_ahead(r)
+		var ahead_fall := -INF
+		var ahead := -INF
+		while t < end:
+			t = minf(t + (1.0 / 60.0) * lerpf(tt.death_slow, 1.0, smoothstep(0.0, land, t)), end)
+			real += 1.0 / 60.0
+			r.pose_death(t, from)
+			var pts: Array = r._rag_points()
+			for p in pts:
+				lowest = minf(lowest, (p as Vector3).y * SoldierRig.SIZE)
+			ahead_fall = maxf(ahead_fall, _reach_ahead(r))
+			if t >= land:
+				ahead = maxf(ahead, _reach_ahead(r))
+			pistol_low = minf(pistol_low, r._in_rig(r.wrists[1].get_node("Pistol")).origin.y * SoldierRig.SIZE)
+			var qs := []
+			for j in r._all_joints():
+				qs.append(j.quaternion)
+			if not was.is_empty() and t > 0.02:
+				for k in qs.size():
+					step = maxf(step, (was[k] as Quaternion).angle_to(qs[k]))
+			was = qs
+			if t >= end - 0.3:
+				if lying.is_empty():
+					lying = pts
+				for k in pts.size():
+					moved = maxf(moved, (pts[k] as Vector3).distance_to(lying[k]) * SoldierRig.SIZE)
+		var face := (r._in_rig(r.chest).basis * Vector3.FORWARD).normalized().y
+		var hz := -r.hips.position.z * SoldierRig.SIZE * (-1.0 if back else 1.0)
+		var pistol := r._in_rig(r.wrists[1].get_node("Pistol")).origin * SoldierRig.SIZE
+		# Face down where his run carries him (on his back, knocked back or from a slide), and all of
+		# him, all the way down, behind what's in front of him.
+		var ok := (face > 0.8 if face_up else face < -0.8) and absf(hz - travel) < 0.25 and lowest > -0.04 and step < 1.2 and moved < 0.02 \
+				and pistol.y < 0.1 and pistol_low > -0.02 and -pistol.z <= float(c[4]) + 0.05 and ahead <= float(c[4]) + 0.05 \
+				and ahead_fall <= maxf(float(c[4]), start_ahead) + 0.05 \
+				and real + tt.death_hold < 3.2
+		# The same at the same moment.
+		r.pose_death(0.4, from)
+		var a := str(r.hips.position) + str(r.spine.quaternion) + str(r.wrists[1].quaternion)
+		r.pose_death(1.2, from)
+		r.pose_death(0.4, from)
+		ok = ok and a == str(r.hips.position) + str(r.spine.quaternion) + str(r.wrists[1].quaternion)
+		if not ok:
+			all_ok = false
+			worst += " %s(face %.2f, at %.2f of %.2f m, low %.3f, step %.2f, moved %.3f, pistol %s, ahead %.2f, %.2f in the fall from %.2f, %.1f s)" 					% [c[0], face, hz, travel, lowest, step, moved, pistol, ahead, ahead_fall, start_ahead, real]
+		r.queue_free()
+	_check(all_ok, "CROSS's death: face down where his run carries him (blocked, knocked back onto his back; mid-slide, slumped onto his back), nothing through the ground or ever into what's in front of him, no flips, still, the pistol down, about 2.5 s (user)" + worst)
+
+
+## How far forward of where he was killed any of him reaches (m; each ragdoll point with its own size).
+func _reach_ahead(r: SoldierRig) -> float:
+	var pts: Array = r._rag_points()
+	var most := -INF
+	for k in pts.size():
+		most = maxf(most, (-(pts[k] as Vector3).z + SoldierRig.RAG_RADIUS[k]) * SoldierRig.SIZE)
+	return most
+
+
+## The end screen types and counts (user: "the text in this screen to type in and the numbers to
+## count up"): every row's label types out, each number counts up from 0 (a 1 takes long enough to
+## see), each word types out, a tick a letter, the same final words as before; the title types; a
+## skip shows it all at once.
+func _test_end_typing() -> void:
+	var rows := Tally.rows_for({"time": 61.2, "spare": 9.0, "downed": 1, "hits": 2, "run_into": 15, "alarms_set_off": 1,
+			"alarms_stopped": 0, "top_alert": 2, "levels": "MAIN > BELOW", "new_areas": 3})
+	var t := Tally.new()
+	t.rows = rows
+	t.size = Vector2(222, Tally.ROW_H * rows.size())
+	root.add_child(t)
+	var typed := [0]
+	var lands := [0]
+	t.typed.connect(func() -> void: typed[0] += 1)
+	t.landed.connect(func() -> void: lands[0] += 1)
+	var letters := 0
+	for row in rows:
+		letters += String(row[0]).replace(" ", "").length()
+		if String(row[1]) == "text":
+			letters += Tally.fit_value(row[0], String(row[2]), 222.0).replace(" ", "").length()
+	# The ENEMIES DOWN row (a 1): how long from its label typed to its landing.
+	var frames := 0
+	var one_from := -1
+	var one_for := 0
+	while not t.is_done() and frames < 6000:
+		t._process(1.0 / 60.0)
+		frames += 1
+		if t._row == 2 and t._typed >= String(rows[2][0]).length() and one_from < 0:
+			one_from = frames
+		if t._row == 3 and one_from >= 0 and one_for == 0:
+			one_for = frames - one_from
+	_check(t.is_done() and typed[0] == letters and lands[0] == rows.size(),
+			"end screen: every label and word types out, a tick a letter (%d of %d), each row lands (%d)" % [typed[0], letters, lands[0]])
+	_check(one_for >= int(Tally.MIN_COUNT * 60.0) - 1, "end screen: a count of 1 rolls slowly enough to see (%d frames)" % one_for)
+	_check(frames / 60.0 < 12.0, "end screen: the whole tally types and counts in a reasonable time (%.1f s)" % (frames / 60.0))
+	t.queue_free()
+	# Skipped part way: all at once, one thunk.
+	var t2 := Tally.new()
+	t2.rows = rows
+	t2.size = Vector2(222, Tally.ROW_H * rows.size())
+	root.add_child(t2)
+	var lands2 := [0]
+	t2.landed.connect(func() -> void: lands2[0] += 1)
+	for f in 40:
+		t2._process(1.0 / 60.0)
+	var before: int = lands2[0]
+	t2.skip()
+	t2.skip()
+	_check(t2.is_done() and lands2[0] == before + 1, "end screen: a tap shows the whole tally at once (one thunk)")
+	t2.queue_free()
+	# The title and subtitle type out, in order, a tick a letter; finish() shows them at once.
+	var shown := {"a": -1, "b": -1}
+	var ty := Typer.new()
+	ty.add("KILLED IN ACTION", 0.05, func(n: int) -> void: shown["a"] = n)
+	ty.add("AGENT DOWN", 0.03, func(n: int) -> void: shown["b"] = n)
+	root.add_child(ty)
+	var ticks := [0]
+	ty.typed.connect(func() -> void: ticks[0] += 1)
+	var order_ok: bool = shown["a"] == 0 and shown["b"] == 0
+	for f in 30:
+		ty._process(1.0 / 60.0)
+		order_ok = order_ok and (shown["b"] == 0 or shown["a"] == 16)
+	var mid: bool = shown["a"] > 0 and not ty.is_done()
+	ty.finish()
+	_check(order_ok and mid and ty.is_done() and shown["a"] == 16 and shown["b"] == 10 and ticks[0] > 0,
+			"end screen: the title types out, then the subtitle; a tap shows them at once")
+	ty.queue_free()
 
 
 ## The Sniper (user design; LOCKED roster: a timed movement threat you dodge): his hit rule, a

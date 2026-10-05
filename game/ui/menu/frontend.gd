@@ -13,6 +13,8 @@ signal clicked
 ## The end screen's tally: a count step (a tick), a row landing (a thunk).
 signal tally_ticked
 signal tally_landed
+## A letter of the end screen typed out (the level plays a tick).
+signal typed
 
 enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END }
 
@@ -199,8 +201,10 @@ func _build_end() -> void:
 	var info: Array = END_TITLES.get(_end_reason, ["MISSION FAILED", String(_end_reason).to_upper(), UiKit.RED])
 	var col: Color = info[2]
 	_root.add_child(Stamp.new(col))
-	_place_wide(UiKit.label(info[0], 16, col, HORIZONTAL_ALIGNMENT_CENTER), 80)
-	_place_wide(UiKit.label(info[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), 104)
+	var title := UiKit.label(info[0], 16, col, HORIZONTAL_ALIGNMENT_CENTER)
+	var sub := UiKit.label(info[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER)
+	_place_wide(title, 80)
+	_place_wide(sub, 104)
 	# The debrief (the LOCKED post-run route record): the route map, then the tally under it.
 	var w := _root.get_viewport_rect().size.x
 	var panel := DebriefPanel.new()
@@ -208,6 +212,8 @@ func _build_end() -> void:
 	_root.add_child(panel)
 	var x := panel.rect.position.x + 10.0
 	var inner := panel.rect.size.x - 20.0
+	var typer := Typer.new()
+	var area_typer := Typer.new()
 	var map: RouteMap = null
 	var graph = _end_stats.get("graph")
 	if graph is RouteGraph:
@@ -228,17 +234,30 @@ func _build_end() -> void:
 			var where := UiKit.label("▶ " + graph.display_name(run[-1]), 8, col)
 			where.position = Vector2(x, 213)
 			_root.add_child(where)
+			area_typer.add(where.text, 0.035, Typer.label_setter(where))
+	# The title, subtitle and DEBRIEF type out (user: MGS-style, a tick a letter); the area's name as
+	# the route map's line reaches it.
+	typer.add(info[0], 0.05, Typer.label_setter(title))
+	typer.add(info[1], 0.03, Typer.label_setter(sub))
+	typer.add("DEBRIEF", 0.04, func(n: int) -> void: panel.shown = n)
+	area_typer.delay = RouteMap.DRAW_TIME if map != null else 0.0
+	for t in [typer, area_typer]:
+		t.typed.connect(func() -> void: typed.emit())
+		_root.add_child(t)
 	var tally := Tally.new()
 	tally.rows = Tally.rows_for(_end_stats)
-	tally.delay = RouteMap.DRAW_TIME + 0.3 if map != null else 0.3
+	tally.delay = maxf(RouteMap.DRAW_TIME + 0.3 if map != null else 0.3, typer.length() + 0.1)
 	tally.position = Vector2(x, 236)
 	tally.size = Vector2(inner, Tally.ROW_H * tally.rows.size())
 	tally.ticked.connect(func() -> void: tally_ticked.emit())
 	tally.landed.connect(func() -> void: tally_landed.emit())
+	tally.typed.connect(func() -> void: typed.emit())
 	_root.add_child(tally)
 	# A tap anywhere but the buttons shows it all at once.
 	var skip := SkipArea.new()
 	skip.pressed.connect(func() -> void:
+		typer.finish()
+		area_typer.finish()
 		if map != null:
 			map.finish()
 		tally.skip())
@@ -411,6 +430,11 @@ class Stamp extends Control:
 ## are their own controls, laid over it: RouteMap and Tally).
 class DebriefPanel extends Control:
 	var rect := Rect2()
+	## Letters of its header shown (it types out).
+	var shown := 7:
+		set(n):
+			shown = n
+			queue_redraw()
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -419,7 +443,7 @@ class DebriefPanel extends Control:
 	func _draw() -> void:
 		UiKit.panel(self, rect, UiKit.TEAL, UiKit.PANEL_SOLID, 8.0)
 		var x := rect.position.x + 10.0
-		draw_string(UiKit.font(), Vector2(x, rect.position.y + 16), "DEBRIEF", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
+		draw_string(UiKit.font(), Vector2(x, rect.position.y + 16), "DEBRIEF".substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
 		draw_rect(Rect2(x, rect.position.y + 96, rect.size.x - 20.0, 1), Color(UiKit.TEAL_DIM, 0.8))
 
 

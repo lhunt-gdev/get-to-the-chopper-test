@@ -87,42 +87,6 @@ const DEATH_LIE := 0.22
 const GUN_LAND := 0.6
 ## How long his death runs on its own clock (s; the blood has spread by then).
 const DEATH_END := 2.6
-## Like a ragdoll (user: "he's very stiff can't you make it a little more human/rag doll looking?"):
-## his body's path is set (above), but from the hits his muscles go slack and the rest of him moves
-## under its own weight, worked out at this many steps a second of his death's clock. Gravity (this
-## rig's units: 9.8 m/s² at 1.35 m to the unit); the share of a limb's speed it keeps each step in
-## the air (and once he's down, settling), and of its slide along the deck.
-const RAG_HZ := 120.0
-const RAG_GRAVITY := 7.26
-const RAG_DRAG := 0.996
-const RAG_DRAG_DOWN := 0.85
-const RAG_DRAG_STILL := 0.5
-const RAG_GRIP := 0.55
-## How much of the way to a pose his muscles still pull a limb each step: slack in the air, all but
-## limp lying (just enough to leave him spread out); his head a little firmer.
-const RAG_PULL_AIR := 0.025
-const RAG_PULL_DOWN := 0.004
-const RAG_PULL_HEAD := 0.07
-const RAG_PULL_HEAD_DOWN := 0.01
-## His waist: how stiff and how damped (his upper body lags his hips, swings past, settles), and the
-## most it lags (rad: a real waist turns about this far, no further). His neck's most (from his chest).
-const RAG_WAIST_K := 90.0
-const RAG_WAIST_C := 7.0
-const RAG_WAIST_MAX := 0.6
-const RAG_NECK_MAX := 0.75
-## The ragdoll's tips (their joints' own frames): his fingertips (this many times his hand's middle
-## out from the wrist), the toe of each boot from the ankle (on the deck as he stands), the middle of
-## his skull from the head joint.
-const RAG_FINGERS := 1.8
-const RAG_TOE := Vector3(0.0, -0.06, -0.21)
-const RAG_SKULL := Vector3(0.0, 0.12, -0.03)
-## How far each ragdoll point keeps off the deck (rig units: the limb's thickness there): elbow,
-## wrist, fingertips (each arm), knee, ankle, toe (each leg), skull. And the knock each hit gives his
-## arms and head (rig units/s; +z away from you).
-const RAG_RADIUS: Array[float] = [0.08, 0.07, 0.03, 0.08, 0.07, 0.03, 0.12, 0.09, 0.03, 0.12, 0.09, 0.03, 0.15]
-const RAG_KICK := Vector3(0.6, 0.8, 1.6)
-## How much of the way to its new direction a limb's steering moves each step (see _rag_smooth).
-const RAG_EASE := 0.3
 const GUN_YAW := -0.12
 const GUN_REST := Transform3D(Basis(Vector3.UP, GUN_YAW) * Basis(Vector3.FORWARD, PI / 2.0), Vector3(0.26, 0.1, -0.4))
 ## Which way the elbows go (chest axes; right, left): at the ready, down by his sides; at a run, down
@@ -139,10 +103,6 @@ const KICK_LIFT := 0.14
 const KICK_BACK := 0.035
 ## Shot (not down): a jolt back, this long.
 const FLINCH_TIME := 0.22
-## How much of a hand's turn about the forearm the forearm takes (turned at the elbow), the rest at
-## the wrist, so no one joint twists the skin too far (holding the handguard palm up, the left hand
-## turns over ~115 degrees): as CROSS's hands-up shares it.
-const FOREARM_SHARE := 0.5
 ## Down: how long he takes to fall, face first, and how far into the fall he's left how he was.
 const FALL_TIME := 0.55
 const FALL_BLEND := 0.3
@@ -187,16 +147,6 @@ var _eject: Node3D
 ## Braced (the boss's stance), and his breath.
 var _brace := false
 var _breath := 0.0
-## Where each ankle joint is standing at rest (this rig's space): the feet are planted at its height.
-var _ankle_rest := {}
-## His ragdoll (death_start sets it up, _rag_step moves it on): the points it moves (his elbows,
-## wrists, knees, ankles and head, left then right: this rig's space) and where they were a step
-## before, his bones' lengths, his waist's turn and spin, how many steps it has done, and what each
-## step made of him (his hips' place and every joint's turn: what the replays show).
-var _rag := {}
-## His ragdoll's hands' last turns about their forearms (by side; only while it's worked out).
-var _twist_was := {}
-var _twist_on := false
 ## The barrels' turn and spin when he was killed (they spin down from there as the gun falls).
 var _barrels_from := 0.0
 var _spin_from := 0.0
@@ -210,21 +160,11 @@ func _init(rifle_kind: GuardRifle.Kind = GuardRifle.Kind.CARBINE, model: PackedS
 	kind = rifle_kind
 	armed = carries_rifle
 	_body_joints = [hips, spine, chest, neck, head, leg_hips[-1], leg_hips[1], knees[-1], knees[1], ankles[-1], ankles[1]]
-	for side in [-1, 1]:
-		_ankle_rest[side] = _in_rig(ankles[side]).origin
 	if not armed:  # his free arms blend too (into a slide, a fall), the reach's collarbone and hand too
 		_body_joints.append_array([shoulders[-1], shoulders[1], elbows[-1], elbows[1], clavicles[-1], clavicles[1], wrists[-1], wrists[1]])
 	if armed:
 		_build_rifle()
 	animate(0.0, {})
-
-
-## Every joint in him (the hips first), for the boss's death, which poses them all.
-func _all_joints() -> Array[Node3D]:
-	var out: Array[Node3D] = [hips, spine, chest, neck, head]
-	for side in [-1, 1]:
-		out.append_array([clavicles[side], shoulders[side], elbows[side], wrists[side], leg_hips[side], knees[side], ankles[side]])
-	return out
 
 
 ## A pose given before he's in the scene doesn't reach his skeleton: give it again now.
@@ -380,355 +320,38 @@ func fall() -> void:
 		pose_to({})
 
 
-## The boss is killed: how he stands now (his hips' place and every joint's turn), and his minigun
-## (this rig's space), for pose_death() to start from, every time it's shown.
-func death_start() -> Dictionary:
-	var joints: Array[Quaternion] = []
-	for j in _all_joints():
-		joints.append(j.quaternion)
+## The boss's death: his own timings (the DEATH_ constants) and gravity (9.8 m/s² at 1.35 m to the unit).
+func _death_plan() -> Dictionary:
+	return {"hits": DEATH_HITS, "let_go": DEATH_LET_GO, "lift": DEATH_LIFT, "land": DEATH_LAND, "end": DEATH_END, "gravity": 7.26}
+
+
+## The boss is killed: his barrels' turn and spin (they spin down as the gun falls), and no more
+## holds or falls of his own (pose_death poses him from now on).
+func death_start(opts: Dictionary = {}) -> Dictionary:
 	_barrels_from = _barrels.rotation.z if _barrels != null else 0.0
 	_spin_from = _spin
-	set_process(false)  # (posed from now on by pose_death, not by a hold or a fall)
+	set_process(false)
+	_flinch = 0.0
 	if _flash_left > 0.0:
 		_flash(_flash_left)  # (no red hit flash left on him)
-	_flinch = 0.0
-	_kick = 0.0
-	var from := {"hips": hips.position, "joints": joints, "gun": _in_rig(rifle) if rifle != null else Transform3D.IDENTITY}
-	var pts := _rag_points()
-	var roots := _rag_roots()
-	_rag = {"from": from, "pos": pts.duplicate(), "prev": pts.duplicate(), "n": 0, "samples": [], "bones": _rag_bones(pts, roots),
-			"smooth": [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO], "twist": {},
-			"waist_q": Quaternion(_in_rig(chest).basis.orthonormalized()), "waist_w": Vector3.ZERO}
-	return from
+	return super(opts)
 
 
-## The boss's death at `t` (s on its own clock), from `from` (death_start()): the same t, the
-## same pose, so it can be shown again from any angle. The last hits jolt him back; his hands open
-## and the minigun falls (barrels spinning down), hits the deck and bounces onto its side; he's
-## blasted up and back off his feet, going over backwards and twisting round twice, his limbs
-## slack and swinging; he slams down on his back, his limbs flop onto the deck, and he lies still,
-## face up. (Worked out as a ragdoll a step at a time as it's first needed, and a little ahead each
-## time it's shown, so the replays are ready.)
 func pose_death(t: float, from: Dictionary) -> void:
 	_still = false
-	if _rag.is_empty():
-		return
-	var last := int(ceil(DEATH_END * RAG_HZ))
-	var need := mini(int(ceil(clampf(t, 0.0, DEATH_END) * RAG_HZ)) + 1, last)
-	while int(_rag["n"]) <= need:
-		_rag_step()
-	for k in 9:  # (all of it in about half a second of the live shot: before a skip can come)
-		if int(_rag["n"]) <= last:
-			_rag_step()
-	var samples: Array = _rag["samples"]
-	var x := clampf(t * RAG_HZ, 0.0, float(samples.size() - 1))
-	var i := int(x)
-	var f := x - i
-	var a: Array = samples[i]
-	var b: Array = samples[mini(i + 1, samples.size() - 1)]
-	_reset()
-	hips.position = (a[0] as Vector3).lerp(b[0], f)
-	var joints: Array[Node3D] = _all_joints()
-	for k in joints.size():
-		joints[k].quaternion = (a[k + 1] as Quaternion).slerp(b[k + 1], f)
-	_death_gun(t, from["gun"])
-	_apply()
+	super(t, from)
 
 
-## The pose his body's path and his muscles would give him at `t`: the set path, and out of his
-## stance, not in one jump (his upper body at once, his hips and legs as he leaves the deck: until
-## then his feet stay where they were).
-func _death_target(t: float, from: Dictionary) -> void:
-	_reset()
-	_death_body(t, from["hips"])
-	var up := smoothstep(0.0, 0.12, t)
-	var low := smoothstep(DEATH_LIFT - 0.02, DEATH_LIFT + 0.12, t)
-	var joints: Array[Node3D] = _all_joints()
-	var was: Array = from["joints"]
-	hips.position = (from["hips"] as Vector3).lerp(hips.position, low)
-	for i in joints.size():
-		var j := joints[i]
-		var w := low if (j == hips or j in leg_hips.values() or j in knees.values() or j in ankles.values()) else up
-		if w < 1.0:
-			j.quaternion = (was[i] as Quaternion).slerp(j.quaternion, w)
+func _death_prop_from() -> Transform3D:
+	return _in_rig(rifle) if rifle != null else Transform3D.IDENTITY
 
 
-## The ragdoll's points in the pose the joints hold now (this rig's space), each limb from its root
-## out: for each arm (left, then right) the elbow, the wrist and the fingertips; for each leg the
-## knee, the ankle and the toe; then the middle of his skull.
-func _rag_points() -> Array:
-	var out := []
-	for side in [-1, 1]:
-		var w := _in_rig(wrists[side])
-		out.append_array([_in_rig(elbows[side]).origin, w.origin, w * ((_hand_mid[side] as Vector3) * RAG_FINGERS)])
-	for side in [-1, 1]:
-		var a := _in_rig(ankles[side])
-		out.append_array([_in_rig(knees[side]).origin, a.origin, a * RAG_TOE])
-	out.append(_in_rig(head) * RAG_SKULL)
-	return out
+func _death_prop(t: float, from: Dictionary) -> void:
+	_death_gun(t, from["prop"])
 
 
-## What his limbs and head hang from (this rig's space): his shoulders, his hips' leg joints, his neck.
-func _rag_roots() -> Array:
-	return [_in_rig(shoulders[-1]).origin, _in_rig(shoulders[1]).origin, _in_rig(leg_hips[-1]).origin, _in_rig(leg_hips[1]).origin,
-			_in_rig(neck).origin]
-
-
-## The ragdoll's bones (point, point, length; a point -1 is the limb's root, -2 the second root)
-## from its points and roots now: each limb root to its middle joint, the middle to the end, the end
-## to the tip, and the middle to the tip (which holds the wrist or ankle at its angle); his neck to
-## his skull.
-static func _rag_bones(pts: Array, roots: Array) -> Array:
-	var out := []
-	for limb in 4:
-		var k := limb * 3
-		var root: Vector3 = roots[limb]
-		out.append([-1 - limb, k, root.distance_to(pts[k])])
-		out.append([k, k + 1, (pts[k] as Vector3).distance_to(pts[k + 1])])
-		out.append([k + 1, k + 2, (pts[k + 1] as Vector3).distance_to(pts[k + 2])])
-		out.append([k, k + 2, (pts[k] as Vector3).distance_to(pts[k + 2])])
-	out.append([-5, 12, (roots[4] as Vector3).distance_to(pts[12])])
-	return out
-
-
-## One step of his ragdoll (1/RAG_HZ s of his death): his body along its path, his waist bending
-## after it (within limits), his slack limbs and head swinging under their own weight (each still
-## pulled a little toward a pose), his elbows and knees bending only the way they bend, bones kept
-## their lengths, nothing through the deck, and once he's down, settling still; then the step's
-## pose kept.
-func _rag_step() -> void:
-	var dt := 1.0 / RAG_HZ
-	var n: int = _rag["n"]
-	var t := n * dt
-	_death_target(t, _rag["from"])
-	_rag_waist(t, dt)
-	var target := _rag_points()
-	var roots := _rag_roots()
-	var tgt_hands := [_in_rig(wrists[-1]).basis.orthonormalized(), _in_rig(wrists[1]).basis.orthonormalized(),
-			_in_rig(ankles[-1]).basis.orthonormalized(), _in_rig(ankles[1]).basis.orthonormalized()]
-	# Which way each elbow and knee bends in the pose (square to its limb): the way it must bend.
-	var bends := []
-	for limb in 4:
-		var k := limb * 3
-		bends.append(_rag_bend(roots[limb], target[k], target[k + 1], Vector3.FORWARD if limb >= 2 else Vector3.DOWN))
-	var pos: Array = _rag["pos"]
-	var prev: Array = _rag["prev"]
-	var down := smoothstep(DEATH_LAND, DEATH_LAND + 0.25, t)
-	var still := smoothstep(DEATH_LAND + 0.4, DEATH_LAND + 0.9, t)
-	var drag := lerpf(lerpf(RAG_DRAG, RAG_DRAG_DOWN, down), RAG_DRAG_STILL, still)
-	var fall := RAG_GRAVITY * dt * dt * (1.0 - still)  # (lying, he stays where he fell: no slow sag)
-	for i in pos.size():
-		var p: Vector3 = pos[i]
-		var v: Vector3 = (p - (prev[i] as Vector3)) * drag
-		prev[i] = p
-		pos[i] = (p + v + Vector3(0.0, -fall, 0.0)).lerp(target[i], _rag_pull(t, i))
-	# Each hit knocks his arms and head back (away from you) and out.
-	for h in DEATH_HITS:
-		if t >= h and t < h + dt:
-			for i in [0, 1, 2, 3, 4, 5, 12]:
-				var side := -1.0 if i < 3 else 1.0
-				var kick := Vector3(side * RAG_KICK.x, RAG_KICK.y, RAG_KICK.z) if i != 12 else Vector3(0.0, RAG_KICK.y, RAG_KICK.z)
-				prev[i] = (prev[i] as Vector3) - kick * dt
-	var bones: Array = _rag["bones"]
-	for it in 4:
-		for bone in bones:
-			var a: int = bone[0]
-			_rag_stick(pos, roots[-1 - a] if a < 0 else Vector3.ZERO, a, bone[1], bone[2])
-		for limb in 4:
-			_rag_hinge(pos, prev, roots[limb], limb * 3, bends[limb], (target[limb * 3] as Vector3) - (roots[limb] as Vector3),
-					(target[limb * 3 + 1] as Vector3) - (roots[limb] as Vector3))
-		for i in pos.size():
-			var p: Vector3 = pos[i]
-			var r: float = RAG_RADIUS[i]
-			if p.y < r:
-				# On the deck: a little bounce, and its slide mostly gripped.
-				var was: Vector3 = prev[i]
-				var vy := p.y - was.y
-				p.y = r
-				prev[i] = Vector3(p.x - (p.x - was.x) * RAG_GRIP, r + vy * 0.25, p.z - (p.z - was.z) * RAG_GRIP)
-				pos[i] = p
-	_twist_was = _rag["twist"]
-	_twist_on = true
-	_rag_pose(pos, roots, target, bends, tgt_hands)
-	_twist_on = false
-	var sample := [hips.position]
-	for j in _all_joints():
-		sample.append(j.quaternion)
-	(_rag["samples"] as Array).append(sample)
-	_rag["n"] = n + 1
-
-
-## How much of the way to the pose a ragdoll point is pulled this step: all of it while he's still
-## alive (his arms and head till the first hits are done, his legs till he leaves the deck), then
-## slack, then all but limp once he's down.
-func _rag_pull(t: float, i: int) -> float:
-	var leg := i >= 6 and i < 12
-	var alive_until := DEATH_LIFT if leg else 0.04
-	var slack_by := DEATH_LIFT + 0.08 if leg else 0.16
-	var air := RAG_PULL_HEAD if i == 12 else RAG_PULL_AIR
-	var limp := RAG_PULL_HEAD_DOWN if i == 12 else RAG_PULL_DOWN
-	var p := lerpf(1.0, air, smoothstep(alive_until, slack_by, t))
-	p = lerpf(p, limp, smoothstep(DEATH_LAND, DEATH_LAND + 0.3, t))
-	return p * (1.0 - smoothstep(DEATH_LAND + 0.4, DEATH_LAND + 0.9, t))  # (then none: he lies where he fell)
-
-
-## A bone keeps its length: `b` (a point) to `a` (a point, or the fixed `root` when a < 0).
-static func _rag_stick(pos: Array, root: Vector3, a: int, b: int, length: float) -> void:
-	var pa: Vector3 = root if a < 0 else pos[a]
-	var pb: Vector3 = pos[b]
-	var d := pb - pa
-	var l := d.length()
-	if l < 0.0001:
-		return
-	var off := d * ((l - length) / l)
-	if a < 0:
-		pos[b] = pb - off
-	else:
-		pos[a] = pa + off * 0.5
-		pos[b] = pb - off * 0.5
-
-
-## An elbow or knee (point `k`, between `root` and point k + 1) bends only the way it bends: `bend`
-## in the pose (whose limb ran root to `line_t`'s end), turned with the limb as it is now; pushed
-## out to at least a little bend that way (moved with its last place, so it gains no speed), and
-## never folded right up (the end kept out from the root).
-static func _rag_hinge(pos: Array, prev: Array, root: Vector3, k: int, bend: Vector3, mid_t: Vector3, end_t: Vector3) -> void:
-	var end: Vector3 = pos[k + 1]
-	var line := end - root
-	if line.length() < 0.0001 or end_t.length() < 0.0001:
-		return
-	var reach := (mid_t.length() + (end_t - mid_t).length())
-	if line.length() < 0.4 * reach:
-		pos[k + 1] = root + line.normalized() * 0.4 * reach
-		line = (pos[k + 1] as Vector3) - root
-	var dir := line.normalized()
-	var turn := Quaternion(end_t.normalized(), dir) if end_t.normalized().dot(dir) > -0.9999 else Quaternion.IDENTITY
-	var anat := (Basis(turn) * bend)
-	anat = (anat - dir * anat.dot(dir)).normalized()
-	var mid: Vector3 = pos[k]
-	var off := (mid - root) - dir * (mid - root).dot(dir)
-	var along := off.dot(anat)
-	if along < 0.03:
-		var push := anat * (0.03 - along)
-		pos[k] = mid + push
-		prev[k] = (prev[k] as Vector3) + push
-
-
-## His waist: his upper body's turn lags the pose's on a spring (stiff, a little bouncy in the air,
-## settling once he's down), never more than RAG_WAIST_MAX behind (no wringing), put into his
-## spine so his chest and all above it follow.
-func _rag_waist(t: float, dt: float) -> void:
-	var want := Quaternion(_in_rig(chest).basis.orthonormalized())
-	if t < DEATH_LET_GO:
-		_rag["waist_q"] = want
-		_rag["waist_w"] = Vector3.ZERO
-		return
-	var q: Quaternion = _rag["waist_q"]
-	var w: Vector3 = _rag["waist_w"]
-	var err := want * q.inverse()
-	if err.w < 0.0:
-		err = -err
-	var e := Vector3.ZERO
-	if err.get_angle() > 0.0001:
-		e = err.get_axis().normalized() * err.get_angle()
-	var c := RAG_WAIST_C if t < DEATH_LAND else 2.0 * sqrt(RAG_WAIST_K)
-	w += (e * RAG_WAIST_K - w * c) * dt
-	if w.length() > 0.00001:
-		q = (Quaternion(w.normalized(), w.length() * dt) * q).normalized()
-	var lag := q * want.inverse()
-	if lag.w < 0.0:
-		lag = -lag
-	if lag.get_angle() > RAG_WAIST_MAX:
-		q = (Quaternion(lag.get_axis().normalized(), RAG_WAIST_MAX) * want).normalized()
-	_rag["waist_q"] = q
-	_rag["waist_w"] = w
-	var turn := Basis(q * want.inverse())
-	spine.basis = _in_rig(spine.get_parent() as Node3D).basis.inverse() * (turn * _in_rig(spine).basis)
-
-
-## The ragdoll's points onto his joints: each wrist to its point, the elbow bent toward its point
-## (the way it bends), the hand as in the pose, carried round with the forearm (and lifted off the
-## deck); each ankle to its point, the knee likewise, the foot aimed at its toe; his head
-## turned toward its point (no further than a neck turns).
-func _rag_pose(pos: Array, roots: Array, target: Array, bends: Array, tgt_ends: Array) -> void:
-	var tgt_hands := tgt_ends
-	for side in [-1, 1]:
-		var limb := 0 if side < 0 else 1
-		var k := limb * 3
-		var sh: Vector3 = roots[limb]
-		var el: Vector3 = pos[k]
-		var wr: Vector3 = pos[k + 1]
-		# The hand as it is in the pose, against its forearm and upper arm, carried with them as they are now.
-		var was := _frame((target[k + 1] as Vector3) - (target[k] as Vector3), sh - (target[k] as Vector3))
-		var hand: Basis = _frame(wr - el, sh - el) * was.inverse() * (tgt_hands[limb] as Basis)
-		# ...lifted at the wrist, only as far as it must be, if its fingertips would be in the deck.
-		var fingers := hand * ((_hand_mid[side] as Vector3) * RAG_FINGERS)
-		var deck := RAG_RADIUS[k + 2] - wr.y
-		if fingers.y < deck and Vector2(fingers.x, fingers.z).length() > 0.001:
-			var flat := Vector2(fingers.x, fingers.z).normalized() * sqrt(maxf(0.0, fingers.length_squared() - deck * deck))
-			hand = Basis(_rag_arc(fingers, Vector3(flat.x, deck, flat.y))) * hand
-		var pole := (_rag_bend(sh, el, wr, bends[limb]) + (bends[limb] as Vector3) * 0.05).normalized()
-		_reach(side, Transform3D(hand, wr), _rag_smooth(limb, pole, _in_rig(chest).basis.orthonormalized()))
-	for side in [-1, 1]:
-		var limb := 2 if side < 0 else 3
-		var k := limb * 3
-		var hp: Vector3 = roots[limb]
-		var kn: Vector3 = pos[k]
-		var an: Vector3 = pos[k + 1]
-		var knee_dir := (_rag_bend(hp, kn, an, bends[limb]) + (bends[limb] as Vector3) * 0.05).normalized()
-		_plant(side, an, _rag_smooth(limb, knee_dir, _in_rig(hips).basis.orthonormalized()), 0.0)
-		# The foot as it is in the pose, against its shin and toe, set on the shin and toe as they are now.
-		var shin := an - _in_rig(knees[side]).origin
-		var was := _frame((target[k + 1] as Vector3) - (target[k] as Vector3), (target[k + 2] as Vector3) - (target[k + 1] as Vector3))
-		var foot: Basis = _frame(shin, (pos[k + 2] as Vector3) - an) * was.inverse() * (tgt_hands[limb] as Basis)
-		ankles[side].basis = _in_rig(knees[side]).basis.inverse() * foot
-	var nk: Vector3 = roots[4]
-	var want: Vector3 = (pos[12] as Vector3) - nk
-	var up := _in_rig(chest).basis.y.normalized()
-	if want.length() > 0.01:
-		var wd := want.normalized()
-		var bent := up.angle_to(wd)
-		if bent > RAG_NECK_MAX:
-			wd = up.slerp(wd, RAG_NECK_MAX / bent)
-		var now := _in_rig(head) * RAG_SKULL - nk
-		var q := _rag_arc(now, wd)
-		neck.basis = _in_rig(neck.get_parent() as Node3D).basis.inverse() * (Basis(q) * _in_rig(neck).basis)
-
-
-## A direction the ragdoll steers a limb by (an elbow's or knee's bend), eased over a few steps in
-## the frame of what it hangs from (`frame`: his chest or hips), so a limb never
-## rolls round in one step but still turns with him as he spins.
-func _rag_smooth(i: int, dir: Vector3, frame: Basis) -> Vector3:
-	if dir.length() < 0.0001:
-		return dir
-	var local := (frame.inverse() * dir).normalized()
-	var smooth: Array = _rag["smooth"]
-	var was: Vector3 = smooth[i]
-	if was != Vector3.ZERO and was.dot(local) > -0.999:
-		local = was.slerp(local, RAG_EASE).normalized()
-	smooth[i] = local
-	return frame * local
-
-
-## The turn taking direction `from` onto `to` (none if either is too short, or they're opposite).
-static func _rag_arc(from: Vector3, to: Vector3) -> Quaternion:
-	if from.length() < 0.0001 or to.length() < 0.0001:
-		return Quaternion.IDENTITY
-	var a := from.normalized()
-	var b := to.normalized()
-	if a.dot(b) < -0.9999:
-		return Quaternion.IDENTITY
-	return Quaternion(a, b)
-
-
-## Which way a joint between `a` and `c` is bent out (toward `b`, square to a-c), or `fallback`
-## if it's near straight.
-static func _rag_bend(a: Vector3, b: Vector3, c: Vector3, fallback: Vector3) -> Vector3:
-	var line := (c - a).normalized()
-	var off := (b - a) - line * (b - a).dot(line)
-	return off.normalized() if off.length() > 0.01 else fallback
-
-
+## The boss's body through his death (the path his ragdoll follows): jolted by the hits, blasted
+## up and back, over backwards and twisting round twice, landing face up.
 func _death_body(t: float, hips_from: Vector3) -> void:
 	var u := clampf((t - DEATH_LIFT) / (DEATH_LAND - DEATH_LIFT), 0.0, 1.0)  # through the air
 	var e := u * u * (3.0 - 2.0 * u)
@@ -814,11 +437,6 @@ func _death_gun(t: float, held: Transform3D) -> void:
 	if _barrels != null:
 		_barrels.rotation.z = _barrels_from + _spin_from * SPIN_RATE * (1.0 - exp(-1.4 * t)) / 1.4
 	_muzzle_flash.visible = false
-
-
-## His death's ragdoll is all worked out (the rest of it can be shown at once).
-func death_baked() -> bool:
-	return not _rag.is_empty() and int(_rag["n"]) > int(ceil(DEATH_END * RAG_HZ))
 
 
 func is_down() -> bool:
@@ -996,36 +614,6 @@ func _brace_toe(side: int) -> float:
 	return BRACE_TOES[side]
 
 
-## One leg planted: `side`'s ankle joint to `at` (this rig's space; as near as the leg reaches),
-## the knee toward `knee` (a direction), the foot flat on the floor and turned out by `toe` (+ to
-## his left). As _reach_from_shoulder does an arm.
-func _plant(side: int, at: Vector3, knee: Vector3, toe: float) -> void:
-	var lh: Node3D = leg_hips[side]
-	var kn: Node3D = knees[side]
-	var an: Node3D = ankles[side]
-	var leg_in: Node3D = kn.get_parent()
-	var pk := kn.position  # hip to knee, in the leg-in pivot's frame
-	var pa := an.position  # knee to ankle, in the knee's frame
-	var parent := _in_rig(lh.get_parent() as Node3D)
-	var to := parent.basis.inverse() * (at - parent * lh.position)
-	# Never quite straight (so the knee always has a way to point).
-	to = to.limit_length((pk.length() + pa.length()) * 0.995)
-	# The knee (a hinge about its x; -x folds the shin back): bent so hip to ankle is as long as hip
-	# to `at` (as the elbow is, folding the other way).
-	var ca := pk.y * pa.y + pk.z * pa.z
-	var sa := pk.z * pa.y - pk.y * pa.z
-	var r := sqrt(ca * ca + sa * sa)
-	var phi := atan2(sa, ca)
-	var k := (to.length_squared() - pk.length_squared() - pa.length_squared()) * 0.5 - pk.x * pa.x
-	kn.basis = Basis(Vector3.RIGHT, phi - acos(clampf(k / maxf(r, 0.0001), -1.0, 1.0)))
-	# The hip: the leg (hip to ankle) onto `at`, the knee toward `knee`.
-	var reach := leg_in.basis * (pk + kn.basis * pa)
-	lh.basis = _frame(to, parent.basis.inverse() * knee) * _frame(reach, leg_in.basis * pk).inverse()
-	# The foot: flat, turned out (its sole's level at rest, under the flat-foot pivot).
-	var flat := an.get_node(String(an.name) + "Flat") as Node3D
-	an.basis = _in_rig(kn).basis.inverse() * Basis(Vector3.UP, toe) * flat.basis.inverse()
-
-
 ## Lying on his front in a sniper's nest (head toward -Z), propped on both elbows, looking ahead
 ## along the rifle; legs a little apart.
 func _pose_prone() -> void:
@@ -1191,59 +779,6 @@ func _left_on(r: Transform3D) -> Transform3D:
 	var hold := GuardRifle.support_hand(kind)
 	var hand := _frame(r.basis * hold[0], r.basis * hold[1]) * _frame(_hand_run[-1], _hand_palm[-1]).inverse()
 	return Transform3D(hand, r * GuardRifle.support(kind) - hand * (_hand_mid[-1] as Vector3))
-
-
-## One arm's two-joint reach: `side`'s wrist joint to `target.origin` (this rig's space; as near as
-## the arm reaches), the elbow toward `pole`, the hand turned to `target.basis`. With the arm raised
-## high, the collarbone lifts too (the shrug, as SoldierRig does it), and the arm reaches again from
-## there.
-func _reach(side: int, target: Transform3D, pole: Vector3) -> void:
-	clavicles[side].basis = Basis.IDENTITY
-	_reach_from_shoulder(side, target, pole)
-	var arm_in: Node3D = elbows[side].get_parent()
-	var arm: Vector3 = shoulders[side].basis * (arm_in.basis * (elbows[side] as Node3D).position)
-	var lift := clampf((acos(clampf(-arm.normalized().y, -1.0, 1.0)) - SHRUG_FROM) * SHRUG, 0.0, SHRUG_MAX)
-	if lift > 0.0:
-		clavicles[side].basis = Basis(Vector3.BACK, side * lift)
-		_reach_from_shoulder(side, target, pole)
-
-
-func _reach_from_shoulder(side: int, target: Transform3D, pole: Vector3) -> void:
-	var sh: Node3D = shoulders[side]
-	var el: Node3D = elbows[side]
-	var arm_in: Node3D = el.get_parent()
-	var pe := el.position  # shoulder to elbow, in the arm-in pivot's frame
-	var pw := (wrists[side] as Node3D).position  # elbow to wrist, in the elbow's frame
-	var parent := _in_rig(sh.get_parent() as Node3D)
-	var to := parent.basis.inverse() * (target.origin - parent * sh.position)
-	to = to.limit_length((pe.length() + pw.length()) * 0.995)  # (never quite straight: the elbow keeps a way to point)
-	# The elbow (a hinge about its x): bent so shoulder to wrist is as long as shoulder to target.
-	# |pe + turn(pw)|^2 = |pe|^2 + |pw|^2 + 2 pe.turn(pw), and pe.turn(pw) = pe.x pw.x + r cos(bend - phi).
-	var ca := pe.y * pw.y + pe.z * pw.z
-	var sa := pe.z * pw.y - pe.y * pw.z
-	var r := sqrt(ca * ca + sa * sa)
-	var phi := atan2(sa, ca)  # the straightest it goes
-	var k := (to.length_squared() - pe.length_squared() - pw.length_squared()) * 0.5 - pe.x * pw.x
-	var bend := phi + acos(clampf(k / maxf(r, 0.0001), -1.0, 1.0))  # the forward-bending way
-	el.basis = Basis(Vector3.RIGHT, bend)
-	# The shoulder: the arm (shoulder to wrist) onto the target, the elbow toward the pole.
-	var reach := arm_in.basis * (pe + el.basis * pw)
-	var elbow := arm_in.basis * pe
-	sh.basis = _frame(to, parent.basis.inverse() * pole) * _frame(reach, elbow).inverse()
-	# The hand, its turn about the forearm shared with the forearm (a turn about the forearm's own
-	# line doesn't move the wrist).
-	var w := wrists[side] as Node3D
-	w.basis = _in_rig(el).basis.inverse() * target.basis
-	var fore := pw.normalized()
-	var q := w.basis.get_rotation_quaternion()
-	var twist := wrapf(2.0 * atan2(Vector3(q.x, q.y, q.z).dot(fore), q.w), -PI, PI)
-	if _twist_on:
-		# (his ragdoll: carried on from its last step, so it never flips round as it passes half a turn)
-		if _twist_was.has(side):
-			twist = float(_twist_was[side]) + wrapf(twist - float(_twist_was[side]), -PI, PI)
-		_twist_was[side] = twist
-	el.basis = el.basis * Basis(fore, twist * FOREARM_SHARE)
-	w.basis = _in_rig(el).basis.inverse() * target.basis
 
 
 ## The muzzle flash, while the kick's still fresh (as CROSS's, without its lamp).

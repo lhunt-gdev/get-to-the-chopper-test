@@ -415,6 +415,10 @@ func _ready() -> void:
 	_runner.capture_reached.connect(_on_capture_reached)
 	_runner.node_entered.connect(_on_node_entered)
 	GameState.run_ended.connect(_on_run_ended)
+	_player.death_beat.connect(func(beat: String) -> void:
+		if beat == "down":  # (he hits the ground)
+			_audio.play_at("fall", _player.to_global(Vector3(0.0, 0.3, -1.0)), 1.0, 0.04)
+			_audio.play_at("player_hit", _player.to_global(Vector3(0.0, 0.3, -1.0)), -6.0, 0.04))
 	GameState.alert_changed.connect(_on_alert_changed.unbind(1))
 
 	_promote(_make_segment(_graph.start_id, 0.0, {}, Transform3D.IDENTITY))
@@ -439,6 +443,7 @@ func _ready() -> void:
 	# The end screen's tally counting up, Doom style: a tick per step, a thunk as each row lands.
 	_frontend.tally_ticked.connect(func() -> void: _audio.play("tick", -6.0, 0.04, "UI"))
 	_frontend.tally_landed.connect(func() -> void: _audio.play("thunk", -3.0, 0.03, "UI"))
+	_frontend.typed.connect(func() -> void: _audio.play("tick", -8.0, 0.05, "UI"))
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
 
@@ -7476,7 +7481,42 @@ func _damage_player(why: String) -> void:
 	_hud.show_hit()
 	_hud.show_hp(_player.hits_left, tuning.player_hits)
 	if _player.hits_left <= 0:
+		_player.die(_free_ahead())  # (user: the game stops, his death plays, then the end screen)
 		_end(&"killed")
+
+
+## Killed: the end screen opens once his death has played out, with the game-over sting.
+func _open_end(reason: StringName, stats: Dictionary) -> void:
+	_audio.play("gameover", -2.0, 0.0, "UI")
+	_frontend.show_end(reason, stats)
+
+
+## How far the way ahead of him is clear (m), for his fall: to the nearest thing he'd fall into
+## (an obstacle or cover in his lane, a pipe unless he's sliding under it, a door not yet open, an
+## enemy just ahead).
+func _free_ahead() -> float:
+	_place_player()  # (where he is this frame: the level moves him after its own step)
+	var d := _player.distance_run()
+	var free := 99.0
+	for o in _obstacles:
+		if (o["pass"] == "slide" and _player.is_sliding()) or absf(float(o["x"]) - _player.track_x) > tuning.lane_width * 0.5 + 0.3:
+			continue  # (he's under it, or it's not in his way)
+		var near: float = float(o["at"]) - float(o["depth"]) / 2.0 - d
+		if near > -0.3:
+			free = minf(free, maxf(near, 0.0))
+	for door in _doors:
+		# Shut, it's a wall across the way (the run's over: it won't burst open now).
+		if not door.get("done", false) and door["seg"].get("promoted", false):
+			var to_door: float = float(door["at"]) - d
+			if to_door > -0.3 and to_door < 6.0:
+				free = minf(free, maxf(to_door, 0.0))
+	for c in _combatants:
+		var n = c["node"]
+		if is_instance_valid(n) and n is Node3D and (n as Node3D).is_visible_in_tree():
+			var rel := _player.to_local((n as Node3D).global_position)
+			if rel.z < 0.3 and rel.z > -4.0 and absf(rel.x) < 0.9:
+				free = minf(free, maxf(-rel.z - 0.3, 0.0))  # (to his near side)
+	return free
 
 
 ## World position of a point on the route: `d` metres along, `x` across, `y` up.
@@ -7636,10 +7676,17 @@ func _on_run_ended(reason: StringName) -> void:
 			"end_into": _player.distance_run() - _runner.segment_start,
 			"end_ramp": float(_current.get("ramp_len", 0.0)),
 			"levels": RouteMap.levels_text(_graph, RunLog.visited)})
-	get_tree().create_timer(1.1).timeout.connect(func() -> void: _frontend.show_end(reason, stats))
+	if reason == GameState.END_KILLED and _player.dying:
+		# Killed: his death plays out first (user), and he lies still a moment.
+		_player.died.connect(func() -> void:
+			get_tree().create_timer(tuning.death_hold, true, false, true).timeout.connect(func() -> void: _open_end(reason, stats)),
+			CONNECT_ONE_SHOT)
+	else:
+		get_tree().create_timer(1.1).timeout.connect(func() -> void: _frontend.show_end(reason, stats))
 	_audio.fade_loops(2.5)
 	_audio.stop_music()
-	_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")
+	if not (reason == GameState.END_KILLED and _player.dying):
+		_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")  # (killed: as the end screen opens)
 
 
 func _on_swipe(dir: Vector2i) -> void:

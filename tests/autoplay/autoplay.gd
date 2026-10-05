@@ -4,7 +4,12 @@ extends Node
 ##   godot --headless --path . --fixed-fps 60 res://tests/autoplay/autoplay.tscn -- --scenario=ground
 ## Every bot but "naive" holds FIRE while there's a trooper to shoot (alarm boxes only in the
 ## alarm scenarios). Scenarios:
-##   naive        - never moves or shoots; should be killed
+##   naive        - never moves or shoots; should be killed. It watches his death (the play camera
+##                  kept, normal time, none of him through the ground, the end screen opening only
+##                  once he's still) and the end screen typing and counting to its end: RESULT ends
+##                  death=ok end=typed
+##   naive_skip   - as naive, but taps the end screen while it's typing: everything at once
+##                  (end=skipped)
 ##   ground       - keeps to the middle lanes: straight on through the main floor to the EXIT
 ##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
 ##                  (open at alert 1), through the underground to the STORM DRAIN's ladder up
@@ -69,6 +74,9 @@ var _boss_attacks_seen := 0
 ## The boss we're fighting was ever out of sight (the twin on a ladder route's other helipad
 ## standing in for him, say): RESULT then says boss=HIDDEN, so no expectation passes.
 var _boss_hidden := false
+## naive / naive_skip: watching his death and the end screen, and what it found.
+var _death := {}
+var _death_report := ""
 ## The boss's KO replay: the chopper's clock and our distance as it started (and our distance as it
 ## last showed), its frames and those with the boss out of view, and the verdict once it's over.
 var _ko_from := {}
@@ -139,7 +147,7 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if not GameState.run_active or scenario == "naive":
+	if not GameState.run_active or scenario in ["naive", "naive_skip"]:
 		return
 	var d := _player.distance_run()
 	var obstacles: Array = _level._obstacles
@@ -377,7 +385,86 @@ func _junction_soon() -> bool:
 
 
 func _on_end(reason: StringName) -> void:
+	if reason == GameState.END_KILLED and scenario in ["naive", "naive_skip"]:
+		# Watch his death and the end screen (_process) before reporting.
+		_death = {"reason": String(reason), "fov": _level._camera.fov, "cam": _level._camera, "frames": 0, "low": INF,
+				"bad": "", "open_at": -1, "dead_at": -1, "tapped": false}
+		return
 	_report(String(reason))
+
+
+## naive / naive_skip: his death, then the end screen, frame by frame.
+func _process(_delta: float) -> void:
+	if _death.is_empty() or _death.has("done"):
+		return
+	var d := _death
+	d["frames"] += 1
+	var f: int = d["frames"]
+	var fe = _level._frontend
+	var open: bool = fe.is_open()
+	if int(d["open_at"]) < 0:
+		# Dying: the play camera, as it was; normal time; none of him through the ground.
+		if get_viewport().get_camera_3d() != d["cam"] or not is_equal_approx(_level._camera.fov, d["fov"]) or Engine.time_scale != 1.0:
+			d["bad"] += " camera/time"
+		var rig: SoldierRig = _player._rig
+		for p in rig._rag_points():
+			d["low"] = minf(d["low"], _player.to_local(rig.global_transform * (p as Vector3)).y)
+		if _player.is_dead() and int(d["dead_at"]) < 0:
+			d["dead_at"] = f
+		if open:
+			d["open_at"] = f
+			if not _player.is_dead():
+				d["bad"] += " opened-before-he-was-still"
+	else:
+		if scenario == "naive_skip" and not d["tapped"] and f >= int(d["open_at"]) + 30:
+			# A tap on the screen, clear of the buttons, into the end screen's skip area (a headless run
+			# doesn't route a pushed tap to the controls; the unit test checks the area covers the screen).
+			d["tapped"] = true
+			var tap := InputEventMouseButton.new()
+			tap.button_index = MOUSE_BUTTON_LEFT
+			tap.pressed = true
+			tap.position = Vector2(135, 300)
+			for n in fe.find_children("*", "", true, false):
+				if n is Control and n.get_class() == "Control" and (n as Control).mouse_filter == Control.MOUSE_FILTER_STOP and n.has_signal("pressed"):
+					n._gui_input(tap)
+			d["skip_at"] = f
+			return
+		var done := _end_screen_done()
+		if done.is_empty() and f < int(d["open_at"]) + 900:
+			return
+		if scenario == "naive_skip" and (not d.has("skip_at") or f > int(d["skip_at"]) + 2):
+			d["bad"] += " skip-not-at-once"
+		d["done"] = true
+		var ok: bool = String(d["bad"]) == "" and float(d["low"]) > -0.04 and int(d["dead_at"]) > 0 and done == "ok"
+		_death_report = " death=%s end=%s" % ["ok" if ok else "bad(%s low=%.3f dead=%d open=%d)" % [d["bad"], d["low"], d["dead_at"], d["open_at"]],
+				("skipped" if scenario == "naive_skip" else "typed") + ("" if done == "ok" else "/" + done)]
+		_report(String(d["reason"]))
+
+
+## The end screen typed and counted to its end, with the exact words ("ok"), or what isn't ("": not
+## done yet).
+func _end_screen_done() -> String:
+	var fe = _level._frontend
+	var tally: Tally = null
+	var title: Label = null
+	var typers := []
+	for n in fe.find_children("*", "", true, false):
+		if n is Tally:
+			tally = n
+		elif n is Label and (n as Label).text == "KILLED IN ACTION":
+			title = n
+		elif n.has_method("finish") and n.has_method("is_done") and not n is Tally:
+			typers.append(n)
+	if tally == null or title == null or typers.is_empty():
+		return ""
+	if not tally.is_done():
+		return ""
+	for t in typers:
+		if not t.is_done():
+			return ""
+	if title.visible_characters != -1 and title.visible_characters < title.text.length():
+		return "title-not-typed"
+	return "ok"
 
 
 func _count(kind: String) -> int:
@@ -429,7 +516,7 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok])
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report)
 	get_tree().quit()
 
 
