@@ -21,7 +21,13 @@ const TREE := {
 	"HindUpperL": "Hips", "HindLowerL": "HindUpperL", "HindFootL": "HindLowerL",
 }
 ## A gallop's strides per second at a full run.
-const STRIDES := 2.4
+const STRIDES := 3.0
+## The rotary gallop (user: each leg on its own timing, as a dog's): when in the stride each foot
+## lands (fraction of a stride): the left hind, the right hind a moment later, then the right fore,
+## then the left fore, round his body.
+const FOOTFALL := {"HindL": 0.0, "HindR": 0.1, "FrontR": 0.45, "FrontL": 0.55}
+## How much of a stride each foot is on the ground (the rest it's in the air, swinging forward).
+const STANCE := 0.34
 ## The bite: how long his leap at you takes (s).
 const LUNGE_TIME := 0.45
 ## Down: how long he takes to drop onto his side (s).
@@ -238,29 +244,49 @@ func _pose_stand() -> void:
 	_j("Neck").rotation.x = 0.05  # (his tail hangs as modelled)
 
 
-## A gallop: the front legs reach and pull as a pair, the back legs half a stride later, each pair a
-## little out of step (the lead leg first); the back flexes and stretches with them; the head stays
-## level; the tail streams out behind.
+## A dog's rotary gallop: each foot lands on its own beat round his body (FOOTFALL); each leg on
+## the ground sweeps back under him as it pushes (its paw flat on the floor), then lifts, folds up and
+## swings forward to reach for the next landing. His back arches as his hind legs reach forward under
+## him and stretches out as his front legs reach ahead; he's off the ground twice a stride (stretched
+## out, then gathered up), his head kept level; the tail streams out behind.
 func _pose_gallop(r: float) -> void:
-	var p := _phase
-	var flex := sin(p)
-	_j("Hips").position.y = _hips_at.y + 0.04 * r * absf(sin(p))
-	_j("Chest").rotation.x = 0.1 * r * flex
-	_j("Hips").rotation.x = -0.06 * r * flex
-	_j("Neck").rotation.x = 0.05 - 0.1 * r * flex
-	_j("Tail1").rotation.x = -0.6 * r  # streaming out behind
-	_j("Tail2").rotation.x = -0.25 * r - 0.15 * r * sin(p * 2.0)
-	for side in [-1, 1]:
-		var s := "R" if side > 0 else "L"
-		var lead := 0.0 if side > 0 else 0.35
-		var qf := p + lead
-		var qb := p + PI + lead
-		_j("FrontUpper" + s).rotation.x = 0.7 * r * sin(qf)
-		_j("FrontLower" + s).rotation.x = 0.35 * r * maxf(0.0, cos(qf))
-		_j("FrontPaw" + s).rotation.x = -1.3 * r * maxf(0.0, cos(qf))  # folding up under him on the swing
-		_j("HindUpper" + s).rotation.x = 0.6 * r * sin(qb)
-		_j("HindLower" + s).rotation.x = -0.7 * r * maxf(0.0, cos(qb))
-		_j("HindFoot" + s).rotation.x = 0.8 * r * maxf(0.0, cos(qb))
+	var u := _phase / TAU
+	var bend := cos(TAU * (u - 0.95))  # 1 gathered (hind legs forward under him), -1 stretched out
+	_j("Hips").position.y = _hips_at.y + r * (0.03 * cos(2.0 * TAU * (u - 0.45)) - 0.02)  # up in each flight
+	_j("Hips").rotation.x = 0.1 * r * bend  # the rump tucks under...
+	_j("Chest").rotation.x = -0.18 * r * bend  # ...and the shoulders drop: the back arches
+	_j("Neck").rotation.x = 0.05 + 0.12 * r * bend  # (the head stays level)
+	_j("Tail1").rotation.x = -0.4 * r  # streaming out behind, a little low
+	_j("Tail2").rotation.x = 0.1 * r + 0.15 * r * bend  # (the end hanging, swinging with his back)
+	for leg: String in FOOTFALL:
+		var front := leg.begins_with("Front")
+		var s := leg.right(1)
+		var a := _stride(fposmod(u - float(FOOTFALL[leg]), 1.0), front)
+		var names: Array = ["FrontUpper", "FrontLower", "FrontPaw"] if front else ["HindUpper", "HindLower", "HindFoot"]
+		for i in 3:
+			_j(String(names[i]) + s).rotation.x = r * float(a[i])
+
+
+## One leg through its stride (`u` 0..1 from its foot's landing): [upper, lower, paw] turns. On the
+## ground (STANCE): from reaching forward to pushed back behind him, a front paw kept flat on the
+## floor as the leg rolls over it, a back leg's knee and hock giving a little under his weight. In the
+## air: swung forward again, folding up (the paw tucked) and opening out to land.
+static func _stride(u: float, front: bool) -> Array:
+	var reach := 0.55 if front else 0.5
+	var back := -0.6 if front else -0.7
+	if u < STANCE:
+		var s := u / STANCE
+		var up := lerpf(reach, back, s)
+		if front:
+			return [up, 0.0, -up * 0.9]
+		var give := sin(PI * s)
+		return [up, -0.25 * give, 0.3 * give]
+	var t := (u - STANCE) / (1.0 - STANCE)
+	var swing := lerpf(back, reach, t * t * (3.0 - 2.0 * t))
+	var fold := sin(PI * minf(1.0, t * 1.15))
+	if front:
+		return [swing, 0.45 * fold, -1.4 * fold]
+	return [swing, -0.9 * fold, 1.0 * fold]
 
 
 ## The lunge: rearing up off his back legs (the whole body nose-up about the hips), front legs
