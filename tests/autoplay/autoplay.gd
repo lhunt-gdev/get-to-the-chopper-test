@@ -41,6 +41,22 @@ extends Node
 ## until he's fired). RESULT ends snipers=hit/dodged/out of view on a tall phone when he locked.
 ##   squad_caught - trips both main-route wires (Alert 3, the squad comes after us), then takes
 ##                  the next cover and stays in it: the squad catches up, CAPTURED
+##   boss_hit     - main route; at the chopper, steps into one of the boss's swept lanes for his
+##                  first sweep: hit once; it dodges the rest and takes him down
+##   boss_hold_fire - main route; at the chopper it dodges every sweep but never shoots the boss:
+##                  he blocks the way until the chopper leaves without us
+##   boss_tap     - main route; at the chopper it switches to TAP ONLY aiming and taps the boss
+##                  (low on his body, off-centre): FIRE shoots him, and it takes him down
+##   boss_skip    - main route; it taps at once in the boss's KO replay (too soon: nothing), then
+##                  two seconds in: skipped, it runs on
+## Every KO replay is watched: RESULT ends ko=shots shown/skipped/ok, ok when it ended with time back
+## to normal, the camera back (its field of view, behind us), the HUD back (FIRE showing, REPLAY
+## gone), the chopper's clock not moved, us not moved, the boss in view on a tall phone through it,
+## his death really shown (every shot ended by its part of his death, not its timeout), and no
+## early tap skipping it.
+## Every bot that gets to the helipad fights the boss: while his minigun spins up it steps to the
+## nearest of his 2 free lanes, and holds FIRE (he's the target). RESULT ends boss=down/hits/attacks.
+## His pattern is fixed for each scenario (a seed from its name), so a run repeats.
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
@@ -48,6 +64,19 @@ const ACT_DISTANCE := 1.6
 const COVER_AT := 22.0
 
 var scenario := "ground"
+## boss_hit: how many of the boss's attacks have finished (it takes the hit in the first).
+var _boss_attacks_seen := 0
+## The boss we're fighting was ever out of sight (the twin on a ladder route's other helipad
+## standing in for him, say): RESULT then says boss=HIDDEN, so no expectation passes.
+var _boss_hidden := false
+## The boss's KO replay: the chopper's clock and our distance as it started (and our distance as it
+## last showed), its frames and those with the boss out of view, and the verdict once it's over.
+var _ko_from := {}
+var _ko_frames := 0
+var _ko_unseen := 0
+var _ko_ok := "-"
+var _ko_early := false
+var _play_fov := 70.0
 var _level: Node
 var _player: Player
 ## Which side to lean toward at each junction, by node id (-1 left, 0 straight on, 1 right).
@@ -101,6 +130,7 @@ func _ready() -> void:
 		"ground_loud", "ground_alarms", "squad_caught":
 			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 	_level = LEVEL.instantiate()
+	_level.boss_seed = absi(hash(scenario)) % 100000
 	add_child(_level)
 	_player = _level.get_node("Player")
 	GameState.run_ended.connect(_on_end)
@@ -115,9 +145,17 @@ func _physics_process(_delta: float) -> void:
 	var obstacles: Array = _level._obstacles
 	var lane_count: int = _player.tuning.lane_count
 
+	if _watch_ko():
+		return  # (the KO replay: we just watch)
 	_shoot()
 	if d < 0.3 or _level.in_stairwell():
 		return  # in the start room or a stairwell: no swipes until we're through the door
+	if _level._boss_fight != null and is_instance_valid(_level._boss_fight) and _level._boss_fight.state == Boss.State.SPINDOWN:
+		_boss_attacks_seen = maxi(_boss_attacks_seen, _count("boss_attack"))
+	if _level._boss_fight != null and is_instance_valid(_level._boss_fight) and not _level._boss_fight.is_visible_in_tree():
+		_boss_hidden = true
+	if _boss_standoff():
+		return  # facing the boss: lane steps only (FIRE is held by _shoot: he's the target)
 	if _player.in_cover:
 		_took_cover = true
 		_cover_frames += 1
@@ -208,10 +246,84 @@ func _physics_process(_delta: float) -> void:
 				_player.handle_swipe(Vector2i.DOWN)
 
 
+## The boss at the chopper: while his minigun spins up, step toward the nearest of his 2 free
+## lanes (a lane a frame, ties toward the middle), then hold through the sweep and the spin-down.
+## boss_hit steps into a swept lane for his first sweep instead.
+func _boss_standoff() -> bool:
+	if not _player.standoff:
+		return false
+	var boss: Boss = _level._boss_fight
+	if boss == null or not is_instance_valid(boss) or boss.state != Boss.State.SPINUP:
+		return true
+	var mid := (_player.tuning.lane_count - 1) / 2.0
+	var want_hit := scenario == "boss_hit" and _boss_attacks_seen == 0
+	var to := _player.lane
+	var best := INF
+	for l in _player.tuning.lane_count:
+		if boss.free_lanes.has(l) == want_hit:
+			continue
+		var cost := absf(l - _player.lane) * 10.0 + absf(l - mid)
+		if cost < best:
+			best = cost
+			to = l
+	if to != _player.lane:
+		_player.handle_swipe(Vector2i.RIGHT if to > _player.lane else Vector2i.LEFT)
+	return true
+
+
+## The boss's KO replay: true while it's on. boss_skip taps two seconds in.
+func _watch_ko() -> bool:
+	var ko: int = _level._ko
+	if ko < 0 and _ko_from.is_empty():
+		_play_fov = _level._camera.fov
+	if ko >= 0:
+		if _ko_from.is_empty():
+			_ko_from = {"clock": _level._clock.elapsed, "d": _player.distance_run()}
+		_ko_from["d_last"] = _player.distance_run()
+		_ko_frames += 1
+		var boss: Boss = _level._boss_fight
+		if not _in_phone_view(boss._rig.chest.global_position) and not _in_phone_view(boss._rig.hips.global_position):
+			_ko_unseen += 1
+		if scenario == "boss_skip" and _ko_frames == 10:
+			_level._on_tap(Vector2(135, 300))  # (too soon: no skip)
+			_ko_early = _level._ko < 0
+		if scenario == "boss_skip" and _ko_frames == 120:
+			_level._on_tap(Vector2(135, 300))
+		return true
+	if not _ko_from.is_empty() and _ko_ok == "-":
+		var cam: Camera3D = _level._camera
+		var rel: Vector3 = _player.to_local(cam.global_position)
+		var cam_back: bool = get_viewport().get_camera_3d() == cam and is_equal_approx(cam.fov, _play_fov) and rel.z > 2.0 and rel.length() < 8.0
+		var hud = _level._hud
+		var hud_back: bool = hud._fire.visible and (hud._replay == null or not hud._replay.visible)
+		var timed_out := RunLog.events.filter(func(e: Dictionary) -> bool: return e["kind"] == "ko_shot_end" and e.get("timed_out", false)).size()
+		var boss: Boss = _level._boss_fight
+		var shown_to: float = Boss.DEATH_END if _level._ko_skipped else float(KoReplay.shots(_player.tuning)[-1]["to"])
+		var shown: bool = timed_out == 0 and boss.death_t >= shown_to - 0.001
+		var ok: bool = Engine.time_scale == 1.0 and cam_back and hud_back and shown and not _ko_early \
+				and absf(_level._clock.elapsed - float(_ko_from["clock"])) < 0.05 \
+				and is_equal_approx(float(_ko_from["d_last"]), float(_ko_from["d"])) and not _player.standoff \
+				and _ko_unseen <= _ko_frames / 20
+		_ko_ok = "ok" if ok else "bad(ts=%.2f cam=%s fov=%.0f/%.0f rel=%s hud=%s shown=%s(%d,%.2f) early=%s clock=%.2f/%.2f d=%.2f/%.2f unseen=%d/%d)" % [
+				Engine.time_scale, cam_back, cam.fov, _play_fov, rel, hud_back, shown, timed_out, boss.death_t, _ko_early,
+				_level._clock.elapsed, _ko_from["clock"], _ko_from["d_last"], _ko_from["d"], _ko_unseen, _ko_frames]
+	return false
+
+
 ## Hold FIRE while there's something worth shooting.
 func _shoot() -> void:
+	if scenario == "boss_tap" and _player.standoff:
+		# TAP ONLY from here: nothing's shot till it's tapped. Tap him (at his knees, a little off
+		# to the side), as a player would.
+		_level.tuning.targeting_mode = Tuning.TargetingMode.TAP_TO_TARGET
+		var boss: Boss = _level._boss_fight
+		if boss != null and is_instance_valid(boss) and boss.is_targetable(GameState.alert_level) and _level._tapped != boss:
+			var cam: Camera3D = _level._camera
+			_level._on_tap(cam.unproject_position(boss.global_position + Vector3.UP * 0.6) + Vector2(10.0, 0.0))
 	var target: Node3D = _level.fire_target()
 	var want := target != null
+	if target is Boss and scenario == "boss_hold_fire":
+		want = false  # he blocks the way: the chopper leaves without us
 	if target is AlarmBox and not _may_shoot_alarm():
 		want = false
 	if target is SecurityTrooper and scenario == "runner_escapes":
@@ -315,7 +427,9 @@ func _report(reason: String) -> void:
 	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d lights=%d time=%.1f snipers=%d/%d/%d" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
-			_count("sniper_hit"), _count("sniper_dodged"), _unseen])
+			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
+			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok])
 	get_tree().quit()
 
 

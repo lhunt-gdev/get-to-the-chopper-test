@@ -13,6 +13,7 @@ enum Kind {
 	CARBINE,        ## the rifle troopers'
 	CARBINE_LIGHT,  ## the pursuit squad's: a light under the handguard, a bright point in the dark
 	SNIPER,         ## the sniper's: a long barrel, a scope and a bipod
+	MINIGUN,        ## the boss's (user): six spinning barrels, carried at the hip
 }
 
 ## The palette, one texel each: gunmetal, the receiver, the polymer furniture, small details (sights,
@@ -22,6 +23,13 @@ enum Swatch { METAL, RECEIVER, FURNITURE, DETAIL, GLASS, LIGHT }
 
 ## The parts were drawn with the grip's middle here; everything is moved so it's at the origin.
 const GRIP := Vector3(0.0, -0.01, 0.028)
+## The minigun's barrels turn about this line (along -Z): their own mesh (barrels_mesh()), spun.
+const SPIN_AXIS := Vector3(0.0, 0.11, -0.28)
+## ...and how far out round it each of the six sits, and how long they are.
+const BARREL_RING := 0.03
+const BARREL_LENGTH := 0.6
+
+static var _barrels: ArrayMesh
 
 static var _meshes := {}
 static var _palette: ImageTexture
@@ -46,7 +54,12 @@ static func material() -> ShaderMaterial:
 
 ## Where the barrel ends (rifle space): shots and the flash come from here.
 static func muzzle(kind: Kind) -> Vector3:
-	return (Vector3(0, 0.075, -0.865) if kind == Kind.SNIPER else Vector3(0, 0.078, -0.53)) - GRIP
+	match kind:
+		Kind.SNIPER:
+			return Vector3(0, 0.075, -0.865) - GRIP
+		Kind.MINIGUN:
+			return SPIN_AXIS + Vector3(0, 0, -BARREL_LENGTH - 0.01) - GRIP
+	return Vector3(0, 0.078, -0.53) - GRIP
 
 
 ## The middle of the butt pad: it goes into his shoulder when he aims.
@@ -57,7 +70,38 @@ static func butt(kind: Kind) -> Vector3:
 ## Where the middle of his left fist goes: under the handguard; on the sniper's rifle (resting on its
 ## bipod), under the back of the stock, as a sniper lying behind it holds it.
 static func support(kind: Kind) -> Vector3:
-	return (Vector3(0, -0.03, 0.24) if kind == Kind.SNIPER else Vector3(0, 0.021, -0.21)) - GRIP
+	match kind:
+		Kind.SNIPER:
+			return Vector3(0, -0.03, 0.24) - GRIP
+		Kind.MINIGUN:
+			return Vector3(0, 0.25, -0.135) - GRIP  # the minigun's: round the bar of its top handle
+	return Vector3(0, 0.021, -0.21) - GRIP
+
+
+## How the left hand holds on (rifle axes): which way its fingers run, and its palm faces. Under a
+## handguard, palm up, fingers round its right side; on the minigun's top handle, from above, palm
+## down, fingers curled over the bar.
+static func support_hand(kind: Kind) -> Array[Vector3]:
+	if kind == Kind.MINIGUN:
+		return [Vector3(1.0, -0.2, -0.3), Vector3(0.0, -1.0, 0.15)]
+	return [Vector3(0.9, 0.25, -0.4), Vector3(0.35, 1.0, 0.0)]
+
+
+## The minigun's six barrels and their two clamps, round their own axis (the origin), along -Z: the
+## part that spins (put it at SPIN_AXIS - GRIP and turn it about z).
+static func barrels_mesh() -> ArrayMesh:
+	if _barrels == null:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for i in 6:
+			var ang := TAU * i / 6.0
+			var c := Vector3(cos(ang), sin(ang), 0.0) * BARREL_RING + GRIP  # (_tube moves by -GRIP)
+			_tube(st, c, c + Vector3(0, 0, -BARREL_LENGTH), 0.009, 5, Swatch.METAL, Swatch.METAL)
+		for z: float in [-0.12, -BARREL_LENGTH + 0.04]:
+			_tube(st, GRIP + Vector3(0, 0, z), GRIP + Vector3(0, 0, z - 0.03), 0.047, 8, Swatch.RECEIVER, Swatch.RECEIVER)
+		_tube(st, GRIP, GRIP + Vector3(0, 0, -BARREL_LENGTH), 0.012, 6, Swatch.DETAIL, Swatch.METAL)  # the middle rod
+		_barrels = st.commit()
+	return _barrels
 
 
 ## The top of the sights (the line he looks down when he aims).
@@ -68,6 +112,18 @@ static func sight(kind: Kind) -> Vector3:
 ## The front of the scope (the sniper's: his laser and its glint come from here).
 static func scope_front() -> Vector3:
 	return Vector3(0, 0.17, -0.265) - GRIP
+
+
+## The minigun's ejection port (rifle space): on its right side under the housing, the cases
+## thrown out along its x (out to the right, a little down and back).
+static func eject_port() -> Transform3D:
+	var out := Vector3(1.0, -0.35, 0.25).normalized()
+	return Transform3D(_frame_of(out, Vector3.UP), SPIN_AXIS + Vector3(0.07, -0.03, 0.15) - GRIP)
+
+
+static func _frame_of(x: Vector3, up: Vector3) -> Basis:
+	var z := x.cross(up).normalized()
+	return Basis(x, z.cross(x), z)
 
 
 ## The front of the squad's light (its lens glows there, facing -Z).
@@ -86,7 +142,21 @@ static func _build(kind: Kind) -> ArrayMesh:
 	_prism(st, [Vector2(-0.052, -0.002), Vector2(0.0, -0.002), Vector2(0.0, 0.006), Vector2(-0.052, 0.006)], 0.0, 0.005, Swatch.METAL)
 	_prism(st, [Vector2(-0.052, 0.006), Vector2(-0.044, 0.006), Vector2(-0.044, 0.046), Vector2(-0.052, 0.046)], 0.0, 0.005, Swatch.METAL)
 	_prism(st, [Vector2(-0.024, 0.014), Vector2(-0.017, 0.012), Vector2(-0.016, 0.046), Vector2(-0.024, 0.046)], 0.0, 0.004, Swatch.METAL)
-	if sniper:
+	if kind == Kind.MINIGUN:
+		# The minigun (the barrels are their own mesh, to spin): the drive housing over the grip, its
+		# back plate, the motor on its right, the top carry handle (the left hand's), and the box of
+		# ammunition on its left with the belt feeding up into it.
+		var ax := SPIN_AXIS
+		_tube(st, ax + Vector3(0, 0, 0.36), ax + Vector3(0, 0, 0.02), 0.066, 8, Swatch.RECEIVER, Swatch.METAL)
+		_prism(st, [Vector2(ax.z + 0.36, ax.y - 0.06), Vector2(ax.z + 0.42, ax.y - 0.06), Vector2(ax.z + 0.42, ax.y + 0.06),
+				Vector2(ax.z + 0.36, ax.y + 0.06)], 0.0, 0.055, Swatch.METAL)
+		_tube(st, Vector3(0.07, 0.15, 0.0), Vector3(0.07, 0.15, -0.16), 0.026, 6, Swatch.METAL, Swatch.METAL)
+		for z: float in [-0.06, -0.21]:
+			_beam(st, Vector3(0, 0.17, z), Vector3(0, 0.255, z), 0.018, Swatch.METAL)
+		_beam(st, Vector3(0, 0.25, -0.05), Vector3(0, 0.25, -0.22), 0.022, Swatch.FURNITURE)
+		_prism(st, [Vector2(0.02, -0.09), Vector2(-0.18, -0.09), Vector2(-0.18, 0.08), Vector2(0.02, 0.08)], -0.115, 0.055, Swatch.FURNITURE)
+		_beam(st, Vector3(-0.095, 0.08, -0.08), Vector3(-0.045, 0.12, -0.08), 0.05, Swatch.DETAIL)
+	elif sniper:
 		# A bolt-action: a plain receiver, the bolt handle out to the right, a solid stock with a
 		# cheek rest, a short box magazine.
 		_prism(st, [Vector2(0.1, 0.045), Vector2(0.1, 0.105), Vector2(-0.16, 0.105), Vector2(-0.16, 0.045)], 0.0, 0.022, Swatch.RECEIVER)

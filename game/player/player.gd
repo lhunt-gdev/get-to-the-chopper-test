@@ -18,6 +18,9 @@ var halted: bool = false
 var in_cover: bool = false
 ## Behind a box you crouch; behind a wall you stand.
 var cover_crouch: bool = false
+## Facing the boss at the chopper (user design): stopped at the standoff line; swipe left/right steps
+## between lanes (you stay stopped), FIRE works, no jumping or sliding. Ends when he's down.
+var standoff: bool = false
 ## Placeholder damage model (Point 4 OPEN): this many hits and you're down.
 var hits_left: int = 3
 var _invulnerable: float = 0.0
@@ -57,7 +60,7 @@ func _physics_process(delta: float) -> void:
 		_stun_left -= delta
 	else:
 		_speed_mul = move_toward(_speed_mul, 1.0, delta * (1.0 - tuning.obstacle_slow_factor) / tuning.obstacle_slow_recover)
-	if not in_cover:
+	if not in_cover and not standoff:
 		distance += tuning.run_speed * _speed_mul * delta
 	track_x = move_toward(track_x, lane_x(lane), tuning.lane_change_speed * delta)
 
@@ -74,7 +77,7 @@ func _physics_process(delta: float) -> void:
 
 ## The model's pose every frame (also before the run starts and after it ends, standing).
 func _process(delta: float) -> void:
-	var running := GameState.run_active and not halted and not in_cover
+	var running := GameState.run_active and not halted and not in_cover and not standoff
 	_rig.animate(delta, {
 		"run": _speed_mul if running else 0.0,
 		"airborne": is_airborne(),
@@ -90,6 +93,11 @@ func _process(delta: float) -> void:
 
 func handle_swipe(dir: Vector2i) -> void:
 	if halted or is_stunned():
+		return
+	if standoff:
+		# Facing the boss: a step to the next lane, and nothing else.
+		if dir.y == 0:
+			lane = clampi(lane + dir.x, 0, tuning.lane_count - 1)
 		return
 	if in_cover:
 		# Swiping away from the cover (sideways) leaves it and resumes the run. Nothing else does.
@@ -111,6 +119,20 @@ func handle_swipe(dir: Vector2i) -> void:
 			_slide_left = tuning.slide_duration
 			if is_airborne():
 				_y_velocity = minf(_y_velocity, -tuning.jump_velocity)  # fast-fall into the slide
+
+
+## The boss fight starts: stop at the standoff line (`stop_at`, route distance), up out of a slide.
+## A jump you're in lands where you are (no new ones till he's down).
+func enter_standoff(stop_at: float) -> void:
+	standoff = true
+	in_cover = false
+	distance = minf(distance, stop_at)
+	_slide_left = 0.0
+
+
+## He's down: run on (to the chopper).
+func end_standoff() -> void:
+	standoff = false
 
 
 ## Ran into cover: stop just in front of it, and crouch if it's low (a box).

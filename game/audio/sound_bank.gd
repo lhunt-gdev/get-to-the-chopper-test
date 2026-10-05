@@ -14,7 +14,7 @@ const MUSIC_RATE := 16000
 const SURFACES := ["office", "tunnel", "gravel", "stairs", "concrete"]
 const STEP_VARIANTS := 3
 const LOOPS := ["music_menu", "amb_office", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle", "rotor",
-		"music_tension", "music_alert"]
+		"music_tension", "music_alert", "minigun_fire"]
 
 static var _cache: Dictionary = {}
 
@@ -37,7 +37,8 @@ static func all_names() -> Array[String]:
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
-			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite", "thunk", "sniper_aim", "sniper_lock", "sniper_shot"]
+			"rotor", "warn", "jingle", "gameover", "bark", "yelp", "bite", "thunk", "sniper_aim", "sniper_lock", "sniper_shot",
+			"minigun_spin", "minigun_fire", "gun_drop", "slowmo"]
 	for i in 3:
 		names.append("grunt_%d" % i)
 	for surface in SURFACES:
@@ -95,6 +96,28 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.tone(0.0, 0.11, 190.0, 60.0, 0.7, Synth.Wave.SINE, 0.001, 7.0)
 			syn.crush(9, 1)
 			syn.normalize(0.85)
+		"gun_drop":
+			# The boss's minigun hitting the deck: a heavy thump and a dull clank (on concrete, duller
+			# than steel on steel), a bounce, and the clatter of its belt.
+			syn = Synth.create(0.9, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.25, 120.0, 45.0, 0.9, Synth.Wave.SINE, 0.001, 5.0)
+			syn.noise(0.0, 0.12, 0.7, 1800.0, 100.0, 0.0005, 9.0)
+			_clang(syn, 0.0, 0.5)
+			syn.tone(0.24, 0.15, 100.0, 50.0, 0.5, Synth.Wave.SINE, 0.001, 7.0)
+			_clang(syn, 0.24, 0.25)
+			for i in 6:
+				syn.noise(0.3 + i * 0.05, 0.03, 0.25 * (1.0 - i / 6.0), 3500.0, 600.0, 0.0005, 20.0)
+			syn.lowpass(4000.0)
+			syn.crush(9, 1)
+			syn.normalize(0.85)
+		"slowmo":
+			# The cut into the boss's KO replay (each shot): a deep whoosh falling away, a low boom under it.
+			syn = Synth.create(1.1, SFX_RATE, seed_value)
+			syn.noise(0.0, 1.0, 0.5, 700.0, 60.0, 0.25, 2.5)
+			syn.tone(0.0, 0.9, 140.0, 40.0, 0.7, Synth.Wave.SINE, 0.01, 2.5)
+			syn.echo(0.18, 0.4, 0.3)
+			syn.crush(9, 1)
+			syn.normalize(0.6)
 		"fall":
 			# A body hitting the floor.
 			syn = Synth.create(0.45, SFX_RATE, seed_value)
@@ -274,6 +297,31 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.echo(0.23, 0.45, 0.35)
 			syn.lowpass(7000.0)
 			syn.normalize(0.7)
+		"minigun_spin":
+			# The boss's minigun spinning up (the telegraph): a motor's whine rising, the barrels'
+			# rattle quickening.
+			syn = Synth.create(1.0, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.95, 180.0, 900.0, 0.35, Synth.Wave.SQUARE, 0.05, 1.5)
+			syn.tone(0.0, 0.95, 90.0, 450.0, 0.3, Synth.Wave.TRIANGLE, 0.05, 1.5)
+			for i in 14:
+				var t := 0.9 * (1.0 - pow(1.0 - i / 14.0, 1.6))
+				syn.noise(t, 0.02, 0.25, 4000.0, 900.0, 0.001, 30.0)
+			syn.lowpass(5000.0)
+			syn.crush(8, 1)
+			syn.normalize(0.5)
+		"minigun_fire":
+			# The minigun firing (loop; on only while the stream is): a buzz-saw roar of shots (50 a
+			# second), a low motor under it.
+			syn = Synth.create(0.62, SFX_RATE, seed_value)
+			for i in 31:
+				syn.noise(i * 0.02, 0.018, 0.9, 7000.0, 600.0, 0.0005, 40.0)
+			syn.tone(0.0, 0.62, 110.0, 110.0, 0.5, Synth.Wave.SQUARE, 0.0, 0.0)
+			syn.tone(0.0, 0.62, 55.0, 55.0, 0.4, Synth.Wave.TRIANGLE, 0.0, 0.0)
+			syn.lowpass(6000.0)
+			syn.crush(7, 1)
+			syn.normalize(0.75)
+			syn.loopify(0.02)
+			return syn.to_stream(true)
 		"thunk":
 			# A row of the end screen's tally landing (after Doom's): a short, heavy knock.
 			syn = Synth.create(0.18, SFX_RATE, seed_value)

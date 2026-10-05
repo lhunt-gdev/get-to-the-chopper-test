@@ -228,3 +228,27 @@ var fire_on_left := false
 @export var sniper_nest_ahead: float = 75.0
 @export var sniper_nest_out: float = 15.0
 @export var sniper_nest_up: float = 7.0
+
+@export_group("Boss")
+## The boss at the chopper (user design): how far in front of him your run stops for the standoff (m).
+@export var boss_standoff: float = 14.0
+## How many of your hits drop him.
+@export var boss_health: int = 30
+## His minigun spinning up (the telegraph, the swept lanes lit) at each alert (s; LOCKED: alert
+## changes the pressure), the sweep across the lanes, and the spin-down before the next.
+@export var boss_spinup_alert1: float = 1.1
+@export var boss_spinup_alert2: float = 0.9
+@export var boss_spinup_alert3: float = 0.75
+@export var boss_sweep_time: float = 1.2
+@export var boss_spindown_time: float = 1.2
+## His rounds (user: a fan of bullets from the tip of his gun): how many a second while it fires,
+## how fast they fly (m/s; about half a second to reach you), and how near you one must come to
+## hit you (m; under half a lane, so standing in a free lane you're never hit).
+@export var boss_fire_rate: float = 40.0
+@export var boss_round_speed: float = 28.0
+@export var boss_round_hit_radius: float = 0.4
+## His KO replay (user: Tekken-style): how slow each of its three shots plays (a fraction of normal
+## speed: the live one, then the two replays), and how long (real s) before a tap can skip it (so
+## the FIRE you're holding as he dies doesn't).
+@export var boss_ko_slow: Vector3 = Vector3(0.33, 0.5, 0.55)
+@export var boss_ko_skip_after: float = 0.6

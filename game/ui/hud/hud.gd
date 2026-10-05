@@ -19,6 +19,7 @@ const ALERT_COLORS := {1: UiKit.GREEN, 2: UiKit.AMBER, 3: UiKit.RED}
 var _status: StatusPanel
 var _message: MessageBox
 var _runner_bar: RunnerBar
+var _boss_bar: BossBar
 var _rear: RearMonitor
 var _rail: ProgressRail
 var _junction: RichTextLabel
@@ -263,6 +264,46 @@ class RearMonitor extends Control:
 				var p := c + corner * s * 0.5
 				_overlay.draw_line(p, p - Vector2(corner.x * k, 0), col, 1.0)
 				_overlay.draw_line(p, p - Vector2(0, corner.y * k), col, 1.0)
+
+
+## Under the message box in the fight at the chopper: the boss's health (in the runner's slot).
+class BossBar extends Control:
+	var fraction := -1.0
+	var _flash := 0.0
+	var _t := 0.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func set_fraction(f: float) -> void:
+		if absf(f - fraction) > 0.002 or (f < 0.0) != (fraction < 0.0):
+			if f >= 0.0 and fraction >= 0.0 and f < fraction:
+				_flash = 0.05  # a hit: the bar flickers
+			fraction = f
+			visible = f >= 0.0
+			queue_redraw()
+
+	func _process(delta: float) -> void:
+		if fraction < 0.0:
+			return
+		_t += delta
+		_flash = maxf(0.0, _flash - delta)
+		queue_redraw()
+
+	func _draw() -> void:
+		if fraction < 0.0:
+			return
+		var w := get_viewport_rect().size.x
+		var r := Rect2((w - 200.0) / 2.0, 60, 200, 16)
+		var low := fraction <= 0.25
+		var c := UiKit.PAPER if _flash > 0.0 else (UiKit.RED if not low or fmod(_t, 0.4) < 0.24 else UiKit.AMBER)
+		UiKit.panel(self, r, c, UiKit.PANEL, 3.0)
+		draw_string(UiKit.font(), Vector2(r.position.x + 7, r.position.y + 11), "BOSS", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c)
+		var bar := Rect2(r.position.x + 38, r.position.y + 5, 154, 6)
+		draw_rect(bar, UiKit.INK)
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)), c)
+		draw_rect(bar, c.darkened(0.4), false, 1.0)
 
 
 ## Under the message box while the alarm runner is loose: how close he is to his alarm.
@@ -551,6 +592,10 @@ var _grade: ColorRect
 var _grade_mat: ShaderMaterial
 var _retro := true
 var _bars: Array[ColorRect] = []
+var _bars_tween: Tween
+## The boss's KO replay: REPLAY (blinking, in the top bar) and TAP TO SKIP (in the bottom one).
+var _replay: Label
+var _skip: Label
 var _area: Label
 var _area_tween: Tween
 
@@ -577,7 +622,8 @@ func set_retro_filter(on: bool) -> void:
 		_grade.visible = on and not (_cctv != null and _cctv.visible)
 
 
-## Cinema bars top and bottom (the opening pan); they slide away when the run starts.
+## Cinema bars top and bottom (the opening pan, the boss's KO replay); they slide in and away on
+## real time (not slowed with the game).
 func set_letterbox(on: bool, seconds: float = 0.0) -> void:
 	if _bars.is_empty() and not on:
 		return  # never shown (a retry skips the opening pan)
@@ -587,26 +633,56 @@ func set_letterbox(on: bool, seconds: float = 0.0) -> void:
 			bar.color = Color.BLACK
 			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			bar.set_anchors_preset(Control.PRESET_TOP_WIDE if top else Control.PRESET_BOTTOM_WIDE)
-			bar.offset_top = 0.0 if top else -LETTERBOX
-			bar.offset_bottom = LETTERBOX if top else 0.0
+			# Made out of sight, so the first time they're shown they slide in too.
+			bar.offset_top = -LETTERBOX if top else 0.0
+			bar.offset_bottom = 0.0 if top else LETTERBOX
 			add_child(bar)
 			_bars.append(bar)
+		if _replay != null:
+			move_child(_replay, -1)
+			move_child(_skip, -1)
+	if _bars_tween != null:
+		_bars_tween.kill()
+	_bars_tween = create_tween().set_parallel().set_ignore_time_scale(true)
 	for i in _bars.size():
 		var bar := _bars[i]
 		var shown := 0.0 if on else (-LETTERBOX if i == 0 else LETTERBOX)
 		var prop := "offset_top" if i == 0 else "offset_bottom"
 		var other := "offset_bottom" if i == 0 else "offset_top"
-		var t := create_tween().set_parallel()
-		t.tween_property(bar, prop, shown, seconds)
-		t.tween_property(bar, other, shown + (LETTERBOX if i == 0 else -LETTERBOX), seconds)
+		_bars_tween.tween_property(bar, prop, shown, maxf(seconds, 0.001))
+		_bars_tween.tween_property(bar, other, shown + (LETTERBOX if i == 0 else -LETTERBOX), maxf(seconds, 0.001))
+
+
+## The boss's KO replay: REPLAY blinking in the top bar and TAP TO SKIP in the bottom one (over the
+## replays), or neither.
+func show_replay(on: bool) -> void:
+	if _replay == null:
+		if not on:
+			return
+		_replay = UiKit.label("REPLAY", 16, UiKit.RED, HORIZONTAL_ALIGNMENT_CENTER)
+		_replay.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		_replay.offset_top = 14
+		add_child(_replay)
+		_skip = UiKit.label("TAP TO SKIP", 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER)
+		_skip.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		_skip.offset_top = -26
+		_skip.offset_bottom = -14
+		add_child(_skip)
+	_replay.visible = on
+	_skip.visible = on
+
+
+func _process(_delta: float) -> void:
+	if _replay != null and _replay.visible:
+		_replay.modulate.a = 1.0 if (Time.get_ticks_msec() / 450) % 2 == 0 else 0.15  # (blinks on real time)
 
 
 ## The in-run HUD shows only during a run (not over the main menu, the pan or the end screens).
 func set_playing(on: bool) -> void:
-	for n in [_status, _clock, _fire, _rail, _pause, _message, _runner_bar, _rear]:
+	for n in [_status, _clock, _fire, _rail, _pause, _message, _runner_bar, _boss_bar, _rear]:
 		if n:
 			n.visible = on and (n != _message or _message.text != "") and (n != _runner_bar or _runner_bar.fraction >= 0.0) \
-					and (n != _rear or _rear._picture.texture != null)
+					and (n != _boss_bar or _boss_bar.fraction >= 0.0) and (n != _rear or _rear._picture.texture != null)
 
 
 ## MGS-style location caption: the area's name types out bottom left, then fades.
@@ -648,6 +724,9 @@ func setup(tuning: Tuning) -> void:
 	_runner_bar = RunnerBar.new()
 	_runner_bar.visible = false
 	add_child(_runner_bar)
+	_boss_bar = BossBar.new()
+	_boss_bar.visible = false
+	add_child(_boss_bar)
 	_pause = PauseButton.new()
 	add_child(_pause)
 	_pause.pressed.connect(func() -> void: pause_pressed.emit())
@@ -692,6 +771,12 @@ func show_runner(fraction: float) -> void:
 		_runner_bar.set_fraction(fraction)
 
 
+## The boss's health (0..1), or -1 to hide the bar.
+func show_boss(fraction: float) -> void:
+	if _boss_bar:
+		_boss_bar.set_fraction(fraction)
+
+
 ## The rear-view CCTV: the rear camera's picture (null hides the monitor), and how many of the
 ## squad are still chasing.
 func show_rear(feed: Texture2D) -> void:
@@ -731,8 +816,8 @@ func fire_kick() -> void:
 		_fire.kick()
 
 
-func show_cover_hint(on: bool) -> void:
-	_hint.text = "IN COVER - SWIPE < > TO BREAK COVER" if on else ""
+func show_cover_hint(on: bool, standoff: bool = false) -> void:
+	_hint.text = "IN COVER - SWIPE < > TO BREAK COVER" if on else ("SWIPE < > TO DODGE - HOLD FIRE" if standoff else "")
 	# Below the rear-view monitor while it's up (Alert 3), otherwise in its usual place.
 	_hint.offset_top = 176 if _rear and _rear.visible else 104
 
@@ -770,6 +855,7 @@ func show_end(_reason: StringName, _route_summary: String) -> void:
 	clear_junction()
 	_message.show_message("", UiKit.PAPER, 0.0, false)
 	show_runner(-1.0)
+	show_boss(-1.0)
 	show_rear(null)
 	_hint.text = ""
 	set_playing(false)

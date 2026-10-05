@@ -34,9 +34,12 @@ const WIRE_LOW := 1.85
 const MARKER_FUNNEL := 8.0
 ## A roller shutter starts rolling up when you're this far (m) from it, so you run in underneath.
 const SHUTTER_OPEN_AHEAD := 11.0
-## Over the last this-many metres of the extraction area you're steered into the centre lane, so you
-## always run straight into the chopper.
+## Over the last this-many metres of the extraction area you're steered toward the chopper: into the
+## centre lane, except past the downed boss's body (the lane beside it) till you're by him.
 const CHOPPER_FUNNEL := 15.0
+## The boss (user design) waits this far before the end of the extraction area (in front of the
+## chopper, between you and its door).
+const BOSS_FROM_END := 2.0
 ## How far behind you (m) the road and its obstacles are kept: the Alert 3 squad starts 25 m back.
 const BEHIND_KEEP := 50.0
 
@@ -258,6 +261,27 @@ var _snipers: Array[Dictionary] = []
 ## Snipers over a road you didn't take: {node, tier}. Hidden once you go into another level: the
 ## block under his nest runs down through the levels below, so it would stand in your corridor.
 var _retired_snipers: Array[Dictionary] = []
+## The boss at the chopper ({node, owner, seg}), and him once the fight's started.
+var _bosses: Array[Dictionary] = []
+var _boss_fight: Boss = null
+## The boss's minigun pattern (his free lanes, his sweeps' directions): -1, a new one every run; the
+## bots set one, so their runs repeat.
+var boss_seed := -1
+## The boss's KO replay (KoReplay; user): which shot is on (0..2; -1 when it isn't), its shots, real
+## seconds into it and into this shot, whether it was skipped; and what it gives back at the end:
+## whether the chopper's clock was running, and the camera's field of view. The camera cuts back
+## hard (_cam_snap) rather than swinging round from the last shot.
+var _ko := -1
+var _ko_shots: Array[Dictionary] = []
+var _ko_real := 0.0
+var _ko_shot_real := 0.0
+var _ko_skipped := false
+var _ko_skip_asked := false
+var _ko_clock_was := false
+var _ko_fov := 70.0
+var _cam_snap := false
+## The chopper's climb as it lifts off (held while the KO replay stops the clock).
+var _lift_tweens: Array[Tween] = []
 var _fire_held := false
 var _fire_cooldown := 0.0
 ## HYBRID / TAP_TO_TARGET: the enemy the player last tapped.
@@ -429,7 +453,7 @@ func _begin_intro() -> void:
 
 
 func _pause() -> void:
-	if not GameState.run_active or get_tree().paused:
+	if not GameState.run_active or get_tree().paused or _ko >= 0:
 		return
 	set_fire_held(false)
 	get_tree().paused = true
@@ -510,7 +534,9 @@ func _physics_process(delta: float) -> void:
 		_intro_left -= delta
 		if _intro_left <= 0.0 and not _started:
 			start_run()  # the pan has ended behind the player: go
-	if GameState.run_active:
+	if GameState.run_active and _ko >= 0:
+		_update_ko(delta)
+	elif GameState.run_active:
 		for door in _doors:
 			var reach := SHUTTER_OPEN_AHEAD if door.get("shutter", false) else 0.9
 			if not door.get("done", false) and _player.distance_run() >= door["at"] - reach and door["seg"].get("promoted", false):
@@ -532,6 +558,8 @@ func _physics_process(delta: float) -> void:
 			_update_searchlights(delta)
 		if GameState.run_active:
 			_update_snipers(delta)
+		if GameState.run_active:
+			_update_boss(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
@@ -684,8 +712,9 @@ func _on_chopper_stage(stage: ExtractionClock.Stage) -> void:
 			_warn_lift_off()
 			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("ff4b3a"), 0.0, true)
 			for c in get_tree().get_nodes_in_group("chopper"):
-				c.create_tween().tween_property(c, "position:y", c.position.y + 2.5,
-						_clock.gone_at - _clock.lifts_at)
+				var lift: Tween = c.create_tween()
+				lift.tween_property(c, "position:y", c.position.y + 2.5, _clock.gone_at - _clock.lifts_at)
+				_lift_tweens.append(lift)
 		ExtractionClock.Stage.GONE:
 			for c in get_tree().get_nodes_in_group("chopper"):
 				c.visible = false
@@ -1142,7 +1171,45 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 		_build_ladder(node, seg, RouteGraph.side_of(edge))
 	if _graph.end_type(id) == "extract":
 		_spawn_chopper(node, _frame_at(seg, length) * Transform3D(Basis.IDENTITY, Vector3(0, 0, -3.0)))
+		_spawn_boss(node, seg, length)
 	return seg
+
+
+## The boss (user design): waiting in front of the chopper, in the middle lane, facing you.
+func _spawn_boss(node: Node3D, seg: Dictionary, length: float) -> void:
+	var into := length - BOSS_FROM_END
+	var boss := Boss.new(tuning)
+	boss.at = float(seg["start"]) + into
+	boss.set_seed(boss_seed if boss_seed >= 0 else randi())
+	node.add_child(boss)
+	boss.transform = _frame_at(seg, into) * Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO)
+	# A floodlight on him from in front (your side, high up), so he reads from the standoff line.
+	# His (he faces you): it goes out with him if this pad's not the one you take.
+	var lamp := Node3D.new()
+	boss.add_child(lamp)
+	lamp.position = Vector3(0, 3.2, -2.5)
+	_ambience.add_lamp(lamp, Color(1.0, 0.92, 0.8) * 1.4, 6.0, {"alert": false})
+	# His minigun's flash lights him and the deck round him (user): a warm light, flickering with it.
+	_ambience.add_lamp(boss.flash_lamp, Color(1.0, 0.72, 0.38) * 3.6, 8.5, {"alert": false, "second_slot": true})
+	# His minigun's roar, on while the gun fires (it stops over the free lanes).
+	boss.fire_sound = _audio.attach_loop(boss, "minigun_fire", 0.0, 45.0, 6.0)
+	boss.fire_sound.position = Vector3(0, 1.2, -0.5)
+	boss.fire_sound.stop()
+	boss.spinning_up.connect(func() -> void:
+		RunLog.record_event("boss_attack", {"node": _runner.current})
+		_audio.play_at("minigun_spin", boss.global_position + Vector3.UP * 1.2, 0.0, 0.03))
+	boss.wounded.connect(func() -> void: _audio.play_at("hit", boss.global_position + Vector3.UP * 1.5, -1.0, 0.08))
+	boss.defeated.connect(func() -> void:
+		RunLog.record_event("boss_down", {"node": _runner.current})
+		_hud.show_boss(-1.0)
+		_ko_begin(boss))  # (you run on to the chopper once it's over)
+	boss.death_beat.connect(_on_boss_death_beat.bind(boss))
+	# Both ladders down a roof lead to the same helipad (built twice, in the same place): one boss
+	# stands there, not two inside each other; the fork shows the one on the pad you come onto.
+	for b in _bosses:
+		if is_instance_valid(b["node"]) and (b["node"] as Node3D).global_position.distance_to(boss.global_position) < 0.5:
+			boss.visible = false
+	_bosses.append({"node": boss, "owner": node, "seg": seg})
 
 
 ## The player is now on this segment: build every branch it can lead to, and its fork cue.
@@ -1193,6 +1260,7 @@ func _discard(branch: Dictionary) -> void:
 	_combatants = _combatants.filter(func(c: Dictionary) -> bool: return c["owner"] != node)
 	_lights = _lights.filter(func(l: Dictionary) -> bool: return l["owner"] != node)
 	_snipers = _snipers.filter(func(s: Dictionary) -> bool: return s["owner"] != node)
+	_bosses = _bosses.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	_doors = _doors.filter(func(dr: Dictionary) -> bool: return dr["owner"] != node)
 	_blockers = _blockers.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	node.queue_free()
@@ -1207,6 +1275,9 @@ func _on_segment_needed(id: StringName, _start: float, edge: Dictionary) -> void
 	# The branches you didn't take stay standing as scenery until you're well past (nothing pops
 	# out in front of you); they just stop being part of the game.
 	var gone_at: float = _current["end"] + tuning.fork_scenery_keep
+	for b in _bosses:
+		if b["owner"] == chosen["node"] and is_instance_valid(b["node"]):
+			b["node"].visible = true  # (the pad you come onto: its boss, if its twin stood in for him)
 	for k in branches:
 		if k != key:
 			_retire(branches[k]["node"], gone_at)
@@ -1233,6 +1304,10 @@ func _retire(node: Node3D, gone_at: float) -> void:
 			s["node"].stand_down()  # he lies low over a road you didn't take
 			_retired_snipers.append({"node": s["node"], "tier": _graph.tier_of(StringName(s["seg"]["id"]))})
 	_snipers = _snipers.filter(func(s: Dictionary) -> bool: return s["owner"] != node)
+	for b in _bosses:
+		if b["owner"] == node and is_instance_valid(b["node"]):
+			b["node"].visible = false  # (the helipad you didn't come up onto: one boss, not two)
+	_bosses = _bosses.filter(func(b: Dictionary) -> bool: return b["owner"] != node)
 	_retired.append({"node": node, "gone_at": gone_at})
 
 
@@ -1258,7 +1333,8 @@ func _on_node_entered(id: StringName) -> void:
 func _warn_lift_off() -> void:
 	if not GameState.run_active or _clock.stage != ExtractionClock.Stage.LIFTING_OFF:
 		return
-	_audio.play("warn", -6.0, 0.0, "UI")
+	if _ko < 0:
+		_audio.play("warn", -6.0, 0.0, "UI")  # (quiet through the boss's KO replay: the clock's stopped)
 	get_tree().create_timer(1.8).timeout.connect(_warn_lift_off)
 
 
@@ -1269,7 +1345,7 @@ func _update_footsteps(delta: float) -> void:
 		_audio.play("land", -6.0, 0.08)
 		_stride_left = tuning.stride
 	_was_airborne = airborne
-	if airborne or _player.in_cover or _player.halted or _player.is_sliding():
+	if airborne or _player.in_cover or _player.standoff or _player.halted or _player.is_sliding():
 		return
 	_stride_left -= tuning.run_speed * delta
 	if _stride_left > 0.0:
@@ -6296,9 +6372,10 @@ func _raise_shutter(shutter: Node3D) -> void:
 
 ## Forced movement. The outer lanes can't get through a halfway marker's doorway: just before one,
 ## anyone out there is steered in to the nearest lane that can. And at the very end you're steered
-## into the centre lane, lined up with the chopper.
+## into the centre lane, lined up with the chopper (after the boss, the lane beside his body, all
+## the way to the chopper).
 func _funnel_to_markers() -> void:
-	if _player.in_cover:
+	if _player.in_cover or _player.standoff:
 		return
 	var d := _player.distance_run()
 	var mid: int = (tuning.lane_count - 1) / 2
@@ -6310,6 +6387,8 @@ func _funnel_to_markers() -> void:
 	var seg := _segment_at(d)
 	if _graph.end_type(seg["id"]) == "extract" and seg.get("promoted", false) and d >= float(seg["end"]) - CHOPPER_FUNNEL:
 		_player.lane = mid
+		if _boss_fight != null and is_instance_valid(_boss_fight) and not _boss_fight.is_alive():
+			_player.lane = mid - 1 if _player.track_x <= 0.0 else mid + 1  # past his body, beside it
 
 
 ## Out of the room: the door flies open off its hinge and the camera jolts.
@@ -6685,7 +6764,9 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 	if _clock and _clock.stage == ExtractionClock.Stage.LIFTING_OFF:
 		var t := (_clock.elapsed - _clock.lifts_at) / (_clock.gone_at - _clock.lifts_at)
 		chopper.position.y += 2.5 * t
-		chopper.create_tween().tween_property(chopper, "position:y", xf.origin.y + 2.5, _clock.gone_at - _clock.elapsed)
+		var lift := chopper.create_tween()
+		lift.tween_property(chopper, "position:y", xf.origin.y + 2.5, _clock.gone_at - _clock.elapsed)
+		_lift_tweens.append(lift)
 	_build_chopper_model(chopper)
 
 
@@ -6851,7 +6932,7 @@ func _update_combat(delta: float) -> void:
 			_damage_player("ran_into_trooper")
 		if not GameState.run_active:
 			return
-	_hud.show_cover_hint(_player.in_cover)
+	_hud.show_cover_hint(_player.in_cover, _player.standoff)
 
 	_fire_cooldown -= delta
 	_hud.set_firing(_fire_held)
@@ -6947,6 +7028,155 @@ func _update_searchlights(delta: float) -> void:
 		var here: bool = l["seg"].get("promoted", false)
 		light.update(delta, d if here else -INF, _player.track_x)
 	_lights = _lights.filter(func(l: Dictionary) -> bool: return is_instance_valid(l["node"]) and l["node"].at > d - 20.0)
+
+
+## The boss at the chopper: the standoff starts as you come within his range (the run stops; you
+## step between lanes and fire); then, every frame, his minigun's cycle, its hits on you, and his
+## health on the HUD. When he's down you run on to the chopper.
+func _update_boss(delta: float) -> void:
+	var d := _player.distance_run()
+	for b in _bosses:
+		var boss: Boss = b["node"]
+		if not is_instance_valid(boss) or not b["seg"].get("promoted", false):
+			continue
+		if _boss_fight == null and boss.state == Boss.State.WAITING and d >= boss.at - tuning.boss_standoff:
+			_start_boss_fight(boss)
+		if boss != _boss_fight or not boss.is_alive():
+			continue
+		if boss.update(delta, GameState.alert_level, _player.distance_run(), _player.track_x, _route_point):
+			RunLog.record_event("boss_hit", {"node": _runner.current})
+			_damage_player("minigun")
+			if not GameState.run_active:
+				return
+		if boss.is_alive():
+			_hud.show_boss(float(boss.health) / float(tuning.boss_health))
+
+
+func _start_boss_fight(boss: Boss) -> void:
+	_boss_fight = boss
+	_player.enter_standoff(boss.at - tuning.boss_standoff)
+	if _squad_on:
+		_squad_fall_back()  # (they hold back: it's his fight now)
+	_hud.show_runner(-1.0)
+	_hud.show_boss(1.0)
+	RunLog.record_event("boss_fight", {"node": _runner.current})
+	boss.begin(GameState.alert_level)
+
+
+## The boss's KO replay (user: Tekken-style; KoReplay): the moment he's killed the game cuts close
+## to him and slows right down; his death plays live, then twice more from new angles, under cinema
+## bars, REPLAY blinking over the replays. The chopper's clock stops (you can't move), FIRE doesn't
+## shoot, nothing can hurt you; a new tap, swipe or FIRE press skips the rest. Then a hard cut back to the camera behind
+## you, and you run on to the chopper.
+func _ko_begin(boss: Boss) -> void:
+	_ko_shots = KoReplay.shots(tuning)
+	_ko = 0
+	_ko_real = 0.0
+	_ko_skipped = false
+	_ko_skip_asked = false
+	set_fire_held(false)
+	_ko_clock_was = _clock.running
+	_clock.running = false
+	_hold_lift_off(true)
+	_ko_fov = _camera.fov
+	_hud.set_playing(false)
+	_hud.show_cover_hint(false)
+	_hud.set_letterbox(true, 0.15)
+	_ko_shot_start(boss)
+
+
+func _ko_shot_start(boss: Boss) -> void:
+	var shot: Dictionary = _ko_shots[_ko]
+	_ko_shot_real = 0.0
+	Engine.time_scale = float(shot["scale"])
+	if _ko > 0:
+		boss.replay_death(float(shot["from"]))
+	_camera.fov = float(shot["fov"])
+	_hud.show_replay(shot["replay"])
+	_audio.play("slowmo", -2.0, 0.0)
+	RunLog.record_event("ko_shot", {"shot": _ko})
+
+
+## Every physics frame of the KO replay: on to the next shot when this one has shown its part of
+## his death (or, failing that, has run its length in real time and a second more).
+func _update_ko(delta: float) -> void:
+	var boss := _boss_fight
+	if boss == null or not is_instance_valid(boss):
+		_ko_end()
+		return
+	var real := delta / maxf(Engine.time_scale, 0.01)
+	_ko_real += real
+	_ko_shot_real += real
+	if _ko_skip_asked and boss.death_ready():
+		_ko_skip()
+		return
+	var shot: Dictionary = _ko_shots[_ko]
+	if boss.death_t >= float(shot["to"]) or _ko_shot_real > KoReplay.length(shot) + 1.0:
+		RunLog.record_event("ko_shot_end", {"shot": _ko, "timed_out": boss.death_t < float(shot["to"])})
+		_ko += 1
+		if _ko >= _ko_shots.size():
+			_ko_end()
+		else:
+			_ko_shot_start(boss)
+
+
+## A tap (or swipe, or FIRE pressed) during the KO replay: after its first moment, straight to the
+## end (he lies in his blood, the gun by him).
+func _ko_skip() -> void:
+	if _ko < 0 or _ko_real < tuning.boss_ko_skip_after:
+		return
+	if _boss_fight != null and is_instance_valid(_boss_fight) and not _boss_fight.death_ready():
+		_ko_skip_asked = true  # (his ragdoll's still being worked out: skip the moment it's done)
+		return
+	_ko_skipped = true
+	if _boss_fight != null and is_instance_valid(_boss_fight):
+		_boss_fight.finish_death()
+	_ko_end()
+
+
+## The KO replay's over (or the run is): normal time, a hard cut back to the camera behind you, the
+## HUD and the chopper's clock back; you run on.
+func _ko_end() -> void:
+	_ko = -1
+	Engine.time_scale = 1.0
+	_cam_snap = true
+	_camera.fov = _ko_fov
+	_shake = 0.0
+	_hud.show_replay(false)
+	_hud.set_letterbox(false, 0.15)
+	_clock.running = _ko_clock_was
+	_hold_lift_off(false)
+	RunLog.record_event("ko_end", {"skipped": _ko_skipped})
+	if GameState.run_active:
+		_hud.set_playing(true)
+		_player.end_standoff()  # the way to the chopper is clear
+
+
+## The boss's death's sounds, heavy, each time it's shown (live and in the replays).
+func _on_boss_death_beat(beat: String, boss: Boss) -> void:
+	if not is_instance_valid(boss):
+		return
+	match beat:
+		"hit":
+			_audio.play_at("hit", boss.to_global(Vector3(0.0, 1.7, 0.0)), 2.0, 0.05)
+		"let_go":
+			_audio.play_at("grunt_%d" % (randi() % 3), boss.to_global(Vector3(0.0, 1.9, 0.0)), 0.0, 0.03)
+		"gun_down":
+			_audio.play_at("gun_drop", boss.to_global(Vector3(0.3, 0.2, -0.6)), 0.0, 0.04)
+		"body_down":
+			_audio.play_at("fall", boss.to_global(Vector3(0.0, 0.2, 2.0)), 2.0, 0.04)
+			_audio.play_at("player_hit", boss.to_global(Vector3(0.0, 0.2, 2.0)), -2.0, 0.04)
+
+
+## While the clock's stopped, a chopper already lifting off waits too (only its climb: its rotors
+## and their sound go on).
+func _hold_lift_off(on: bool) -> void:
+	_lift_tweens = _lift_tweens.filter(func(t: Tween) -> bool: return t.is_valid())
+	for t in _lift_tweens:
+		if on:
+			t.pause()
+		else:
+			t.play()
 
 
 ## The roof snipers: each starts on you when you reach his spot (if the alert's CAUTION or up),
@@ -7269,6 +7499,8 @@ func fire_target() -> Node3D:
 		if is_instance_valid(n) and c["seg"].get("promoted", false) and n.is_targetable(alert) \
 				and n.is_visible_in_tree() and _sees(gun, n.global_position + Vector3.UP * _aim_height(n)):
 			candidates.append(n)
+	if _boss_fight != null and is_instance_valid(_boss_fight) and _boss_fight.is_targetable(alert):
+		candidates.append(_boss_fight)  # (out in the open in front of the chopper)
 	var origin := _player.global_position + Vector3(0, 1.2, 0)
 	var forward := -_player.global_transform.basis.z
 	if _tapped != null and (not is_instance_valid(_tapped) or not _tapped.call("is_targetable", alert)):
@@ -7278,6 +7510,8 @@ func fire_target() -> Node3D:
 
 ## Where on a target you aim: a trooper's chest, a dog's body, an alarm box's face.
 func _aim_height(n: Node3D) -> float:
+	if n is Boss:
+		return Boss.CHEST
 	if n is SecurityTrooper:
 		return RifleTrooper.CHEST  # the scout's chest, as the guard's
 	if n is RifleTrooper:
@@ -7374,6 +7608,8 @@ func _on_junction_cleared() -> void:
 
 func _on_run_ended(reason: StringName) -> void:
 	_set_rear_cctv(false)
+	if _ko >= 0:
+		_ko_end()
 	Engine.time_scale = 1.0
 	_clock.stop()
 	_fire_held = false
@@ -7384,6 +7620,9 @@ func _on_run_ended(reason: StringName) -> void:
 	for c in _combatants:  # the troopers lower their rifles, the dogs and the runner pull up
 		if is_instance_valid(c["node"]) and (c["node"] is RifleTrooper or c["node"] is RusherDog or c["node"] is SecurityTrooper):
 			c["node"].stand_down()
+	if _boss_fight != null and is_instance_valid(_boss_fight):
+		_boss_fight.stand_down()  # his gun spins down
+	_hud.show_boss(-1.0)
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())
@@ -7406,6 +7645,9 @@ func _on_run_ended(reason: StringName) -> void:
 func _on_swipe(dir: Vector2i) -> void:
 	if _menu_open or _frontend.is_open():
 		return  # the menus have their own buttons
+	if _ko >= 0:
+		_ko_skip()
+		return
 	if not _started:
 		start_run()
 	elif GameState.run_active and _player.distance_run() > 0.3 and not in_stairwell():
@@ -7421,6 +7663,9 @@ func _on_swipe(dir: Vector2i) -> void:
 func _on_tap(pos: Vector2) -> void:
 	if _menu_open or _frontend.is_open():
 		return
+	if _ko >= 0:
+		_ko_skip()
+		return
 	if not _started:
 		start_run()  # a tap during the opening pan skips it
 	elif not GameState.run_active:
@@ -7429,7 +7674,8 @@ func _on_tap(pos: Vector2) -> void:
 		_tapped = _enemy_near_screen(pos)
 
 
-## Tap-to-target (proposal under test): the live trooper drawn nearest the tap, if close enough.
+## Tap-to-target (proposal under test): the live trooper drawn nearest the tap, if close enough; or
+## the boss, tapped anywhere on him.
 func _enemy_near_screen(pos: Vector2) -> Node3D:
 	var best: Node3D = null
 	var best_d := tuning.tap_target_radius_px
@@ -7444,11 +7690,24 @@ func _enemy_near_screen(pos: Vector2) -> Node3D:
 		if d < best_d:
 			best_d = d
 			best = n
+	# The boss (big, and alone at the chopper): nearest his body, feet to head.
+	var boss := _boss_fight
+	if boss != null and is_instance_valid(boss) and boss.is_targetable(GameState.alert_level):
+		var feet := boss.global_position + Vector3.UP * 0.3
+		var head := boss.global_position + Vector3.UP * (Boss.CHEST + 0.5)
+		if not _camera.is_position_behind(feet) and not _camera.is_position_behind(head):
+			var a := _camera.unproject_position(feet)
+			var b := _camera.unproject_position(head)
+			if Geometry2D.get_closest_point_to_segment(pos, a, b).distance_to(pos) < best_d:
+				best = boss
 	return best
 
 
 func _on_fire() -> void:
 	if _menu_open or _frontend.is_open():
+		return
+	if _ko >= 0:
+		_ko_skip()  # (a new press: the FIRE held as he died doesn't count)
 		return
 	if not _started:
 		start_run()
@@ -7503,8 +7762,9 @@ func _update_camera(delta: float) -> void:
 		_cam_base = _camera.global_transform
 		_was_cctv = true
 		return
-	var snap := _was_cctv
+	var snap := _was_cctv or _cam_snap
 	_was_cctv = false
+	_cam_snap = false
 	# Just out of a stairwell, the play camera behind you is still inside it: leave it out for now.
 	var just_out: bool = _is_stairs(seg) and into > seg["ramp_len"] - 0.4 and into < seg["ramp_len"] + 6.5
 	_camera.cull_mask = 0xFFFFF & ~STAIRWELL_LAYER if just_out else 0xFFFFF
@@ -7515,6 +7775,13 @@ func _update_camera(delta: float) -> void:
 		eye_local = Vector3(x + sin(sway) * 3.3, 1.55, -cos(sway) * 3.3)
 		look_local = Vector3(x, 1.25, 0.0)
 		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
+		_cam_base = _camera.global_transform
+		return
+	if _ko >= 0 and _boss_fight != null and is_instance_valid(_boss_fight):
+		# The boss's KO replay: this shot's camera (cut to at each shot).
+		var shot: Dictionary = _ko_shots[_ko]
+		var u := KoReplay.progress(shot, _boss_fight.death_t)
+		_camera.global_transform = _boss_fight.global_transform * KoReplay.camera(shot, u, _boss_fight.body_point())
 		_cam_base = _camera.global_transform
 		return
 	if _intro_left > 0.0 and not _started:

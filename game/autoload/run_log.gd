@@ -73,7 +73,7 @@ func tally() -> Dictionary:
 		elif e["kind"] == "discovered":
 			new_areas[StringName(e["data"].get("node", ""))] = true
 	return {
-		"downed": n.call(["trooper_down", "dog_down", "runner_down"]),
+		"downed": n.call(["trooper_down", "dog_down", "runner_down", "boss_down"]),
 		"hits": n.call(["player_hit"]),
 		"run_into": n.call(["stumble"]),
 		"alarms_set_off": n.call(["tripwire", "searchlight", "runner_alarm"]),

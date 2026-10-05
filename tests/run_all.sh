@@ -25,30 +25,38 @@ G="MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WARE
 U="MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SERVICE TUNNEL > BOILER ROOM > SEWER > PUMP STATION > STORM DRAIN > HELIPAD"
 R="MAIN FLOOR LOBBY > ROOFTOPS > WATER TOWERS > GANTRY > SKYLIGHTS > ANTENNA FARM > ROOF EDGE"
 expect naive       "reason=killed"
-expect ground      "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/0 runner=1/0"
-expect tunnel_quiet "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=13"
-expect tunnel_loud "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15"
-expect tunnel_alarm "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=0 alarms=1"
-expect roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15"
-expect roof_loud   "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0" "snipers=0/4/0"
+expect ground      "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/0 runner=1/0" "boss=1/0/" "ko=3/0/ok"
+expect tunnel_quiet "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=13" "boss=1/0/" "ko=3/0/ok"
+expect tunnel_loud "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15" "boss=1/0/" "ko=3/0/ok"
+expect tunnel_alarm "reason=extracted alert=1 route=$U | covers=0 hits=0 missed=0 alarms=1" "boss=1/0/" "ko=3/0/ok"
+expect roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15" "boss=1/0/" "ko=3/0/ok"
+expect roof_loud   "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0" "snipers=0/4/0" "boss=1/0/" "ko=3/0/ok"
 # The roof snipers are out at Alert 2: sniper_hit holds its lane for the first one (hit once) and
 # dodges the other three. The last number: snipers out of view on a tall phone when they locked.
-expect sniper_hit  "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=1" "snipers=1/3/0"
+expect sniper_hit  "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=1" "snipers=1/3/0" "boss=1/0/" "ko=3/0/ok"
 expect miss_ladder "reason=captured alert=2 route=$R |"
-expect warehouse_drop "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0"
-expect late_switch "reason=extracted alert=1 route=$G"
+expect warehouse_drop "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0" "boss=1/0/" "ko=3/0/ok"
+expect late_switch "reason=extracted alert=1 route=$G" "boss=1/0/" "ko=3/0/ok"
 # cover holds fire until it is in cover, so the alarm runner gets away: Alert 2.
-expect cover       "reason=extracted alert=2 route=$G | covers=1 hits=0 missed=1"
+expect cover       "reason=extracted alert=2 route=$G | covers=1 hits=0 missed=1" "boss=1/0/" "ko=3/0/ok"
 # camper never leaves cover, so the alarm runner gets away too.
 expect camper      "reason=chopper_left alert=2 route=MAIN FLOOR LOBBY | covers=1"
-expect ground_loud "reason=extracted alert=3 route=$G | covers=0"
+expect ground_loud "reason=extracted alert=3 route=$G | covers=0" "boss=1/0/" "ko=3/0/ok"
 # The dock's alarm box is out in the yard, in plain view: the bot shoots all three.
-expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=3"
-expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1"
-expect dog_bite    "reason=extracted alert=2 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1 doors=15 dogs=1/0/"
-expect dog_dodge   "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/1/"
+expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=3" "boss=1/0/" "ko=3/0/ok"
+expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1" "boss=1/0/" "ko=3/0/ok"
+expect dog_bite    "reason=extracted alert=2 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1 doors=15 dogs=1/0/" "boss=1/0/" "ko=3/0/ok"
+expect dog_dodge   "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/1/" "boss=1/0/" "ko=3/0/ok"
 # (The bot never shoots the runner: he gets to his panel, on the wall, out of its lane.)
-expect runner_escapes "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/4 runner=0/1"
-expect roof_spotted "reason=extracted alert=3 route=$R > HELIPAD"
+expect runner_escapes "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/4 runner=0/1" "boss=1/0/" "ko=3/0/ok"
+expect roof_spotted "reason=extracted alert=3 route=$R > HELIPAD" "boss=1/0/" "ko=3/0/ok"
 expect squad_caught "reason=captured alert=3 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR |"
+# The boss at the chopper: stepping into a swept lane costs a hit; never shooting him, he blocks the
+# way and the chopper leaves.
+expect boss_hit "reason=extracted alert=1 route=$G | covers=0 hits=1" "boss=1/1/" "ko=3/0/ok"
+expect boss_hold_fire "reason=chopper_left alert=1 route=$G |" "boss=0/0/" "ko=0/0/-"
+# TAP ONLY aiming: tapping the boss makes him the target (he's not one of the troopers).
+expect boss_tap "reason=extracted alert=1 route=$G | covers=0 hits=0" "boss=1/0/" "ko=3/0/ok"
+# The boss's KO replay skipped with a tap: one shot shown, and you run on.
+expect boss_skip "reason=extracted alert=1 route=$G | covers=0 hits=0" "boss=1/0/" "ko=1/1/ok"
 exit $fail

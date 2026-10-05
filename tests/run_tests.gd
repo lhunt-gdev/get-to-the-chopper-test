@@ -30,6 +30,8 @@ func _run() -> void:
 	_test_route_map()
 	_test_tally()
 	_test_snipers()
+	_test_boss()
+	_test_boss_ko()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -112,6 +114,331 @@ func _test_route_map() -> void:
 			skip_size = (c as Control).size
 	_check(skip_size == fe.get_viewport().get_visible_rect().size, "end screen: the tap-to-skip area covers the screen (%s)" % skip_size)
 	fe.free()
+
+
+## The boss at the chopper (user design): his minigun always leaves 2 random lanes free; its rounds
+## fan out from the tip of the gun, never into a free lane, and one that reaches you is a hit (once
+## an attack); alert shortens the spin-up; a new pattern for a new seed; the flash lights up; the
+## cases pile up on the deck; his stance has his feet planted; he's down after boss_health hits.
+func _test_boss() -> void:
+	var tt := Tuning.new()
+	var pairs := {}
+	var ok := true
+	for i in 5:
+		for j in 4:
+			var f := Boss.pick_free_lanes((i + 0.5) / 5.0, (j + 0.5) / 4.0, 5)
+			ok = ok and f.size() == 2 and f[0] != f[1] and f[0] >= 0 and f[0] <= 4 and f[1] >= 0 and f[1] <= 4
+			pairs["%d%d" % [mini(f[0], f[1]), maxi(f[0], f[1])]] = true
+	_check(ok, "boss: always 2 different free lanes (user)")
+	_check(pairs.size() == 10, "boss: any 2 of the 5 lanes can be the free ones")
+	_check(Boss.pick_free_lanes(0.0, 0.0, 5) == [0, 1] and Boss.pick_free_lanes(0.999, 0.999, 5).max() <= 4, "boss: free lanes at the ends")
+	var free: Array[int] = [1, 3]
+	var rad := tt.boss_round_hit_radius
+	_check(Boss.round_hits(0.3, 0.0, 0.0, rad) and not Boss.round_hits(0.5, 0.0, 0.0, rad),
+			"boss: a round reaching you near you, hit; one further off, not")
+	_check(Boss.round_hits(0.6, 1.4, 0.0, rad), "boss: stepping across where a round reaches, hit")
+	_check(not Boss.round_hits(-0.6, 1.4, 0.0, rad), "boss: stepping toward a round but not to it, not hit")
+	var clean := true
+	var x_try := -4.0
+	while x_try <= 4.0:
+		if Boss.fires_at(x_try, free, tt.lane_width, tt.lane_count):
+			for l in free:
+				clean = clean and absf(x_try - (l - 2) * tt.lane_width) >= tt.lane_width * 0.5 - 0.001
+		x_try += 0.01
+	_check(clean and rad < tt.lane_width * 0.5 - 0.1,
+			"boss: he never fires into a free lane, so standing in one no round comes near you (user: 2 lanes always free)")
+	_check(Boss.lane_of(0.69, 1.4, 5) == 2 and Boss.lane_of(0.71, 1.4, 5) == 3 and Boss.lane_of(9.0, 1.4, 5) == 4, "boss: you're in the nearest lane")
+	var times := [tt.boss_spinup_alert1, tt.boss_spinup_alert2, tt.boss_spinup_alert3]
+	_check(Boss.spinup_for(1, times) > Boss.spinup_for(2, times) and Boss.spinup_for(2, times) > Boss.spinup_for(3, times),
+			"boss: less warning at higher alert (LOCKED: alert changes the pressure)")
+	# A new pattern every run (user: "2 random lanes"): the first attacks differ between seeds.
+	var patterns := {}
+	for sd in 8:
+		var b := Boss.new(tt)
+		b.set_seed(sd * 7919 + 1)
+		var p := ""
+		for k in 4:
+			b._spin_up(1)
+			p += "%d%d%d" % [b.free_lanes[0], b.free_lanes[1], b.sweep_dir]
+		patterns[p] = true
+		b.free()
+	_check(patterns.size() >= 6, "boss: a different pattern for a different seed (%d of 8)" % patterns.size())
+	# A fight on a straight road: in a free lane every spin-up, never hit; standing in a swept lane,
+	# hit once a sweep (its rounds reach you once). He stands on the road at 20 m, facing you.
+	var road := func(d: float, x: float, y: float) -> Vector3: return Vector3(x, y, -d)
+	for dodge in [true, false]:
+		var boss := Boss.new(tt)
+		boss.at = 20.0
+		boss.set_seed(3)
+		root.add_child(boss)
+		boss.global_transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, -20.0))
+		var spread := 0.0
+		var gaps_clean := true
+		var lit := false
+		var flash_wrong := false
+		var muzzle_ok := true
+		_check(not boss.is_targetable(1), "boss: not a target till the fight starts")
+		boss.begin(1)
+		_check(boss.is_targetable(1), "boss: a target once it's on")
+		var hits := 0
+		var sweeps := 0
+		var x := 0.0
+		var was := boss.state
+		for f in roundi(60.0 * 3.0 * (tt.boss_spinup_alert1 + tt.boss_sweep_time + tt.boss_spindown_time)):
+			if boss.state == Boss.State.SPINUP:
+				var stay := 2 if not boss.free_lanes.has(2) else (0 if not boss.free_lanes.has(0) else 1)
+				x = boss.lane_x(boss.free_lanes[0] if dodge else stay)
+			var fired_before := boss._round_next
+			if boss.update(1.0 / 60.0, 1, 20.0 - tt.boss_standoff, x, road):
+				hits += 1
+			if was == Boss.State.SWEEP and boss.state != Boss.State.SWEEP:
+				sweeps += 1
+			was = boss.state
+			lit = lit or boss.flash_lamp.visible
+			# (the rig still says firing for the frame the sweep ends on, after the flash is put out)
+			flash_wrong = flash_wrong or boss.flash_lamp.visible != (boss.state == Boss.State.SWEEP and boss._rig.is_firing())
+			# The rounds in the air: fired from the tip of the gun, spread across the lanes (the fan),
+			# never toward a free lane's middle.
+			if boss._round_next != fired_before:
+				var newest: Dictionary = boss._rounds[(boss._round_next + Boss.MAX_ROUNDS - 1) % Boss.MAX_ROUNDS]
+				muzzle_ok = muzzle_ok and (newest["from"] as Vector3).distance_to(boss._rig.muzzle_position()) < 0.05
+			var lo := INF
+			var hi := -INF
+			for r: Dictionary in boss._rounds:
+				if r["live"]:
+					lo = minf(lo, r["x"])
+					hi = maxf(hi, r["x"])
+					for l in boss.free_lanes:
+						gaps_clean = gaps_clean and absf(float(r["x"]) - boss.lane_x(l)) >= tt.lane_width * 0.5 - 0.001
+			if hi > lo:
+				spread = maxf(spread, hi - lo)
+		_check(sweeps == 3, "boss: three attacks in three cycles' time (%d)" % sweeps)
+		if dodge:
+			_check(hits == 0, "boss: dodging into a free lane each time, never hit (%d)" % hits)
+			_check(muzzle_ok, "boss: every round leaves from the tip of his gun (user)")
+			_check(spread > 2.5, "boss: the rounds in the air fan out across the lanes as he sweeps (%.1f m)" % spread)
+			_check(gaps_clean, "boss: no round in the fan heads for a free lane (the gaps where it reaches you)")
+			_check(lit and not flash_wrong, "boss: the gun's flash is lit while it fires and dark otherwise (user)")
+			var down := 0
+			for c: Dictionary in boss._cases:
+				if c["live"] and c["resting"] and absf((c["pos"] as Vector3).y - Boss.CASE_SIZE.y * 0.5) < 0.001:
+					down += 1
+			_check(boss.cases_out() > 40 and down > 20, "boss: the cases fly out and lie on the deck (%d out, %d down) (user)" % [boss.cases_out(), down])
+		else:
+			_check(hits == 3, "boss: standing in a swept lane, hit once a sweep (%d)" % hits)
+		var downs := [0]
+		boss.defeated.connect(func() -> void: downs[0] += 1)
+		for i in tt.boss_health - 1:
+			boss.hit()
+		_check(boss.is_alive(), "boss: still up one hit short")
+		boss.hit()
+		boss.hit()
+		_check(not boss.is_alive() and not boss.is_targetable(1) and downs[0] == 1, "boss: down after %d hits, once" % tt.boss_health)
+		boss.queue_free()
+	# The flash lights him in a lamp slot of its own: never one of the 12 nearest level lamps put out
+	# (they stay as they were), lit as brightly as its flicker says, however far from the focus.
+	var amb := Ambience.new()
+	amb.tuning = tt
+	root.add_child(amb)
+	var near_lamps: Array[Node3D] = []
+	for i in Ambience.SLOTS:
+		var n := Node3D.new()
+		root.add_child(n)
+		n.position = Vector3(i * 0.1, 1.0, 0.0)
+		amb.add_lamp(n, Color.WHITE, 5.0, {"alert": false})
+		near_lamps.append(n)
+	var flash_boss := Boss.new(tt)
+	root.add_child(flash_boss)
+	amb.add_lamp(flash_boss.flash_lamp, Color.ORANGE, 8.0, {"alert": false, "second_slot": true})
+	flash_boss.flash_lamp.global_position = Vector3(0, 1, -100)
+	amb.update(1.0 / 60.0, Vector3.ZERO, 1)
+	var before := amb.slot_nodes.slice(0, Ambience.SLOTS)
+	flash_boss.flash_lamp.visible = true
+	flash_boss.flash_lamp.set_meta("power", 0.7)
+	amb.update(1.0 / 60.0, Vector3.ZERO, 1)
+	_check(amb.slot_nodes.slice(0, Ambience.SLOTS) == before and before.all(func(x) -> bool: return x != null)
+			and amb.slot_nodes[Ambience.SLOTS + 1] == flash_boss.flash_lamp and is_equal_approx(amb.slot_lit[Ambience.SLOTS + 1], 0.7),
+			"boss: his flash lights in a slot of its own, no level lamp put out (user)")
+	flash_boss.flash_lamp.visible = false
+	amb.update(1.0 / 60.0, Vector3.ZERO, 1)
+	_check(amb.slot_nodes[Ambience.SLOTS + 1] == null, "boss: his flash's slot is dark when it's out")
+	for n in near_lamps:
+		n.queue_free()
+	flash_boss.queue_free()
+	amb.queue_free()
+	# His stance (user: "a cool action ready stance"): down low, both feet planted where they go, flat
+	# on the deck, and still planted as he turns to sweep.
+	var rig := GuardRig.new(GuardRifle.Kind.MINIGUN, Boss.MODEL, "BOSS")
+	root.add_child(rig)
+	var planted := true
+	var flat := true
+	for aim_x in [0.0, -4.0, 4.0]:
+		for f in 30:
+			rig.animate(1.0 / 30.0, {"brace": true, "aim": true, "spin": 1.0, "target": rig.global_transform * Vector3(aim_x, 1.0, -14.0)})
+		for side in [-1, 1]:
+			var foot: Vector2 = GuardRig.BRACE_FEET[side]
+			var at := rig._in_rig(rig.ankles[side]).origin
+			planted = planted and at.distance_to(Vector3(foot.x, (rig._ankle_rest[side] as Vector3).y, foot.y)) < 0.01
+			var sole := rig._in_rig(rig.ankles[side].get_node(String(rig.ankles[side].name) + "Flat"))
+			flat = flat and sole.basis.orthonormalized().y.dot(Vector3.UP) > 0.999
+	_check(planted and flat, "boss: braced, his feet stay planted and flat as he turns")
+	_check(rig.hips.position.y < rig._hip_y - GuardRig.BRACE_DROP + 0.02, "boss: braced, he's down low")
+	rig.queue_free()
+
+
+## The boss's KO replay (user: Tekken-style): his death is the same at the same moment however often
+## it's shown; he drops the minigun, twists round twice in the air, lands face up a couple of metres
+## back in one pool of blood, the gun in front of where he stood, clear of the lane you run past in;
+## and the three shots: slowed, each a different angle, each with him in view on a tall phone, the
+## camera under the chopper's rotor, short enough (about 9 s), skippable.
+func _test_boss_ko() -> void:
+	var tt := Tuning.new()
+	var boss := Boss.new(tt)
+	root.add_child(boss)
+	boss.global_transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, -20.0))
+	for f in 20:
+		boss._rig.animate(0.05, boss._stance())
+	var downs := [0]
+	boss.defeated.connect(func() -> void: downs[0] += 1)
+	for i in tt.boss_health:
+		boss.hit()
+	_check(boss.death_t == 0.0 and downs[0] == 1, "boss KO: killed, his death starts (once)")
+	# Killed between sweeps (barrels still), they stay still: they spin down from how fast they were.
+	var barrels_still := boss._rig._barrels.rotation.z
+	boss.replay_death(0.6)
+	_check(is_equal_approx(boss._rig._barrels.rotation.z, barrels_still), "boss KO: killed with his barrels still, they don't start spinning")
+	# The same moment, the same pose: shown, run on, wound back.
+	var pose_at := func(t: float) -> Array:
+		boss.replay_death(t)
+		var out := [boss._rig.hips.position]
+		for j in boss._rig._all_joints():
+			out.append(j.quaternion)
+		out.append(boss._rig.rifle.transform)
+		return out
+	var first: Array = pose_at.call(0.5)
+	pose_at.call(1.7)
+	var again: Array = pose_at.call(0.5)
+	var same := first.size() == again.size()
+	for i in first.size():
+		same = same and (str(first[i]) == str(again[i]))
+	_check(same, "boss KO: his death at the same moment is the same pose, replayed (user: 3 angles)")
+	# Through it: the turns about himself, and how he ends.
+	var face_down := 0
+	var was_up := 1.0
+	var t := 0.0
+	while t <= Boss.DEATH_END:
+		boss.replay_death(t)
+		var up := (-boss._rig.chest.global_transform.basis.z.normalized()).y
+		if was_up > 0.0 and up < 0.0:
+			face_down += 1
+		was_up = up
+		t += 1.0 / 120.0
+	var hips := boss.body_point()
+	# Nothing through the deck on the way (his limbs as he twists low; the gun's barrels as it lands).
+	# Also, like a ragdoll (user): no joint flips round from one moment to the next, his waist never
+	# wrings round, and once he's down he settles still.
+	var lowest := INF
+	var gun_lowest := INF
+	var lowest_at := ""
+	var names := ["elbow L", "wrist L", "fingers L", "elbow R", "wrist R", "fingers R", "knee L", "ankle L", "toe L", "knee R", "ankle R", "toe R", "skull"]
+	var worst_step := 0.0
+	var worst_waist := 0.0
+	var was_q: Array = []
+	var lying_from: Array = []
+	var lying_moved := 0.0
+	t = 0.0
+	while t <= Boss.DEATH_END:
+		boss.replay_death(t)
+		var r: GuardRig = boss._rig
+		var pts: Array = r._rag_points()
+		for i in pts.size():
+			var y := boss.to_local(r.global_transform * (pts[i] as Vector3)).y
+			if y < lowest:
+				lowest = y
+				lowest_at = "%s at %.2f" % [names[i], t]
+		gun_lowest = minf(gun_lowest, minf(boss.to_local(r.muzzle_position()).y, boss.to_local(r.rifle.global_position).y))
+		var qs: Array = []
+		for j in r._all_joints():
+			qs.append(j.quaternion)
+		if t > 0.02 and not was_q.is_empty():
+			for k in qs.size():
+				worst_step = maxf(worst_step, (was_q[k] as Quaternion).angle_to(qs[k]))
+		was_q = qs
+		worst_waist = maxf(worst_waist, r.spine.quaternion.get_angle())
+		if t >= 1.8:
+			var here: Array = []
+			for i in pts.size():
+				here.append(r.global_transform * (pts[i] as Vector3))
+			if lying_from.is_empty():
+				lying_from = here
+			for i in here.size():
+				lying_moved = maxf(lying_moved, (here[i] as Vector3).distance_to(lying_from[i]))
+		t += 1.0 / 120.0
+	boss.replay_death(Boss.DEATH_END)
+	_check(lowest > -0.03, "boss KO: none of him goes through the deck, toes, fingertips and skull too (%.2f m, %s)" % [lowest, lowest_at])
+	_check(worst_step < 1.2, "boss KO: no joint flips round from one moment to the next (%.2f rad in 1/120 s)" % worst_step)
+	_check(worst_waist < 1.1, "boss KO: his waist bends but never wrings round (%.2f rad)" % worst_waist)
+	_check(lying_moved < 0.08, "boss KO: down, he settles still (%.2f m)" % lying_moved)
+	_check(gun_lowest > -0.02, "boss KO: the minigun lands on the deck, not through it (%.2f m)" % gun_lowest)
+	var hands_down: bool = boss.to_local(boss._rig.wrists[-1].global_position).y < 0.2 and boss.to_local(boss._rig.wrists[1].global_position).y < 0.2
+	_check(hands_down, "boss KO: lying dead, his hands lie on the deck")
+	hips = boss.body_point()
+	_check(face_down == 2, "boss KO: he twists round twice in the air (user: 'one or twice') (%d)" % face_down)
+	_check(was_up > 0.9 and hips.y < 0.4 and hips.z > 1.6, "boss KO: he lands face up (user), on the deck, blasted back (%.2f up, at %s)" % [was_up, hips])
+	var gun := boss.to_local(boss._rig.rifle.global_position)
+	var muzzle := boss.to_local(boss._rig.muzzle_position())
+	_check(gun.y < 0.3 and muzzle.y < 0.3 and gun.z < 0.0 and absf(muzzle.x) < 1.4 - 0.45 and absf(gun.x) < 1.4 - 0.45,
+			"boss KO: the minigun's dropped, on the deck in front of where he stood, clear of the lane you run past in (%s, %s)" % [gun, muzzle])
+	var pools := 0
+	for c in boss.get_children():
+		if c is MeshInstance3D and (c as MeshInstance3D).material_override is ShaderMaterial \
+				and ((c as MeshInstance3D).material_override as ShaderMaterial).shader == Blood.POOL_SHADER:
+			pools += 1
+	boss.replay_death(0.0)
+	boss.finish_death()
+	_check(pools == 1 and downs[0] == 1, "boss KO: one pool of blood and one death, however often it's replayed")
+	# The shots: slowed, three angles, him in view on a tall phone (270x585, between the cinema bars),
+	# under the rotor; the gun's landing in view in at least one, his hands as he lies in the last.
+	var plan := KoReplay.shots(tt)
+	var total := 0.0
+	var in_view := true
+	var under_rotor := true
+	var slowed := true
+	var angles: Array[float] = []
+	var gun_seen := false
+	var bars := 1.0 - 2.0 * 44.0 / 585.0  # (the cinema bars, Hud.LETTERBOX)
+	var seen := func(cam: Transform3D, fov: float, p: Vector3) -> bool:
+		var half_v := tan(deg_to_rad(fov) / 2.0)
+		var c := cam.affine_inverse() * p
+		return c.z < 0.0 and absf(c.x / -c.z) <= half_v * 270.0 / 585.0 and absf(c.y / -c.z) <= half_v * bars
+	for si in plan.size():
+		var shot: Dictionary = plan[si]
+		total += KoReplay.length(shot)
+		slowed = slowed and float(shot["scale"]) < 1.0
+		var fov := float(shot["fov"])
+		for u in [0.0, 0.25, 0.5, 0.75, 1.0]:
+			boss.replay_death(lerpf(float(shot["from"]), float(shot["to"]), u))
+			var cam := KoReplay.camera(shot, u, boss.body_point())
+			under_rotor = under_rotor and cam.origin.y < 3.7
+			for p: Vector3 in [boss.to_local(boss._rig.chest.global_position), boss.body_point()]:
+				in_view = in_view and seen.call(cam, fov, p)
+			if si == plan.size() - 1 and u == 1.0:
+				for w in [-1, 1]:
+					in_view = in_view and seen.call(cam, fov, boss.to_local(boss._rig.wrists[w].global_position))
+		if float(shot["from"]) <= GuardRig.GUN_LAND and float(shot["to"]) >= GuardRig.GUN_LAND:
+			boss.replay_death(GuardRig.GUN_LAND)
+			var cam_g := KoReplay.camera(shot, KoReplay.progress(shot, GuardRig.GUN_LAND), boss.body_point())
+			gun_seen = gun_seen or (seen.call(cam_g, fov, boss.to_local(boss._rig.rifle.global_position))
+					and seen.call(cam_g, fov, boss.to_local(boss._rig.muzzle_position())))
+		var from_cam: Vector3 = shot["cam"][0]
+		angles.append(atan2(from_cam.x, -from_cam.z))
+	var apart := absf(angle_difference(angles[0], angles[1])) > 0.8 and absf(angle_difference(angles[1], angles[2])) > 0.8
+	_check(plan.size() == 3 and slowed and apart, "boss KO: three slowed shots from three angles (user: like Tekken)")
+	_check(in_view, "boss KO: he's in view in every shot on a tall phone (and his hands as he lies there)")
+	_check(gun_seen, "boss KO: the minigun's seen hitting the deck (user: 'he drops the minigun')")
+	_check(under_rotor, "boss KO: the cameras stay under the chopper's rotor")
+	_check(total <= 10.0, "boss KO: about 9 s in all (%.1f; LOCKED: cinematic beats short; the bots check the tap to skip)" % total)
+	boss.queue_free()
 
 
 ## The Sniper (user design; LOCKED roster: a timed movement threat you dodge): his hit rule, a

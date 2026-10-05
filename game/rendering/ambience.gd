@@ -13,6 +13,10 @@ const CAUTION_AMBER := Color(1.0, 0.6, 0.2)
 
 ## {node, color, range, flicker, blink, alert, fixture, on_mat, off_mat, seed}
 var _lamps: Array[Dictionary] = []
+## This frame, what's lit in each slot (the 12 nearest, then the two of their own): the lamp's node
+## (or null) and how lit it is.
+var slot_nodes: Array = []
+var slot_lit: Array[float] = []
 var _amb := Color(1, 1, 1)
 var _moon := Color(0, 0, 0)
 var _moon_dir := Vector3.UP
@@ -31,13 +35,15 @@ var brightness_scale := 1.0
 ## stutters. blink > 0: on/off period in seconds (beacons). alert: pulses red at ALERT.
 ## fixture: the glowing mesh you see, swapped to off_mat while the lamp is off. own_slot: lit in a
 ## slot of its own, outside the nearest SLOTS (one lamp: his muzzle flash, so a shot never puts out
-## a level lamp by taking its slot); lit while its node is visible.
+## a level lamp by taking its slot); lit while its node is visible. second_slot: the same, in a second
+## slot of its own (the boss's muzzle flash, lit however far from the camera's focus). A node with a
+## "power" meta (0..1) is lit that much, set by its owner every frame (a flash's flicker).
 func add_lamp(node: Node3D, color: Color, range_m: float, opts: Dictionary = {}) -> void:
 	var lamp := {"node": node, "color": color, "range": range_m, "flicker": opts.get("flicker", 0.0),
 			"blink": opts.get("blink", 0.0), "alert": opts.get("alert", true), "fixture": opts.get("fixture", null),
 			"on_mat": opts.get("on_mat", null), "off_mat": opts.get("off_mat", null),
 			"seed": float(absi(hash(node.get_instance_id())) % 1000) / 37.0, "lit": 1.0,
-			"own_slot": opts.get("own_slot", false)}
+			"own_slot": opts.get("own_slot", false), "second_slot": opts.get("second_slot", false)}
 	_lamps.append(lamp)
 
 
@@ -78,6 +84,12 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 	var near: Array[Dictionary] = []
 	var own_pos := Vector4.ZERO
 	var own_col := Vector4.ZERO
+	var second_pos := Vector4.ZERO
+	var second_col := Vector4.ZERO
+	slot_nodes.resize(SLOTS + 2)
+	slot_nodes.fill(null)
+	slot_lit.resize(SLOTS + 2)
+	slot_lit.fill(0.0)
 	for l in _lamps:
 		var node: Node3D = l["node"]
 		if not node.is_inside_tree() or not node.is_visible_in_tree():  # e.g. walls rebuilt, the old ones on their way out
@@ -87,6 +99,17 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 			var p: Vector3 = node.global_position
 			own_pos = Vector4(p.x, p.y, p.z, l["range"])
 			own_col = Vector4(oc.r * b, oc.g * b, oc.b * b, 1)
+			slot_nodes[SLOTS] = node
+			slot_lit[SLOTS] = 1.0
+			continue
+		if l["second_slot"]:
+			var sc: Color = l["color"]
+			var sp: Vector3 = node.global_position
+			var se := _lit(l) * b
+			second_pos = Vector4(sp.x, sp.y, sp.z, l["range"])
+			second_col = Vector4(sc.r * se, sc.g * se, sc.b * se, 1)
+			slot_nodes[SLOTS + 1] = node
+			slot_lit[SLOTS + 1] = _lit(l)
 			continue
 		l["lit"] = _lit(l)
 		var fixture = l["fixture"]
@@ -112,10 +135,14 @@ func update(delta: float, focus: Vector3, alert_level: int) -> void:
 			var p: Vector3 = l["pos"]
 			pos = Vector4(p.x, p.y, p.z, l["range"])
 			col = Vector4(c.r * e, c.g * e, c.b * e, 1)
+			slot_nodes[i] = l["node"]
+			slot_lit[i] = e
 		RenderingServer.global_shader_parameter_set("lamp_pos_%d" % i, pos)
 		RenderingServer.global_shader_parameter_set("lamp_col_%d" % i, col)
 	RenderingServer.global_shader_parameter_set("lamp_pos_%d" % SLOTS, own_pos)
 	RenderingServer.global_shader_parameter_set("lamp_col_%d" % SLOTS, own_col)
+	RenderingServer.global_shader_parameter_set("lamp_pos_%d" % (SLOTS + 1), second_pos)
+	RenderingServer.global_shader_parameter_set("lamp_col_%d" % (SLOTS + 1), second_col)
 
 
 ## How strongly the screen edges throb: x = ALERT red, y = CAUTION amber (both 0..1, pulsing).
@@ -126,6 +153,9 @@ func screen_alert() -> Vector2:
 
 ## How lit a lamp is right now, 0..1: blinking beacons, and the odd stutter of a failing tube.
 func _lit(l: Dictionary) -> float:
+	var node: Node3D = l["node"]
+	if node.has_meta("power"):
+		return float(node.get_meta("power"))
 	var t: float = _time + l["seed"]
 	if l["blink"] > 0.0:
 		return 1.0 if fmod(t, l["blink"]) < l["blink"] * 0.35 else 0.0

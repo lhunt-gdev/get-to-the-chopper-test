@@ -18,6 +18,17 @@ static func mist(parent: Node3D, pos: Vector3, away: Vector3, seed_value: int = 
 ## A pool of blood on the floor at `pos` (in `parent`'s space), spreading out to `radius` metres
 ## over `seconds`. It stays.
 static func pool(parent: Node3D, pos: Vector3, radius: float, seconds: float, seed_value: int = 0) -> MeshInstance3D:
+	var m := pool_at(parent, pos, radius, seed_value)
+	var mat := m.material_override as ShaderMaterial
+	var t := m.create_tween()
+	t.tween_method(func(v: float) -> void: mat.set_shader_parameter("spread", v), 0.0, 1.0, seconds) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	return m
+
+
+## The same pool, not spreading yet: its owner sets how far it has spread (set_spread), and can wind
+## it back (a replay).
+static func pool_at(parent: Node3D, pos: Vector3, radius: float, seed_value: int = 0) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var quad := PlaneMesh.new()
 	quad.size = Vector2(radius * 2.0, radius * 2.0)
@@ -29,10 +40,14 @@ static func pool(parent: Node3D, pos: Vector3, radius: float, seconds: float, se
 	m.material_override = mat
 	m.position = pos
 	parent.add_child(m)
-	var t := m.create_tween()
-	t.tween_method(func(v: float) -> void: mat.set_shader_parameter("spread", v), 0.0, 1.0, seconds) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	return m
+
+
+## How far a pool has spread, 0..1 (eased out as pool() does it).
+static func set_spread(pool_mesh: MeshInstance3D, v: float) -> void:
+	var e := 1.0 - (1.0 - clampf(v, 0.0, 1.0)) * (1.0 - clampf(v, 0.0, 1.0))
+	(pool_mesh.material_override as ShaderMaterial).set_shader_parameter("spread", e)
+	pool_mesh.visible = v > 0.0
 
 
 ## The flecks: each flies out along the spray with some scatter, drops under gravity and shrinks

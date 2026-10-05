@@ -165,3 +165,11 @@ lamp_col_12={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
 }
+lamp_pos_13={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+lamp_col_13={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
