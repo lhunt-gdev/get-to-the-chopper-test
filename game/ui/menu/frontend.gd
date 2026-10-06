@@ -153,14 +153,25 @@ func _show(s: Screen) -> void:
 
 # --- Screens --------------------------------------------------------------------------
 
+## The room left above and below the main menu's logo (px).
+const LOGO_ROOM := 10.0
+
+
 func _build_main() -> void:
 	_back_to = Screen.MAIN
 	_root.add_child(Reticle.new())
 	var tag := UiKit.label("// CLASSIFIED: EYES ONLY", 8, UiKit.RED, HORIZONTAL_ALIGNMENT_CENTER)
 	_place_wide(tag, 70)
-	_place_wide(UiKit.label("GET TO THE", 16, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), 92)
-	_place_wide(UiKit.label("CHOPPER!", 24, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 116)
-	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), 150)
+	var logo := Logo.new()
+	# Room round the logo (user: "it needs a bit of padding around the logo as the other texts are too
+	# close"): LOGO_ROOM under the tag, the mission line LOGO_ROOM under the logo, the red rule below that.
+	var logo_y := 78.0 + LOGO_ROOM
+	_place_wide(logo, logo_y)
+	logo.offset_bottom = logo_y + Logo.height()
+	var mission_y := logo_y + Logo.height() + LOGO_ROOM
+	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_y)
+	Reticle.rule_bottom = mission_y + 15.0
+	Reticle.ring_y = roundf(logo_y + Logo.height() / 2.0)
 	var first := _button("START MISSION", 290, func() -> void: start_requested.emit())
 	_button("SETTINGS", 318, func() -> void: _open(Screen.SETTINGS))
 	_button("CONTROLS", 346, func() -> void: _open(Screen.CONTROLS))
@@ -462,7 +473,61 @@ func _choice_row(text: String, key: String, names: Dictionary, y: float) -> floa
 
 
 ## The main menu's backdrop: a gun-barrel reticle (a GoldenEye nod) behind the title.
+## The game's name (user: "Hot exfil sounds cool"; the slanted-block logo from the mockups, in the
+## game's own pixel font): HOT on a solid red block, EXFIL on a dark block outlined in teal, one
+## over the other, both leaning like the game's other slanted blocks, a hard shadow under each.
+class Logo extends Control:
+	## The letters' size (the pixel font is crisp at 8, 16 or 24), a block's padding round them, how far
+	## its top leans right of its bottom, the gap between the two, and the whole logo's height.
+	const SIZE := 24
+	const PAD := Vector2(9, 3)
+	const SLANT := 7.0
+	const GAP := 4.0
+	const SHADOW := Vector2(3, 3)
+	## HOT and EXFIL side by side on one row (else one over the other).
+	static var one_row := false
+	static func height() -> float:
+		return SIZE + PAD.y * 2.0 + SHADOW.y if one_row else (SIZE + PAD.y * 2.0) * 2.0 + GAP + SHADOW.y
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var f := UiKit.font()
+		var parts := [["HOT", UiKit.RED, UiKit.INK, false], ["EXFIL", UiKit.PANEL_SOLID, UiKit.TEAL, true]]
+		var widths := []
+		for row in parts:
+			widths.append(f.get_string_size(String(row[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, SIZE).x + PAD.x * 2.0 + SLANT)
+		var x := roundf((size.x - (float(widths[0]) + GAP * 1.5 + float(widths[1]))) / 2.0)
+		var y := 0.0
+		for i in parts.size():
+			var row: Array = parts[i]
+			var text: String = row[0]
+			var r := Rect2(x if one_row else roundf((size.x - float(widths[i])) / 2.0), y, widths[i], SIZE + PAD.y * 2.0)
+			draw_colored_polygon(_lean(Rect2(r.position + SHADOW, r.size)), Color(UiKit.INK, 0.9))
+			draw_colored_polygon(_lean(r), row[1])
+			if row[3]:
+				var edge := _lean(r)
+				edge.append(edge[0])
+				draw_polyline(edge, UiKit.TEAL, 2.0)
+			draw_string(f, Vector2(r.position.x + PAD.x + SLANT * 0.5, r.position.y + PAD.y + f.get_ascent(SIZE)), text,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, SIZE, row[2])
+			if one_row:
+				x += r.size.x + GAP * 1.5
+			else:
+				y += r.size.y + GAP
+
+	## A block's shape: the box with its top leaning SLANT right of its bottom.
+	static func _lean(r: Rect2) -> PackedVector2Array:
+		return PackedVector2Array([r.position + Vector2(SLANT, 0.0), Vector2(r.end.x, r.position.y),
+				r.end - Vector2(SLANT, 0.0), Vector2(r.position.x, r.end.y)])
+
+
 class Reticle extends Control:
+	## The lower red rule's height (under the mission line: the main menu sets it).
+	static var rule_bottom := 166.0
+	## The rings' centre height (behind the logo: the main menu sets it).
+	static var ring_y := 122.0
 	var _t := 0.0
 
 	func _ready() -> void:
@@ -474,7 +539,7 @@ class Reticle extends Control:
 		queue_redraw()
 
 	func _draw() -> void:
-		var c := Vector2(get_viewport_rect().size.x / 2.0, 122)
+		var c := Vector2(get_viewport_rect().size.x / 2.0, ring_y)
 		for i in 4:
 			draw_arc(c, 34.0 + i * 16.0, 0, TAU, 40, Color(UiKit.TEAL, 0.18 - i * 0.03), 1.0)
 		var a := _t * 0.4
@@ -482,7 +547,7 @@ class Reticle extends Control:
 			var d := Vector2(cos(a + k * PI / 2.0), sin(a + k * PI / 2.0))
 			draw_line(c + d * 26.0, c + d * 98.0, Color(UiKit.TEAL, 0.12), 1.0)
 		draw_rect(Rect2(0, 62, get_viewport_rect().size.x, 1), Color(UiKit.RED, 0.4))
-		draw_rect(Rect2(0, 166, get_viewport_rect().size.x, 1), Color(UiKit.RED, 0.4))
+		draw_rect(Rect2(0, rule_bottom, get_viewport_rect().size.x, 1), Color(UiKit.RED, 0.4))
 
 
 ## A dossier header strip across the top of a menu screen.

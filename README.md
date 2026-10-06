@@ -1,4 +1,6 @@
-# Get to the Chopper!
+# HOT EXFIL
+
+(Working title: Get to the Chopper!. The repo and the play link keep that name.)
 
 PS1-style mobile escape action game (Godot 4.7). This repo is the **proof of concept**: it exists to find out whether the 20–30 seconds between route choices is fun.
 

@@ -10,7 +10,7 @@ discussed most recently is still only a proposal.
 
 # 1. Executive Summary
 
-**Get to the Chopper!** is a mobile, third-person, forward-moving action
+**HOT EXFIL** (working title: Get to the Chopper!) is a mobile, third-person, forward-moving action
 game presented with a deliberately PS1-era visual language. The player
 is trying to reach an extraction helicopter before it departs. The
 character generally auto-runs away from the camera, while the player
