@@ -1088,7 +1088,8 @@ func _test_cross_ready() -> void:
 	var neck_y := 0.0
 	var turn := 0.0
 	var look := [0.0, 0.0]
-	var lens := [INF, -INF, INF]  # (x least and most at sway 0, y least at any sway: 480 high)
+	var lens := [INF, -INF, INF]  # (x least and most at sway 0, y least at any sway: 480 and 585 high)
+	var top_px := INF  # (the top of his head at its highest on screen: any sway, 480 and 585 high)
 	var lens_x0 := 0.0
 	var gun_px := -INF  # (lowest of the pistol and both hands on screen in the check: 480 and 585)
 	var rest_px := [-INF, -INF]  # (both hands at the ready, the whole loop outside the check: 480, 585)
@@ -1139,9 +1140,15 @@ func _test_cross_ready() -> void:
 		if f == 0:
 			lens_x0 = px.x
 		lens = [minf(lens[0], px.x), maxf(lens[1], px.x), lens[2]]
-		for sw in [-0.7, 0.0, 0.7]:
-			for l in _rd_lenses(lp):
-				lens[2] = minf(lens[2], _rd_screen(l, sw, 480.0).y)
+		# (the top of his head: the middle of his skull and 17 cm up, the top of his hair on the model:
+		# cross.glb's head-skinned vertices sit 2-4.5 cm above the skull's 16 cm sphere, so this reads
+		# a fraction of a px high, never low)
+		var crown := _rd_world(lp, lp._in_rig(lp.head) * SoldierRig.RAG_SKULL) + Vector3.UP * 0.17
+		for sw in [-0.7, -0.35, 0.0, 0.35, 0.7]:
+			for h in [480.0, 585.0]:
+				for l in _rd_lenses(lp):
+					lens[2] = minf(lens[2], _rd_screen(l, sw, h).y)
+				top_px = minf(top_px, _rd_screen(crown, sw, h).y)
 		var t := lp._idle_t
 		if t > 1.0 and t < 5.0:
 			wrist = [wrist[0], maxf(wrist[1], _rd_bend(lp, 1)), maxf(wrist[2], _rd_bend(lp, -1))]
@@ -1178,10 +1185,11 @@ func _test_cross_ready() -> void:
 	_check(clear > 35.0 and dip > 35.0, "CROSS ready: the pistol never at the menu's camera (user; %.1f° off at closest, %.1f° down at least)" % [clear, dip])
 	_check(look[0] > 1.0 and look[1] < -1.3 and head_y < 0.8 and neck_y < 0.35 and turn < 0.6,
 			"CROSS ready: he looks around, far each way (user; %.2f / %.2f rad), no neck or waist wringing (%.2f, %.2f, %.2f)" % [look[0], look[1], head_y, neck_y, turn])
-	_check(lens[1] - lens_x0 > 18.0 and lens_x0 - lens[0] > 18.0 and lens[2] > 168.0,
-			"CROSS ready: his eyes sweep far enough to see on a phone (%+.0f / %+.0f px), under the title (y %.0f)" % [lens[1] - lens_x0, lens[0] - lens_x0, lens[2]])
-	_check(gun_px < 290.0 and rest_px[0] < 290.0 and rest_px[1] < 315.0,
-			"CROSS ready: the gun check above the menu's buttons (y %.0f; START's top at 290); his hands at the ready above them on a 480-high screen (y %.0f), on a tall phone at most just behind START's top edge (y %.0f)" % [gun_px, rest_px[0], rest_px[1]])
+	var rule: float = (load("res://game/ui/menu/frontend.gd") as GDScript).call("title_rule")  # (not by class name: it needs the autoloads)
+	_check(lens[1] - lens_x0 > 18.0 and lens_x0 - lens[0] > 18.0 and lens[2] > rule + 16.0 and top_px > rule + 6.0,
+			"CROSS ready: his eyes sweep far enough to see on a phone (%+.0f / %+.0f px); his head clear under the title (user: \"moved down a little more so he is clear of the text\"): its top at y %.0f at the highest, his eyes %.0f, on a 480-high screen and a tall phone (the title's red rule at %.0f)" % [lens[1] - lens_x0, lens[0] - lens_x0, top_px, lens[2], rule])
+	_check(gun_px < 290.0 and rest_px[0] < 305.0 and rest_px[1] < 305.0 and absf(rest_px[0] - rest_px[1]) < 6.0,
+			"CROSS ready: the gun check above the menu's buttons (y %.0f; START's top at 290); his hands at the ready at most just behind START's top edge (y %.0f on a 480-high screen, %.0f on a tall phone: the same)" % [gun_px, rest_px[0], rest_px[1]])
 	_check(wrist[0] < 30.0 and wrist[1] < 64.0 and wrist[2] < 37.0 and vest < 0.025,
 			"CROSS ready: his wrists within a real wrist's range (user: \"his hand position/rotation it looks a little off\"): at the ready %.0f° off the forearm (was ~90°), in the check the gun hand %.0f° and the left %.0f°; elbows clear of his vest (%.3f)" % [wrist[0], wrist[1], wrist[2], vest])
 	lp.queue_free()
@@ -1362,12 +1370,26 @@ func _test_intro_camera() -> void:
 	var play := Vector3(0.0, 1.0, -10.0)
 	var fm := tt.intro_from_menu
 	var no_cut := fm > 0.0
-	for i in 41:
-		var s := -0.7 + i * 0.035
-		var p := IntroCamera.pan(0.0, 0.0, s, fm, play)
-		var m := IntroCamera.menu(s, 0.0)
-		no_cut = no_cut and (p[0] as Vector3).distance_to(m[0]) < 1e-4 and (p[1] as Vector3).distance_to(m[1]) < 1e-4
-	_check(no_cut, "the opening pan: START doesn't cut, it starts exactly where the menu's camera was")
+	for h in [480.0, 585.0, 640.0]:
+		for i in 41:
+			var s := -0.7 + i * 0.035
+			var p := IntroCamera.pan(0.0, 0.0, s, fm, play, h)
+			var m := IntroCamera.menu(s, 0.0, h)
+			no_cut = no_cut and (p[0] as Vector3).distance_to(m[0]) < 1e-4 and (p[1] as Vector3).distance_to(m[1]) < 1e-4 and absf(float(p[2]) - float(m[2])) < 1e-4
+	_check(no_cut, "the opening pan: START doesn't cut, it starts exactly where the menu's camera was (and with its view, on a tall phone too)")
+	# A tall phone: the menu's view opened up to keep him the size he is on a 480-high screen, eased
+	# back to the play camera's as the pan leaves the menu, never jumping, then exactly the play view.
+	var tall := is_equal_approx(IntroCamera.menu_fov(480.0), IntroCamera.FOV) and is_equal_approx(IntroCamera.menu_look(480.0), IntroCamera.MENU_LOOK)
+	tall = tall and IntroCamera.menu_fov(585.0) > IntroCamera.FOV + 5.0 and IntroCamera.menu_look(585.0) < IntroCamera.MENU_LOOK
+	var last_fov := INF
+	var fov_step := 0.0
+	for k in 101:
+		var v := float(IntroCamera.pan(k / 100.0, 0.0, 0.4, fm, play, 585.0)[2])
+		tall = tall and v <= last_fov + 1e-5 and (k / 100.0 < fm or is_equal_approx(v, IntroCamera.FOV))
+		if k > 0:
+			fov_step = maxf(fov_step, last_fov - v)
+		last_fov = v
+	_check(tall and fov_step < 1.0, "the opening pan on a tall phone: the menu's wider view (%.1f°) eases back to the play camera's (%.0f°) as it leaves the menu, at most %.2f° a step, then exactly it" % [IntroCamera.menu_fov(585.0), IntroCamera.FOV, fov_step])
 	var approved := true
 	for e in [0.0, 0.25, 0.5, 0.75, 1.0]:
 		var angle: float = PI * e
@@ -1615,12 +1637,13 @@ func _rd_dip(r: SoldierRig) -> float:
 	return rad_to_deg(asin(clampf(-b.y, -1.0, 1.0)))
 
 
-## A point (him at the origin) on the menu's camera swayed `s`, on a 270 x `h` phone screen (px).
+## A point (him at the origin) on the menu's camera swayed `s`, on a 270 x `h` phone screen (px;
+## the menu's own view for that height).
 func _rd_screen(p: Vector3, s: float, h: float) -> Vector2:
-	var c := IntroCamera.menu(s, 0.0)
+	var c := IntroCamera.menu(s, 0.0, h)
 	var cam := Transform3D(Basis.IDENTITY, c[0]).looking_at(c[1], Vector3.UP)
 	var q := cam.affine_inverse() * p
-	var f := (h / 2.0) / tan(deg_to_rad(35.0))
+	var f := (h / 2.0) / tan(deg_to_rad(float(c[2]) / 2.0))
 	return Vector2(135.0 + q.x / -q.z * f, h / 2.0 - q.y / -q.z * f)
 
 

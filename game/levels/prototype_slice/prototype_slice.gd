@@ -7872,9 +7872,10 @@ func _update_camera(delta: float) -> void:
 	if _menu_open:
 		# Behind the main menu: in front of you, swaying slowly from side to side.
 		_menu_t += delta
-		var at := IntroCamera.menu(IntroCamera.sway(_menu_t), x)
+		var at := IntroCamera.menu(IntroCamera.sway(_menu_t), x, get_viewport().get_visible_rect().size.y)
 		eye_local = at[0]
 		look_local = at[1]
+		_camera.fov = at[2]  # (wider on a phone taller than the menu's layout: him the same size)
 		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
 		_cam_base = _camera.global_transform
 		return
@@ -7889,9 +7890,10 @@ func _update_camera(delta: float) -> void:
 		# Opening pan: from in front of the player (looking back at them) round the side to the
 		# play camera behind them, where it ends exactly (easing out of the menu's camera first).
 		var e := smoothstep(0.0, 1.0, 1.0 - _intro_left / tuning.intro_pan_time)
-		var at := IntroCamera.pan(e, x, _pan_sway, tuning.intro_from_menu, look_local)
+		var at := IntroCamera.pan(e, x, _pan_sway, tuning.intro_from_menu, look_local, get_viewport().get_visible_rect().size.y)
 		eye_local = at[0]
 		look_local = at[1]
+		_camera.fov = at[2]
 		_camera.global_transform = Transform3D(Basis.IDENTITY, f * eye_local).looking_at(f * look_local, Vector3.UP)
 		_cam_base = _camera.global_transform
 		return
@@ -7901,6 +7903,11 @@ func _update_camera(delta: float) -> void:
 	# The smoothed camera, kept apart from the shake so the smoothing can't swallow it.
 	_cam_base = target if snap else _cam_base.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))
 	_camera.global_transform = _cam_base
+	# The play camera's view (a tap that skipped the pan as the menu's wider view eased out on a tall
+	# phone: eased back with the rest of the camera).
+	if _camera.fov != IntroCamera.FOV:
+		var to := lerpf(_camera.fov, IntroCamera.FOV, clampf(delta * 8.0, 0.0, 1.0))
+		_camera.fov = IntroCamera.FOV if snap or absf(to - IntroCamera.FOV) < 0.01 else to
 	if _shake > 0.0:
 		# Impact: a punch forward, then a hard shake with a little roll, settling over ~0.45 s.
 		_shake = maxf(0.0, _shake - delta / 0.45)

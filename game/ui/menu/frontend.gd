@@ -157,6 +157,21 @@ func _show(s: Screen) -> void:
 const LOGO_ROOM := 10.0
 
 
+## The main menu's title, down the screen (px): the logo's top (LOGO_ROOM under the tag), the
+## mission line (LOGO_ROOM under the logo), and the red rule under that (CROSS's head stays under
+## it: the tests).
+static func logo_top() -> float:
+	return 78.0 + LOGO_ROOM
+
+
+static func mission_line() -> float:
+	return logo_top() + Logo.height() + LOGO_ROOM
+
+
+static func title_rule() -> float:
+	return mission_line() + 15.0
+
+
 func _build_main() -> void:
 	_back_to = Screen.MAIN
 	_root.add_child(Reticle.new())
@@ -164,14 +179,12 @@ func _build_main() -> void:
 	_place_wide(tag, 70)
 	var logo := Logo.new()
 	# Room round the logo (user: "it needs a bit of padding around the logo as the other texts are too
-	# close"): LOGO_ROOM under the tag, the mission line LOGO_ROOM under the logo, the red rule below that.
-	var logo_y := 78.0 + LOGO_ROOM
-	_place_wide(logo, logo_y)
-	logo.offset_bottom = logo_y + Logo.height()
-	var mission_y := logo_y + Logo.height() + LOGO_ROOM
-	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_y)
-	Reticle.rule_bottom = mission_y + 15.0
-	Reticle.ring_y = roundf(logo_y + Logo.height() / 2.0)
+	# close"): see logo_top.
+	_place_wide(logo, logo_top())
+	logo.offset_bottom = logo_top() + Logo.height()
+	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_line())
+	Reticle.rule_bottom = title_rule()
+	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
 	var first := _button("START MISSION", 290, func() -> void: start_requested.emit())
 	_button("SETTINGS", 318, func() -> void: _open(Screen.SETTINGS))
 	_button("CONTROLS", 346, func() -> void: _open(Screen.CONTROLS))
