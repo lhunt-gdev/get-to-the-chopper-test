@@ -1,0 +1,19 @@
+{
+	"_note": "The mission briefing: the conversation after START MISSION (Briefing). PLACEHOLDER LINES (user: 'We need to work on this. Use place holder text for now.'). Each cast member's name is set once, here (the General is BISHOP and the briefer VESPER, for now: user, 2026-10-06): {general} or {briefer} in a line is replaced by their name, so a codename changes in one place (12 letters at most: it fits its name plate). CROSS is always the right card, whoever he's talking to the left. Letters: A-Z, 0-9, spaces and . , : ; ! ? - + = / ' \" ( ) < > % # & @ [ ]; curly quotes, dashes and ... are turned into plain ones. A line holds 5 rows of 39 letters, its speaker's [NAME] included.",
+	"cast": {
+		"cross": {"name": "CROSS", "portrait": "res://assets/textures/portraits/cross.jpg"},
+		"general": {"name": "BISHOP", "portrait": "res://assets/textures/portraits/general.jpg"},
+		"briefer": {"name": "VESPER", "portrait": "res://assets/textures/portraits/briefer.jpg"}
+	},
+	"lines": [
+		{"who": "general", "text": "Cross. You're in. Listen carefully, we don't have long."},
+		{"who": "cross", "text": "I hear you, {general}. Where's my ride out?"},
+		{"who": "general", "text": "A chopper, on the helipad. It won't wait for you. Miss it and you're on your own."},
+		{"who": "general", "text": "{briefer} has the layout. {briefer}, go ahead."},
+		{"who": "briefer", "text": "Three ways to the pad: through the main floor, over the roofs, or down through the tunnels. Every one ends at the chopper."},
+		{"who": "briefer", "text": "Tripwires raise the alert. Shoot an alarm box to bring it back down. Raise it and the stairs down to the tunnels seal."},
+		{"who": "cross", "text": "And the guards?"},
+		{"who": "briefer", "text": "Riflemen on every floor. Dogs, if they get nervous. Whatever happens, keep running."},
+		{"who": "general", "text": "Placeholder briefing ends here. Good luck, Cross. Get to the chopper."}
+	]
+}

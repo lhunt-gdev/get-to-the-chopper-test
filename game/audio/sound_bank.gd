@@ -33,7 +33,7 @@ static func get_stream(name: String) -> AudioStreamWAV:
 
 ## Every sound's name, roughly in the order they're first needed.
 static func all_names() -> Array[String]:
-	var names: Array[String] = ["music_menu", "codec", "tick", "amb_office", "door_wood", "gun", "spotted", "hit", "fall",
+	var names: Array[String] = ["music_menu", "codec", "tick", "codec_open", "codec_static", "codec_close", "amb_office", "door_wood", "gun", "spotted", "hit", "fall",
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"music_tension", "music_alert", "amb_tunnel", "amb_roof", "amb_cctv", "steam", "crackle",
@@ -267,6 +267,36 @@ static func _make(name: String) -> AudioStreamWAV:
 			syn.tone(0.12, 0.07, 2637.0, 2637.0, 0.15, Synth.Wave.SINE, 0.001, 1.0)
 			syn.lowpass(6000.0)
 			syn.echo(0.09, 0.2, 0.2)
+			syn.normalize(0.5)
+		"codec_open":
+			# The mission briefing's codec screen opening (MGS1-style): a quick chirp rising through a
+			# crackle of static, two blips as the faces come on.
+			syn = Synth.create(0.45, SFX_RATE, seed_value)
+			syn.noise(0.0, 0.3, 0.3, 6000.0, 900.0, 0.01, 3.0)
+			syn.tone(0.0, 0.16, 500.0, 2600.0, 0.4, Synth.Wave.SQUARE, 0.002, 1.5)
+			syn.tone(0.18, 0.05, 2600.0, 2600.0, 0.3, Synth.Wave.SQUARE, 0.001, 3.0)
+			syn.tone(0.25, 0.05, 3100.0, 3100.0, 0.25, Synth.Wave.SQUARE, 0.001, 3.0)
+			syn.lowpass(7000.0)
+			syn.crush(7, 2)
+			syn.echo(0.07, 0.2, 0.2)
+			syn.normalize(0.5)
+		"codec_close":
+			# The briefing's codec closing: the chirp falling, the click of it switching off.
+			syn = Synth.create(0.35, SFX_RATE, seed_value)
+			syn.tone(0.0, 0.18, 2400.0, 300.0, 0.4, Synth.Wave.SQUARE, 0.001, 2.0)
+			syn.noise(0.0, 0.12, 0.3, 5000.0, 900.0, 0.002, 5.0)
+			syn.tone(0.2, 0.03, 900.0, 900.0, 0.3, Synth.Wave.SQUARE, 0.0005, 6.0)
+			syn.lowpass(6000.0)
+			syn.crush(7, 2)
+			syn.normalize(0.45)
+		"codec_static":
+			# A new caller on the briefing's codec: a burst of uneven, crackling static (no blip,
+			# unlike squelch).
+			syn = Synth.create(0.42, SFX_RATE, seed_value)
+			for i in 7:
+				syn.noise(i * 0.05 + syn.randf_range(0.0, 0.02), 0.08, syn.randf_range(0.4, 0.8), 7000.0, 600.0, 0.002, 3.0)
+			syn.noise(0.0, 0.4, 0.3, 4000.0, 300.0, 0.02, 2.0)
+			syn.crush(6, 2)
 			syn.normalize(0.5)
 		"tick":
 			# One letter of a typed caption.

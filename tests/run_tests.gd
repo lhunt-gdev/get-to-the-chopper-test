@@ -34,6 +34,7 @@ func _run() -> void:
 	_test_boss_ko()
 	_test_cross_death()
 	_test_end_typing()
+	_test_briefing()
 	_test_cross_ready()
 	_test_cross_eased()
 	_test_intro_camera()
@@ -607,6 +608,260 @@ func _test_end_typing() -> void:
 	_check(order_ok and mid and ty.is_done() and shown["a"] == 16 and shown["b"] == 10 and ticks[0] > 0,
 			"end screen: the title types out, then the subtitle; a tap shows them at once")
 	ty.queue_free()
+
+
+## The mission briefing after START (user): a conversation, CROSS's card on the right and whoever
+## he's talking to on the left, each line typing out with its speaker's name first, the speaker's card
+## lit and forward and the listener's dimmed and pushed back, a new caller's card flipping over through
+## static; a tap finishes the line being typed, the next tap shows the next line, SKIP ends it. The
+## script is data, each name set once.
+func _test_briefing() -> void:
+	var was_scale := Engine.time_scale
+	Engine.time_scale = 1.0
+	var dt := 1.0 / 60.0
+	# The script.
+	var data := Briefing.load_file("res://game/levels/prototype_slice/briefing.json")
+	var problems := Briefing.problems(data)
+	_check(problems.is_empty(), "briefing: the script is valid: known speakers, pictures, only letters the font has, every line fits the box (%s)" % ", ".join(problems))
+	var lines := Briefing.lines_of(data)
+	var who := {}
+	for l in lines:
+		who[l["who"]] = true
+	_check(lines.size() >= 8 and who.has("cross") and who.has("general") and who.has("briefer"),
+			"briefing: placeholder lines for CROSS, the General and the briefer (%d lines)" % lines.size())
+	_check(String(lines[0]["text"]).begins_with("[BISHOP] ") and _said_by(lines, "briefer").begins_with("[VESPER] "),
+			"briefing: a line starts with its speaker's name, the codenames set in the cast (%s)" % lines[0]["text"])
+	for id in ["cross", "general", "briefer"]:
+		_check(load(String(data["cast"][id]["portrait"])) is Texture2D, "briefing: %s's picture loads" % id)
+	# Each name set once: rename the General in the cast and every line follows.
+	var renamed: Dictionary = data.duplicate(true)
+	renamed["cast"]["general"]["name"] = "VIPER"
+	var said := " ".join(Briefing.lines_of(renamed).map(func(l: Dictionary) -> String: return l["text"]))
+	_check(said.contains("[VIPER] ") and said.contains("you, VIPER.") and not said.contains("BISHOP"),
+			"briefing: the General's name is set once, in the cast ({general} in a line follows it)")
+	# What it catches: a speaker not in the cast, an empty line, a name not in the cast, a letter the
+	# font hasn't got, a line too long for the box; and no CROSS.
+	var bad := {"cast": data["cast"], "lines": [
+		{"who": "colonel", "text": "Hello."},
+		{"who": "general", "text": "  "},
+		{"who": "general", "text": "Ask {colonel}."},
+		{"who": "general", "text": "Café."},
+		{"who": "general", "text": "word ".repeat(45)},
+		{"who": "general", "text": "It’s “fine” — really…"},
+	]}
+	var found := Briefing.problems(bad)
+	_check(found.size() == 5, "briefing: a bad script is caught line by line (%s)" % ", ".join(found))
+	_check(not Briefing.problems({"cast": {"general": data["cast"]["general"]}, "lines": []}).is_empty(), "briefing: a script without CROSS is caught")
+	# A codename too long for its name plate (user: still unsure about BISHOP).
+	var long_cast: Dictionary = data["cast"].duplicate(true)
+	long_cast["general"]["name"] = "GENERAL BISHOP"
+	var too_long := Briefing.problems({"cast": long_cast, "lines": data["lines"]})
+	_check(too_long.size() == 1 and too_long[0].contains("12 letters"), "briefing: a codename too long for its name plate is caught (%s)" % ", ".join(too_long))
+	_check(Briefing.plain("It’s “fine” — really…") == "It's \"fine\" - really...", "briefing: curly quotes, dashes and ... from a word processor made plain")
+	_check(Briefing.wrap_rows("AAAA BBBB CCCC", 9) == [[0, 9], [10, 4]] and Briefing.wrap_rows("ABCDEFGHIJ", 4) == [[0, 4], [4, 4], [8, 2]],
+			"briefing: lines wrap at spaces (a word too long for a row is split)")
+	for s in ["codec", "codec_open", "codec_static", "codec_close"]:
+		_check(s in SoundBank.all_names(), "briefing: its sound '%s' is built with the rest" % s)
+	# On screen: a frontend screen of its own.
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	var cues: Array[String] = []
+	var done := [0]
+	var ticks := [0]
+	fe.briefing_cue.connect(func(s: String, _db: float) -> void: cues.append(s))
+	fe.briefing_done.connect(func() -> void: done[0] += 1)
+	fe.typed.connect(func() -> void: ticks[0] += 1)
+	var clicks := [0]
+	fe.clicked.connect(func() -> void: clicks[0] += 1)
+	fe.show_briefing(data)
+	var br: Briefing = null
+	for c in fe.find_children("*", "", true, false):
+		if c is Briefing:
+			br = c
+	_check(br != null and fe.in_briefing() and fe.is_open(), "briefing: START opens it as a menu screen (so the level's own input stays shut out)")
+	if br == null:
+		fe.free()
+		Engine.time_scale = was_scale
+		return
+	var view: Vector2 = fe.get_viewport().get_visible_rect().size
+	_check(br.size == view and br.mouse_filter == Control.MOUSE_FILTER_STOP, "briefing: a tap anywhere is 'next' (it covers the screen: %s)" % br.size)
+	_check(br.frame_rect("right").get_center().x > view.x / 2.0 and br.frame_rect("left").get_center().x < view.x / 2.0,
+			"briefing: CROSS's card on the right, the other on the left (user)")
+	var skip_rect := Rect2(br.skip_button.position, br.skip_button.size)
+	_check(br.skip_button.focus_mode == Control.FOCUS_NONE and Rect2(Vector2.ZERO, view).encloses(skip_rect),
+			"briefing: SKIP on screen, never focused (Space / Enter are 'next')")
+	for v: Vector2 in [Vector2(270, 480), Vector2(270, 585)]:
+		var lay := Briefing.layout(v)
+		var inside := Rect2(0, 44, v.x, v.y - 88)  # (between the cinema bars, Hud.LETTERBOX)
+		var l: Rect2 = lay["left"]
+		var r: Rect2 = lay["right"]
+		var box: Rect2 = lay["text"]
+		_check(r.get_center().x > v.x / 2.0 and l.get_center().x < v.x / 2.0 and l.size == r.size,
+				"briefing %dx%d: CROSS's card on the right, the other on the left, the same size" % [v.x, v.y])
+		# The cards whole (slanted, tilted, in their frames) between the cinema bars; the other's card
+		# over the speech and CROSS's under it, neither's frame into it.
+		var whole := Briefing.RIM + Briefing.EDGE
+		var lo := Briefing.card_outline(l, "left", whole)
+		var ro := Briefing.card_outline(r, "right", whole)
+		var cards_in := true
+		for pt in lo + ro:
+			cards_in = cards_in and inside.has_point(pt)
+		var l_low := -INF
+		for pt in Briefing.card_outline(l, "left", Briefing.RIM):
+			l_low = maxf(l_low, pt.y)
+		var r_high := INF
+		var r_left := INF
+		for pt in Briefing.card_outline(r, "right", Briefing.RIM):
+			r_high = minf(r_high, pt.y)
+			r_left = minf(r_left, pt.x)
+		_check(cards_in and inside.encloses(box) and l_low < box.position.y and r_high > box.end.y,
+				"briefing %dx%d: both cards whole and the speech between the cinema bars, the other's card over the speech, CROSS's under it" % [v.x, v.y])
+		# A name plate holds the longest name a script may have, on the screen between the bars.
+		var plates_in := true
+		for side in ["left", "right"]:
+			plates_in = plates_in and inside.encloses(Briefing.plate_rect(lay[side], side, Briefing.NAME_MOST, v.x))
+		_check(plates_in, "briefing %dx%d: a %d-letter name fits its plate, on the screen" % [v.x, v.y, Briefing.NAME_MOST])
+		# The waveforms (user): the length of their plate, under the caller's and over CROSS's, on the
+		# screen, clear of the speech's band; long enough for the longest name.
+		var waves_ok := Briefing.WAVE_MOST * Briefing.WAVE_STEP >= Briefing.plate_rect(lay["left"], "left", Briefing.NAME_MOST, v.x).size.x
+		for letters in [3, 6, Briefing.NAME_MOST]:
+			var lp := Briefing.plate_rect(lay["left"], "left", letters, v.x)
+			var rp := Briefing.plate_rect(lay["right"], "right", letters, v.x)
+			var lw := Briefing.wave_rect(lp, "left")
+			var rw := Briefing.wave_rect(rp, "right")
+			waves_ok = waves_ok and lw.position.y >= lp.end.y and rw.end.y <= rp.position.y and lw.size.x == lp.size.x and rw.size.x == rp.size.x \
+					and lw.position.x == lp.position.x and rw.position.x == rp.position.x and inside.encloses(lw) and inside.encloses(rw) \
+					and not lw.intersects(lay["text"]) and not rw.intersects(lay["text"])
+		_check(waves_ok, "briefing %dx%d: the speech waveforms the length of their name plates, under the caller's and over CROSS's (user), clear of the speech" % [v.x, v.y])
+		var sk: Rect2 = lay["skip"]
+		_check(sk.position.y >= 0.0 and sk.end.y <= 44.0 and sk.end.x <= v.x and sk.size.y >= 30.0 and sk.size.x >= 60.0,
+				"briefing %dx%d: SKIP up in the top bar (where the pause button is in the run), %dx%d to tap" % [v.x, v.y, sk.size.x, sk.size.y])
+		# The rows: a full row of letters on its strip (with the block's lean) fits across the band, and
+		# all of them under the speaker's bar fit down it.
+		_check(Briefing.strip_reach() <= box.size.x and box.position.x >= 0.0 and box.end.x <= v.x
+				and Briefing.RAIL_H + Briefing.RAIL_GAP + (Briefing.ROWS - 1) * Briefing.ROW_H + Briefing.STRIP_H <= box.size.y,
+				"briefing %dx%d: %d rows of %d letters fit the speech's band (%d px of %d across)" % [v.x, v.y, Briefing.ROWS, Briefing.COLS, Briefing.strip_reach(), box.size.x])
+		# TAP, under the longest line or under CROSS's, stays clear of CROSS's card and on the screen.
+		var hints_ok := true
+		for top in [true, false]:
+			var hr := Briefing.hint_rect(box, Briefing.ROWS, top, "TAP TO CONTINUE")
+			hints_ok = hints_ok and inside.encloses(hr) and hr.end.x < r_left
+		_check(hints_ok, "briefing %dx%d: TAP under the speech, clear of CROSS's card" % [v.x, v.y])
+	_check(cues.size() == 1 and cues[0] == "codec", "briefing: it opens with the codec's call (%s)" % [cues])
+	# The opening: a tap does nothing until the first line; the faces switch on; the first line.
+	br.tap()
+	var f := 0
+	while not br.is_talking() and f < 300:
+		br._process(dt)
+		f += 1
+	_check(br.line_index() == 0 and f <= ceili(Briefing.FIRST_LINE_AT * 60.0) + 1 and br.power("left") == 1.0 and br.power("right") == 1.0,
+			"briefing: it opens in %.1f s, both faces on, the first line typing" % (f / 60.0))
+	_check(cues.has("codec_open"), "briefing: the cards coming in play the codec's opening sound")
+	# A tick a letter (spaces silent), the speaker lit and the listener dimmed.
+	ticks[0] = 0
+	while not br.line_done() and f < 3000:
+		br._process(dt)
+		f += 1
+	_check(ticks[0] == br.line().replace(" ", "").length(), "briefing: a line types a letter at a time, a tick a letter (%d of %d)" % [ticks[0], br.line().replace(" ", "").length()])
+	_check(br.speaker() == "general" and br.left_who() == "general" and br.lit("left") == 1.0 and br.lit("right") == Briefing.DIMMED,
+			"briefing: the General speaking: his face lit, CROSS's dimmed")
+	_check(br.wave_peak("left") > 0.25 and br.wave_peak("right") < 0.1,
+			"briefing: the General's waveform moving as he speaks, CROSS's flat (user; %.2f, %.2f)" % [br.wave_peak("left"), br.wave_peak("right")])
+	_check(_card_scale(br, "left") == 1.0 and is_equal_approx(_card_scale(br, "right"), Briefing.BACK_SCALE),
+			"briefing: the General's card forward, CROSS's pushed back (%.2f, %.2f)" % [_card_scale(br, "left"), _card_scale(br, "right")])
+	# A tap just as the line finished typing on its own was meant to finish it: nothing more.
+	br.tap()
+	_check(br.line_index() == 0 and br.line_done(), "briefing: a tap as a line finishes typing on its own doesn't skip to the next (%.1f s grace)" % Briefing.GRACE)
+	for i in ceili(Briefing.GRACE * 60.0) + 1:
+		br._process(dt)
+	# One tap (a touch and the click emulated from it, in the same frame) on a whole line: the next.
+	var touch := InputEventScreenTouch.new()
+	touch.index = 0
+	touch.pressed = true
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	br._gui_input(touch)
+	br._gui_input(click)
+	_check(br.line_index() == 1 and br.shown() == 0, "briefing: a tap on a whole line shows the next (one tap, a touch and its click, counts once)")
+	for i in 20:
+		br._process(dt)
+	_check(br.speaker() == "cross" and br.lit("right") == 1.0 and br.lit("left") == Briefing.DIMMED and not cues.has("codec_static"),
+			"briefing: CROSS answering: his face lit, the General's dimmed, no static (the same caller)")
+	_check(br.wave_peak("right") > 0.25 and br.wave_peak("left", 6) < 0.1,
+			"briefing: CROSS's waveform moving as he speaks, the General's gone flat (user; %.2f, %.2f)" % [br.wave_peak("right"), br.wave_peak("left", 6)])
+	_check(_card_scale(br, "right") == 1.0 and is_equal_approx(_card_scale(br, "left"), Briefing.BACK_SCALE),
+			"briefing: CROSS's card forward now, the General's pushed back")
+	# A tap part way through a line finishes it (and only that).
+	_check(not br.line_done(), "briefing: (CROSS's line still typing)")
+	br._tap_frame = -1  # (a later frame)
+	br._gui_input(touch)
+	_check(br.line_done() and br.line_index() == 1, "briefing: a tap while a line types shows the whole line, nothing more")
+	br._tap_frame = -1
+	br._gui_input(touch)
+	_check(br.line_index() == 2, "briefing: the tap after one that finished a line shows the next at once (no grace after a tap)")
+	# On to the briefer: a burst of static on the left card, which flips over edge-on and back, her
+	# face coming through it.
+	while br.line_index() < 4:
+		br.tap()
+	_check(br.line_index() == 4 and br.speaker() == "briefer" and cues.count("codec_static") == 1, "briefing: the briefer on: static (%s)" % [cues])
+	var peak := 0.0
+	var right_static := 0.0
+	var thinnest := 1.0
+	var right_thinnest := 1.0
+	for i in 40:
+		br._process(dt)
+		peak = maxf(peak, br.static_on("left"))
+		right_static = maxf(right_static, br.static_on("right"))
+		thinnest = minf(thinnest, absf(br._pics["left"].scale.x / br._pics["left"].scale.y))
+		right_thinnest = minf(right_thinnest, absf(br._pics["right"].scale.x / br._pics["right"].scale.y))
+	_check(peak > 0.9 and br.static_on("left") == 0.0 and right_static == 0.0 and br.left_who() == "briefer" and br.lit("left") == 1.0,
+			"briefing: the static bursts on the left card only (%.2f) and clears on her face, lit" % peak)
+	_check(thinnest < 0.1 and right_thinnest == 1.0 and is_equal_approx(br._pics["left"].scale.x, br._pics["left"].scale.y),
+			"briefing: the left card flips over for her (edge-on at %.2f) and back; CROSS's doesn't" % thinnest)
+	# SKIP ends it, once (pressed twice, and a tap as it closes).
+	br.skip_button.pressed.emit()
+	br.skip_button.pressed.emit()
+	br.tap()
+	for i in 60:
+		br._process(dt)
+	_check(done[0] == 1 and cues.count("codec_close") == 1 and clicks[0] == 2, "briefing: SKIP closes it once (%d), with the codec's closing sound and a button's click" % done[0])
+	fe.free()
+	# Tapped through to the end: every line once, and a tap after the last closes it.
+	var fe2: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe2)
+	var done2 := [0]
+	fe2.briefing_done.connect(func() -> void: done2[0] += 1)
+	fe2.show_briefing(data)
+	var br2: Briefing = null
+	for c in fe2.find_children("*", "", true, false):
+		if c is Briefing:
+			br2 = c
+	var shown := {}
+	f = 0
+	while done2[0] == 0 and f < 6000:
+		br2._process(dt)
+		f += 1
+		if br2.is_talking():
+			shown[br2.line_index()] = true
+			if br2.line_done():
+				br2.tap()
+	_check(done2[0] == 1 and shown.size() == lines.size(), "briefing: tapped through, every line shown (%d of %d) and it closes once" % [shown.size(), lines.size()])
+	fe2.free()
+	Engine.time_scale = was_scale
+
+
+## How big a briefing card is drawn (1: forward, Briefing.BACK_SCALE: pushed back).
+func _card_scale(br: Briefing, side: String) -> float:
+	return snappedf(br._pics[side].scale.y, 0.0001)
+
+
+## The first line in the script that `who` says ("" if none).
+func _said_by(lines: Array, who: String) -> String:
+	for l in lines:
+		if l["who"] == who:
+			return l["text"]
+	return ""
 
 
 ## CROSS ready under the menu (user: "an active stance, alarmed mode, he checks his gun and he's

@@ -29,6 +29,8 @@ var _world: Node3D
 var _loops: Array[AudioStreamPlayer3D] = []
 var _menu_music: AudioStreamPlayer
 var _menu_wanted := false
+## dB the menu music is lowered by (under the mission briefing).
+var _menu_duck := 0.0
 
 
 func _ready() -> void:
@@ -90,6 +92,12 @@ func play_menu_music() -> void:
 	_menu_wanted = true
 
 
+## The menu music quieter under the mission briefing (Tuning.briefing_music_duck_db), or back up
+## (it moves there at the music's usual 20 dB a second).
+func duck_menu_music(on: bool) -> void:
+	_menu_duck = tuning.briefing_music_duck_db if on else 0.0
+
+
 func stop_menu_music(seconds: float = 1.5) -> void:
 	_menu_wanted = false
 	if _menu_music.playing:
@@ -121,7 +129,7 @@ func _process(delta: float) -> void:
 			_menu_music.volume_db = -30.0
 			_menu_music.play()
 		if _menu_music.playing:
-			_menu_music.volume_db = move_toward(_menu_music.volume_db, _mix("Music"), delta * 20.0)
+			_menu_music.volume_db = move_toward(_menu_music.volume_db, _mix("Music") + _menu_duck, delta * 20.0)
 
 
 ## A one-shot, heard the same wherever you are. pitch_jitter: random +/- pitch, so repeats vary.

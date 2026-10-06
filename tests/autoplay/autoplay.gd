@@ -11,10 +11,14 @@ extends Node
 ##   naive_skip   - as naive, but taps the end screen while it's typing: everything at once
 ##                  (end=skipped)
 ##   menu_start   - as ground, but through the real main menu: START pressed 2.3 s in (mid gun
-##                  check), the opening pan, then the run. It watches CROSS's ready stance hand
-##                  over to the run: RESULT ends intro=ok (no joint jumping, the pistol never at
-##                  the camera, no camera cut, never standing, control at the pan's end)
-##   intro_skip   - as menu_start, but taps 0.3 s into the pan to skip it (control at once)
+##                  check), the mission briefing (it taps through every line, some typed out, some
+##                  tapped part way), the opening pan, then the run. It watches CROSS's ready stance
+##                  hand over to the run: RESULT ends intro=ok (no joint jumping, the pistol never
+##                  at the camera, no camera cut, never standing, control at the pan's end) and
+##                  brief=ok (every line shown; a tap finished a line or showed the next, one tap
+##                  counting once; nothing of the run started under it)
+##   intro_skip   - as menu_start, but presses SKIP in the briefing's second line, then taps 0.3 s
+##                  into the pan to skip it (control at once)
 ##   ground       - keeps to the middle lanes: straight on through the main floor to the EXIT
 ##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
 ##                  (open at alert 1), through the underground to the STORM DRAIN's ladder up
@@ -535,10 +539,11 @@ func _report(reason: String) -> void:
 
 
 ## menu_start / intro_skip, every frame from the menu to a second into the run: START 2.3 s in
-## (mid gun check); intro_skip taps 0.3 s into the pan. Checks: no joint jumping (from his second
-## frame: the first replaces the set he's built in before it's drawn), the pistol never at the
-## camera, the camera never cutting, never standing before the run, and control when it should come
-## (LOCKED: "short beats, control back immediately").
+## (mid gun check), the briefing (_watch_briefing), then the pan; intro_skip taps 0.3 s into the
+## pan. Checks: no joint jumping (from his second frame: the first replaces the set he's built in
+## before it's drawn), the pistol never at the camera, the camera never cutting, never standing
+## before the run, and control when it should come after the pan starts (LOCKED: "short beats,
+## control back immediately": the briefing is before control, the user's own request).
 func _watch_intro() -> void:
 	if _intro.is_empty() or _intro.has("done"):
 		return
@@ -547,9 +552,12 @@ func _watch_intro() -> void:
 	var f: int = d["f"]
 	var rig: SoldierRig = _player._rig
 	if f == 138:
+		_level._frontend.briefing_done.connect(func() -> void: d["pan"] = int(d["f"]))  # (the pan starts)
 		_level._frontend.start_requested.emit()
 		d["start"] = f
-	if scenario == "intro_skip" and d.has("start") and f == int(d["start"]) + 18:
+	if d.has("start") and not d.has("pan"):
+		_watch_briefing(d, f)
+	if scenario == "intro_skip" and d.has("pan") and f == int(d["pan"]) + 18:
 		_level._on_tap(Vector2(135, 240))
 	if GameState.run_active and not d.has("run"):
 		d["run"] = f
@@ -571,10 +579,118 @@ func _watch_intro() -> void:
 		return
 	d["done"] = true
 	var want := int(round(_player.tuning.intro_pan_time * 60.0)) if scenario == "menu_start" else 18
-	var took := int(d["run"]) - int(d.get("start", 0))
+	var took := int(d["run"]) - int(d.get("pan", -100000))
 	var ok: bool = float(d["step"]) < 0.25 and float(d["gun"]) > 35.0 and float(d["cam"]) < 0.25 and not d.has("stood") and absi(took - want) <= 1
 	_intro_report = " intro=ok" if ok else " intro=bad(step %.2f, gun %.0f, cam %.2f m, stood %d, control after %d frames)" % [
 			d["step"], d["gun"], d["cam"], d.get("stood", 0), took]
+	var b: Dictionary = d.get("brief", {})
+	var lines: int = b.get("count", -1)
+	var brief_ok: bool = String(b.get("bad", "?")) == "" and d.has("pan") and b.get("closed", 0) == 1
+	if scenario == "menu_start":
+		# Every line; the odd ones tapped part way (finished), every one but the last followed by a tap
+		# showing the next.
+		brief_ok = brief_ok and b.get("lines", 0) == lines and b.get("finished", 0) == floori(lines / 2.0) and b.get("advanced", 0) == lines - 1
+	else:
+		brief_ok = brief_ok and b.get("lines", 0) == 2 and b.get("advanced", 0) == 1 and b.get("skipped", 0) == 1
+	_intro_report += " brief=ok" if brief_ok else " brief=bad(lines %d/%d finished %d advanced %d skipped %d closed %d%s)" % [
+			b.get("lines", 0), lines, b.get("finished", 0), b.get("advanced", 0), b.get("skipped", 0), b.get("closed", 0), b.get("bad", "?")]
+
+
+## The mission briefing, between START and the pan. menu_start reads it the way a player taps
+## through it (each tap a touch and the click emulated from it, in the same frame, as a phone gives
+## one): the odd lines it taps part way (that tap must finish the line, nothing more), the even ones
+## it lets type out; once a line is all there it waits a moment, then a tap must show the next.
+## intro_skip reads the first line the same way, then presses SKIP in the second. While it's up
+## nothing of the run may start (no run, the clock at 0, no pan, the menu still up under it, CROSS's
+## ready loop going), and the level's own input (a swipe, FIRE, a tap) mustn't start it. The last
+## tap (or SKIP) is timed so the pan starts 2.3 s into CROSS's loop (mid gun check), where START
+## used to be.
+func _watch_briefing(d: Dictionary, f: int) -> void:
+	var b: Dictionary = d.get("brief", {"bad": "", "lines": 0, "finished": 0, "advanced": 0, "skipped": 0, "closed": 0, "seen": {}, "full": {}})
+	d["brief"] = b
+	var rig: SoldierRig = _player._rig
+	var stray := ""
+	if GameState.run_active or _level._started:
+		stray = "run"
+	elif _level._clock.elapsed > 0.0:
+		stray = "clock"
+	elif _level._intro_left > 0.0:
+		stray = "pan"
+	elif not _level._menu_open or not rig._idle_on:
+		stray = "menu/loop"
+	if stray != "" and not String(b["bad"]).contains(stray):
+		b["bad"] += " %s-under-it" % stray
+	if f == int(d["start"]) + 90:
+		_level._on_swipe(Vector2i.UP)
+		_level._on_fire()
+		_level._on_tap(Vector2(135, 240))
+		_level.set_fire_held(false)
+		if _level._started:
+			b["bad"] += " input-started-it"
+	var br: Briefing = null
+	for n in _level._frontend.find_children("*", "", true, false):
+		if n is Briefing:
+			br = n
+	if br == null:
+		return
+	if not b.has("count"):
+		b["count"] = br.line_count()
+		br.finished.connect(func() -> void: b["closed"] += 1)
+	if not br.is_talking():
+		return
+	var i := br.line_index()
+	b["lines"] = maxi(int(b["lines"]), i + 1)
+	if not b["seen"].has(i):
+		b["seen"][i] = f
+	var since: int = f - int(b["seen"][i])
+	if scenario == "intro_skip" and i >= 1:
+		if since >= 20 and _pan_due(rig):
+			br.skip_button.pressed.emit()
+			b["skipped"] += 1
+		return
+	if not br.line_done():
+		if i % 2 == 1 and since == 20:
+			_tap_briefing(br)
+			if br.line_done() and br.line_index() == i:
+				b["finished"] += 1
+			else:
+				b["bad"] += " tap-on-line-%d-didn't-just-finish-it" % (i + 1)
+		return
+	if not b["full"].has(i):
+		b["full"][i] = f
+	if f - int(b["full"][i]) < 20:
+		return  # (reading it)
+	if i == br.line_count() - 1:
+		if _pan_due(rig):
+			_tap_briefing(br)
+			if not br.is_closing():
+				b["bad"] += " last-tap-didn't-close"
+		return
+	_tap_briefing(br)
+	if br.line_index() == i + 1 and br.shown() == 0:
+		b["advanced"] += 1
+	else:
+		b["bad"] += " tap-on-line-%d-didn't-show-the-next" % (i + 1)
+
+
+## One tap on the briefing as a phone delivers it: the touch, and the click emulated from it.
+func _tap_briefing(br: Briefing) -> void:
+	var touch := InputEventScreenTouch.new()
+	touch.index = 0
+	touch.pressed = true
+	touch.position = Vector2(135, 300)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = touch.position
+	click.device = InputEvent.DEVICE_ID_EMULATION
+	br._gui_input(touch)
+	br._gui_input(click)
+
+
+## Whether closing the briefing now starts the pan 2.3 s into CROSS's loop (mid gun check).
+func _pan_due(rig: SoldierRig) -> bool:
+	return absf(fposmod(rig._idle_t + Briefing.CLOSE_TIME, SoldierRig.IDLE_LOOP) - 2.3) < 0.03
 
 
 ## tunnel_alarm only shoots MAIN FLOOR's box (the one that can lift the TUNNEL door).

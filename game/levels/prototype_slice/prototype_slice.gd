@@ -14,6 +14,8 @@ extends Node3D
 ## one you don't take is thrown away when you commit. Branches closed by alert get a lockdown door.
 
 const ROUTE_PATH := "res://game/levels/prototype_slice/route.json"
+## The mission briefing after START (Briefing): the conversation's script.
+const BRIEFING_PATH := "res://game/levels/prototype_slice/briefing.json"
 const START_ALERT := 1
 const CEILING_Y := 4.6
 ## Scale (user: "doors should not be smaller than the player"). People here, the player and the
@@ -314,8 +316,11 @@ var _ambience: Ambience
 var _audio: AudioDirector
 ## The menus (main menu, settings, pause, end screens).
 var _frontend: Frontend
-## The main menu is up (the camera sways slowly in front of you; no input reaches the game).
+## The main menu is up (the camera sways slowly in front of you; no input reaches the game). It
+## stays up under the mission briefing, so everything carries on as under the menu.
 var _menu_open := false
+## The mission briefing's script (Briefing.load_file()).
+var _briefing: Dictionary = {}
 var _menu_t := 0.0
 ## Where the menu camera's sway had got to at START (the opening pan eases out of it: IntroCamera).
 var _pan_sway := 0.0
@@ -371,7 +376,11 @@ func _ready() -> void:
 	_frontend.name = "Frontend"
 	add_child(_frontend)
 	_frontend.mission_title = String(RouteGraph.from_json_file(ROUTE_PATH).mission().get("title", "MISSION 1"))
-	_frontend.start_requested.connect(_begin_intro)
+	_briefing = Briefing.load_file(BRIEFING_PATH)
+	for problem in Briefing.problems(_briefing):
+		push_error("briefing.json: " + problem)
+	_frontend.start_requested.connect(_open_briefing)
+	_frontend.briefing_done.connect(_begin_intro)
 	_frontend.resume_requested.connect(_resume)
 	_frontend.retry_requested.connect(func() -> void:
 		get_tree().paused = false
@@ -422,8 +431,11 @@ func _ready() -> void:
 		if beat == "down":  # (he hits the ground)
 			_audio.play_at("fall", _player.to_global(Vector3(0.0, 0.3, -1.0)), 1.0, 0.04)
 			_audio.play_at("player_hit", _player.to_global(Vector3(0.0, 0.3, -1.0)), -6.0, 0.04))
-	# His gun check under the menu: the slide, the magazine, the slap, at his hands.
+	# His gun check under the menu: the slide, the magazine, the slap, at his hands. (Not under the
+	# briefing: the codec's ticks and static are what you hear then.)
 	_player.ready_beat.connect(func(sound: String) -> void:
+		if _frontend.in_briefing():
+			return
 		_audio.play_at(sound, _player.to_global(Vector3(0.0, 1.4, -0.35)), -3.0 if sound == "mag_slap" else -6.0, 0.04))
 	GameState.alert_changed.connect(_on_alert_changed.unbind(1))
 
@@ -450,13 +462,28 @@ func _ready() -> void:
 	_frontend.tally_ticked.connect(func() -> void: _audio.play("tick", -6.0, 0.04, "UI"))
 	_frontend.tally_landed.connect(func() -> void: _audio.play("thunk", -3.0, 0.03, "UI"))
 	_frontend.typed.connect(func() -> void: _audio.play("tick", -8.0, 0.05, "UI"))
+	_frontend.briefing_cue.connect(func(sound: String, db: float) -> void: _audio.play(sound, db, 0.0, "UI"))
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
 
 
-## START MISSION: the menu goes, and the opening pan plays round to behind you with the mission
+## START MISSION: the mission briefing first (user: a codec conversation to read before the run),
+## over the menu's scene as it was: the camera swaying, CROSS in his ready loop, no run, no clock
+## (all of that starts with start_run, after the pan). Its end (SKIP, or a tap after its last line)
+## starts the opening pan. With no lines to play, straight to the pan. Retry never gets here (it
+## skips the menu, the briefing and the pan).
+func _open_briefing() -> void:
+	if Briefing.lines_of(_briefing).is_empty():
+		_begin_intro()
+		return
+	_frontend.show_briefing(_briefing)
+	_audio.duck_menu_music(true)
+
+
+## After the briefing: the menu goes, and the opening pan plays round to behind you with the mission
 ## title; when it ends, the run starts (the door bash). A tap during the pan skips it.
 func _begin_intro() -> void:
+	_audio.duck_menu_music(false)
 	_menu_open = false
 	_frontend.hide_all()
 	_intro_left = tuning.intro_pan_time

@@ -78,6 +78,9 @@ enum TargetingMode {
 ## had got to, so START doesn't cut to the front of him; after that it's exactly the pan the user
 ## approved. 0: the cut.
 @export var intro_from_menu: float = 0.45
+## The mission briefing (the codec conversation after START): how much quieter the menu music
+## plays under it (dB).
+@export var briefing_music_duck_db: float = -10.0
 
 @export_group("Capture")
 ## Missing the exit at a no-way-on end stops the player this far from the end.

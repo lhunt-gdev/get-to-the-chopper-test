@@ -1,8 +1,9 @@
 class_name Frontend
 extends CanvasLayer
 ## Every menu screen, in the game's espionage style (UiKit): the main menu (over the slowly
-## swaying opening camera), SETTINGS, CONTROLS, the pause menu, and the end screens. It keeps
-## working while the game is paused. The level listens to its signals.
+## swaying opening camera), the mission briefing after START (Briefing), SETTINGS, CONTROLS, the
+## pause menu, and the end screens. It keeps working while the game is paused. The level listens to
+## its signals.
 
 signal start_requested
 signal resume_requested
@@ -13,10 +14,14 @@ signal clicked
 ## The end screen's tally: a count step (a tick), a row landing (a thunk).
 signal tally_ticked
 signal tally_landed
-## A letter of the end screen typed out (the level plays a tick).
+## A letter of the end screen or the briefing typed out (the level plays a tick).
 signal typed
+## The mission briefing closed (SKIP, or a tap after its last line): the opening pan comes next.
+signal briefing_done
+## A sound for the briefing to play (the call, the codec opening and closing, static).
+signal briefing_cue(sound: String, volume_db: float)
 
-enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END }
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING }
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
@@ -68,6 +73,16 @@ func hide_all() -> void:
 	_show(Screen.NONE)
 
 
+## START MISSION's briefing: the conversation in `script` (Briefing.load_file()).
+func show_briefing(script: Dictionary) -> void:
+	_briefing_script = script
+	_show(Screen.BRIEFING)
+
+
+func in_briefing() -> bool:
+	return _screen == Screen.BRIEFING
+
+
 ## The run's over. stats: the tally's numbers (Tally.rows_for), and for the route map graph,
 ## visited, discovered, end_into (how far into the last area it ended) and end_ramp (the stairs
 ## at its start).
@@ -79,6 +94,7 @@ func show_end(reason: StringName, stats: Dictionary) -> void:
 
 var _end_reason: StringName = &"extracted"
 var _end_stats: Dictionary = {}
+var _briefing_script: Dictionary = {}
 
 
 func _show(s: Screen) -> void:
@@ -86,7 +102,8 @@ func _show(s: Screen) -> void:
 	for c in _root.get_children():
 		c.queue_free()
 	_dim.visible = s != Screen.NONE
-	_dim.color = Color(0.0, 0.02, 0.03, 0.35 if s == Screen.MAIN else 0.7)
+	# (The briefing darkens the screen behind itself as it opens, from the main menu's dim.)
+	_dim.color = Color(0.0, 0.02, 0.03, 0.35 if s in [Screen.MAIN, Screen.BRIEFING] else 0.7)
 	match s:
 		Screen.MAIN:
 			_build_main()
@@ -98,6 +115,8 @@ func _show(s: Screen) -> void:
 			_build_pause()
 		Screen.END:
 			_build_end()
+		Screen.BRIEFING:
+			_build_briefing()
 
 
 # --- Screens --------------------------------------------------------------------------
@@ -129,6 +148,17 @@ static func build_label() -> String:
 	if not info is Dictionary:
 		return "BUILD DEV"
 	return ("BUILD %s - %s" % [info.get("commit", "?"), info.get("built", "")]).strip_edges().to_upper()
+
+## The mission briefing: its own screen (Briefing), its typing ticking like the end screen's.
+func _build_briefing() -> void:
+	var b := Briefing.new()
+	b.data = _briefing_script
+	b.typed.connect(func() -> void: typed.emit())
+	b.cue.connect(func(sound: String, db: float) -> void: briefing_cue.emit(sound, db))
+	b.finished.connect(func() -> void: briefing_done.emit())
+	_root.add_child(b)  # (connected first: it calls as it opens)
+	b.skip_button.pressed.connect(func() -> void: clicked.emit())  # (a button's click, like the rest)
+
 
 func _build_pause() -> void:
 	_back_to = Screen.PAUSE
