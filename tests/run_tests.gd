@@ -35,6 +35,7 @@ func _run() -> void:
 	_test_cross_death()
 	_test_end_typing()
 	_test_cross_ready()
+	_test_cross_eased()
 	_test_intro_camera()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
@@ -956,6 +957,147 @@ func _test_intro_camera() -> void:
 			forward = forward and ang >= last - 1e-5
 			last = ang
 	_check(approved and forward, "the opening pan: then exactly the approved path (user: \"keep the current values\"), never turning back, ending on the play camera")
+
+
+## CROSS's pose changes eased (user, 2026-10-06: "adding easy to the key frames"; the decision log,
+## "CROSS's animations eased"): into and out of a jump, a slide, cover (a box, a wall), the stumble,
+## a stop and the surrender (caught with the gun up), no joint jumps (each frame's worst turn under
+## half the old one-frame snap), the new pose three quarters there at once (the run's changes within
+## 0.1 s), then exactly it; on the ground his boots never lower than at either end; a shot's re-pose
+## doesn't move a change on; killed mid-change, his death starts from his legs as the pose has them
+## (as it always has); FIRE held through a jump points the gun level ahead all the way; the guard
+## (GuardRig) never eases.
+func _test_cross_eased() -> void:
+	var dt := 1.0 / 60.0
+	var run := {"run": 1.0}
+	# [name, state, frames (long enough to settle: the longest change is 0.3 s), most frames to three
+	# quarters there]: a stop comes as his run dies away, as in the game
+	var seq := [["takeoff", {"run": 1.0, "airborne": true, "rising": true}, 20, 6],
+		["apex", {"run": 1.0, "airborne": true, "rising": false}, 20, 8], ["landing", run, 24, 6],
+		["slide", {"run": 1.0, "sliding": true}, 24, 6], ["slide out", run, 24, 6],
+		["box cover", {"cover": "crouch"}, 24, 7], ["out of it", run, 24, 6],
+		["wall cover", {"cover": "stand"}, 24, 7], ["out of that", run, 24, 6],
+		["stumble", {"run": 0.5, "stun": 1.0}, 30, 3], ["over it", {"run": 0.5}, 24, 6],
+		["stop", {"run": 0.0}, 40, 9], ["go", run, 24, 6], ["aiming", {"run": 1.0, "aim": true}, 20, 0],
+		["caught", {"surrender": true}, 40, 10]]
+	var r := _rd_rig()
+	r.pose_set()
+	for k in 40:
+		r.animate(dt, run)
+	var p := _rd_rig()  # (the pose itself, not eased: what he showed at once before)
+	var ok := true
+	var worst := ""
+	for c in seq:
+		var s: Dictionary = c[1]
+		var key: String = r._pose_was
+		var was := _rd_snap(r)
+		var at := -1
+		var snap := 0.0
+		var step := 0.0
+		var read := -1
+		var gap := 0.0
+		var low_was := 0.0
+		var lows := INF
+		var dip := 0.0
+		for k in int(c[2]):
+			var st := s.duplicate()
+			if s.has("stun"):
+				st["stun"] = maxf(0.0, 1.0 - k / 30.0)
+			var low_before := r._sole_low()
+			p._phase = r._phase
+			p._run = r._run
+			p._aim = r._aim
+			p._kick = r._kick
+			p._pose_was = ""
+			r.animate(dt, st)
+			p.animate(dt, st)
+			var shown := _rd_snap(r)
+			var raw := _rd_snap(p)
+			gap = maxf(_rd_step(shown, raw), (shown[0] as Vector3).distance_to(raw[0]))
+			if at < 0 and r._pose_was != key:
+				at = k
+				snap = _rd_step(was, raw)
+				low_was = low_before
+			if at >= 0:
+				step = maxf(step, _rd_step(was, shown))
+				if read < 0 and gap <= 0.25 * snap + 0.002:
+					read = k - at
+				lows = minf(lows, p._sole_low())
+				dip = minf(dip, r._sole_low() - minf(low_was, lows))
+			was = shown
+		var ground: bool = c[0] not in ["takeoff", "apex", "landing"]
+		var good: bool = gap < 0.002 and (at >= 0 or c[0] == "aiming") and (snap < 0.3 or (step < 0.5 * snap and read >= 0 and read <= int(c[3]))) \
+				and (not ground or dip > -0.005)
+		if not good:
+			ok = false
+			worst += " %s (snap %.2f, worst step %.2f, 3/4 there after %d frames, left %.4f, boots %.3f lower)" % [c[0], snap, step, read, gap, -dip]
+	# A shot mid-change (the arm up and re-posed at once: animate with no time passing) doesn't move
+	# the change on.
+	r.animate(dt, run)
+	r.animate(dt, {"run": 1.0, "airborne": true, "rising": true})
+	r.animate(dt, {"run": 1.0, "airborne": true, "rising": true})
+	var t0: Array = r._change_t.duplicate()
+	var legs := _rd_snap(r)
+	r.recoil()
+	var after := _rd_snap(r)
+	var held: bool = r._change_t == t0 and float(t0[0]) > 0.0 and (legs[0] as Vector3).is_equal_approx(after[0])
+	for k in [1, 10, 11, 12, 17, 18, 19]:  # (his hips and legs)
+		held = held and (legs[k] as Quaternion).is_equal_approx(after[k])
+	# Killed part way down into a slide: his death works his fall out from his legs as the slide has
+	# them, as it always has.
+	var d := _rd_rig()
+	d.pose_set()
+	for k in 40:
+		d.animate(dt, run)
+	var sl := {"run": 1.0, "sliding": true}
+	for k in 3:
+		d.animate(dt, sl)
+	var e := _rd_rig()
+	e._phase = d._phase
+	e._run = d._run
+	e.animate(0.0, sl)
+	var from := d.death_start({"travel": 1.0, "lift": 0.0, "room": 50.0, "back": false, "slide": true})
+	var ej := e._all_joints()
+	var dead: bool = (from["hips"] as Vector3).is_equal_approx(e.hips.position)
+	for k in [0, 9, 10, 11, 16, 17, 18]:  # (his hips and legs)
+		dead = dead and (from["joints"][k] as Quaternion).angle_to(ej[k].quaternion) < 0.002
+	# ...but what's shown carries on: killed a frame down onto a knee behind a box, the first frame of
+	# his death eases on from the last frame he showed (no snap as he's hit).
+	var c := _rd_rig()
+	c.pose_set()
+	for k in 40:
+		c.animate(dt, run)
+	c.animate(dt, {"run": 0.0, "cover": "crouch"})
+	var last_shown := _rd_snap(c)
+	var cf := c.death_start({"travel": 0.2, "lift": 0.0, "room": 50.0, "back": false, "slide": false})
+	c.pose_death(dt * 0.5, cf)
+	var first := _rd_snap(c)
+	var snap := 0.0
+	for k in [1, 10, 11, 12, 17, 18, 19]:  # (his hips and legs)
+		snap = maxf(snap, (last_shown[k] as Quaternion).angle_to(first[k]))
+	dead = dead and snap < 0.5 and (last_shown[0] as Vector3).distance_to(first[0]) < 0.1
+	c.queue_free()
+	# FIRE held through a jump and its landing: the gun level ahead all the way.
+	var q := _rd_rig()
+	q.pose_set()
+	var off := 0.0
+	for k in 100:
+		var air := k >= 40 and k < 80
+		q.animate(dt, {"run": 1.0, "aim": true, "airborne": air, "rising": k < 60})
+		if k >= 20:
+			off = maxf(off, rad_to_deg((q._in_rig(q._muzzle).basis * Vector3.FORWARD).angle_to(Vector3.FORWARD)))
+	var g := GuardRig.new()
+	root.add_child(g)
+	for k in 30:
+		g.animate(dt, {"run": 1.0, "aim": k > 20, "airborne": k > 5 and k < 15, "rising": k < 10, "duck": k > 15 and k < 20})
+	_check(ok and held and dead and off < 0.5 and g._pose_was == "" and g._change_t == [-1.0, -1.0, -1.0],
+			"CROSS's pose changes ease (user: \"adding easy to the key frames\"): no joint jumping, there at once, then exactly the pose, his boots no lower; a shot doesn't move one on (%s); killed mid-change, his death from his legs as the pose has them, what's shown easing onto it (%s); FIRE level ahead through a jump (%.2f°); guards as they were" % [held, dead, off] + worst)
+	g.queue_free()
+	q.queue_free()
+	e.queue_free()
+	d.queue_free()
+	p.queue_free()
+	r.queue_free()
 
 
 func _rd_rig() -> SoldierRig:

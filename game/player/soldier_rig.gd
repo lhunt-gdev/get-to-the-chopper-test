@@ -512,7 +512,8 @@ func _pose_stand() -> void:
 ## `rising`), `sliding`, `cover` ("", "crouch", "stand"), `stun` 0..1, `lean` (lane change, -1..1),
 ## `surrender`, `aim` (FIRE held: the gun up); before the run, `ready` (his ready stance under the
 ## menu) and `pan` (the opening pan's progress once START is pressed, else -1). Out of the stance
-## the run grows from it: the stride at once from his set, the rest of him following.
+## the run grows from it: the stride at once from his set, the rest of him following. Every other
+## change of pose eases in (see "His pose changes eased").
 ## Joint signs (the model faces -Z): spine, neck, head: -x leans forward. Shoulders, leg hips:
 ## +x swings the limb forward. Elbows: +x bends the forearm up and forward. Knees: -x folds the
 ## shin back. Shoulder z: side * angle raises the arm out to its side.
@@ -520,6 +521,12 @@ func animate(delta: float, s: Dictionary) -> void:
 	_last_state = s
 	_flash(delta)
 	if s.get("surrender", false):
+		# Caught: eased down from what he showed, the aim and all (it's let go at once, so this one
+		# is eased after the shrug).
+		var caught := _pose_was not in ["", "ready", "surrender"]
+		var shown := _pose_snapshot() if caught else []
+		var low := _sole_low() if caught else -INF
+		_pose_was = "surrender"
 		_idle_on = false
 		_pose_surrender()
 		# A shot just before the catch doesn't stay frozen on: the gun settles, the flash goes.
@@ -529,9 +536,13 @@ func animate(delta: float, s: Dictionary) -> void:
 		_muzzle_flash.visible = false
 		_flash_light.visible = false
 		_shrug()
+		if caught:
+			_change_begin(shown, POSE_CHANGE["surrender"], low)
+		_change_step(delta)
 		_apply()
 		return
 	if s.get("ready", false):
+		_pose_was = "ready"
 		_animate_ready(delta, float(s.get("pan", -1.0)))
 		return
 	var target_run: float = s.get("run", 0.0)
@@ -545,24 +556,29 @@ func animate(delta: float, s: Dictionary) -> void:
 		_launch_t = 0.0
 		_run = target_run
 		_phase = IDLE_LAUNCH_PHASE
+		_pose_was = "ready"  # (the launch is its own blend: no change carries over into it)
+		_change_t = [-1.0, -1.0, -1.0]
 	if _launch_t >= 0.0:
 		_launch_t += delta
 	_run = move_toward(_run, target_run, delta * 4.0)
 	_phase = fmod(_phase + delta * TAU * 1.55 * maxf(target_run, 0.2), TAU)
+	var pose := _pose_pick(s)
+	var change := pose != _pose_was and _pose_was not in ["", "ready", "surrender"]
+	# (his boots as he showed them, kept off the floor through a change on the ground: the aim doesn't
+	# move them)
+	var low := _sole_low() if change and _grounded(pose) and _grounded(_pose_was) else -INF
 	_reset()
-	var cover := String(s.get("cover", ""))
-	if cover == "crouch":
-		_pose_crouch()
-	elif cover == "stand":
-		_pose_stand()
-	elif s.get("sliding", false):
-		_pose_slide()
-	elif s.get("airborne", false):
-		_pose_jump(s.get("rising", true))
-	elif _run < 0.05:
-		_pose_stand()
-	else:
-		_pose_run()
+	match pose.trim_suffix("!"):
+		"crouch":
+			_pose_crouch()
+		"wall", "stand":
+			_pose_stand()
+		"slide":
+			_pose_slide()
+		"rise", "fall":
+			_pose_jump(pose.begins_with("rise"))
+		_:
+			_pose_run()
 	var stun: float = s.get("stun", 0.0)
 	if stun > 0.0:  # pitched forward, arms flung out, wobbling
 		spine.rotation.x -= 0.5 * stun + 0.12 * sin(stun * 40.0)
@@ -570,10 +586,15 @@ func animate(delta: float, s: Dictionary) -> void:
 			shoulders[side].rotation.z = side * 0.9 * stun
 	rotation.z = -float(s.get("lean", 0.0)) * 0.18  # into a lane change
 	if _launch_t >= 0.0:
-		# Out of the stance, not in one jump: legs and hips first, then the rest (before the aim, so
-		# FIRE still brings the gun up level and ahead on top).
+		# Out of the stance, not in one jump: legs and hips first, then the rest.
 		var up := smoothstep(0.0, IDLE_LAUNCH_UPPER, _launch_t)
 		_pose_blend(_launch_from, smoothstep(0.0, IDLE_LAUNCH_LEGS, _launch_t), up)
+	if change:
+		_change_begin(_shown, _change_time(_pose_was, pose), low)
+	_pose_was = pose
+	# Eased before the aim, so FIRE still brings the gun up level and ahead on top.
+	_change_step(delta)
+	_change_keep()
 	_aim_and_recoil(delta, s.get("aim", false))
 	if _launch_t >= 0.0:
 		_slide.position.z = maxf(_slide.position.z, _launch_slide * (1.0 - smoothstep(0.0, IDLE_LAUNCH_SLIDE, _launch_t)))
@@ -582,6 +603,207 @@ func animate(delta: float, s: Dictionary) -> void:
 			_launch_t = -1.0
 	_shrug()
 	_apply()
+
+# --- His pose changes eased ---------------------------------------------------------------------
+# (user, 2026-10-06: "Cross' animations can be improved by adding easy to the key frames": his pose
+# changes in the run.) His pose is picked every frame as it always was, and gameplay never sees any
+# of this. When it changes (into and out of a jump, over its top, landing, a slide, cover, the
+# stumble, pulling up at the boss or at the run's end, the surrender) he doesn't jump there in one
+# frame: the gap between what he showed and the new pose is kept on top of the new pose and eased
+# away (his hips and legs first, his body, then his arms). The new pose itself runs underneath from
+# the first frame (his stride going on, the stumble's wobble), so nothing waits. See the decision
+# log, "CROSS's animations eased".
+
+## How long each change takes (s): x his hips and legs, y his body and head, z his arms. By the pose
+## he's going to, a "from>to" first; "stun" the stumble's hit, "unstun" him coming out of it. 0: that
+## part isn't changing, so a change it's already in goes on (his stride never stalls over the top of
+## a jump or at the hit). Three quarters of the way in under half of it (see _change_ease): the new
+## pose reads at once.
+const POSE_CHANGE := {
+	"rise": Vector3(0.12, 0.14, 0.17),  # the takeoff: his knee up at once
+	"rise>fall": Vector3(0.0, 0.0, 0.24),  # over the top: only his arms drift down
+	"fall": Vector3(0.12, 0.14, 0.17),
+	"run": Vector3(0.12, 0.15, 0.18),  # landing, and back into his stride
+	"slide>run": Vector3(0.14, 0.16, 0.2),  # up out of the slide
+	"crouch>run": Vector3(0.15, 0.17, 0.2),  # up from behind a box
+	"wall>run": Vector3(0.14, 0.16, 0.2),  # off a wall
+	"slide": Vector3(0.12, 0.13, 0.16),  # down into it
+	"crouch": Vector3(0.15, 0.17, 0.22),  # down on a knee behind a box
+	"wall": Vector3(0.15, 0.17, 0.22),  # up against a wall
+	"stand": Vector3(0.22, 0.26, 0.3),  # pulling up (the boss standoff, the run's end)
+	"stun": Vector3(0.0, 0.07, 0.09),  # the hit: almost at once
+	"unstun": Vector3(0.0, 0.14, 0.16),  # back into his stride
+	"surrender": Vector3(0.18, 0.22, 0.3),  # down on his knees, hands up
+}
+## Which part of him each joint is (_all_joints' order): 0 his hips and legs, 1 his body and head,
+## 2 his arms.
+const CHANGE_PART := [0, 1, 1, 1, 1, 2, 2, 2, 2, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0]
+## Through a change on the ground (down onto a knee behind a box and up again, the surrender, the
+## slide, pulling up), his boots never go lower than in the pose he's leaving or the one he's going
+## to (a hip and a knee half way round put a boot through the floor): his hips lift instead. Not in
+## the air or landing (the jump lifts him off the floor: a lift there would pop). SOLE: the lowest
+## points of his boot sole (the toe, the ball, the heel), in each foot's flat frame.
+const SOLE := [Vector3(0.0, -0.07, -0.23), Vector3(0.0, -0.09, -0.15), Vector3(0.0, -0.09, 0.04)]
+
+## The pose he's in (see _pose_pick; "": none yet; "ready" his stance, which the launch eases out
+## of; "surrender": caught for good), and what he showed this frame before the aim (his hips' place
+## and every joint's turn, as _pose_snapshot: what a change eases from).
+var _pose_was := ""
+var _shown: Array = []
+## The change under way, each part on its own (see CHANGE_PART): how long since it began (s; -1:
+## none), how long it takes; the gap to the new pose as it began (his hips' place, each joint's turn
+## in its parent's axes), and his boots' lowest then (-INF: no floor kept).
+var _change_t := [-1.0, -1.0, -1.0]
+var _change_len := Vector3.ONE
+var _change_hips := Vector3.ZERO
+var _change_off: Array[Quaternion] = []
+var _change_low := -INF
+var _change_joints: Array[Node3D] = []
+
+
+## The pose animate shows this frame, by priority: in cover down on a knee ("crouch") or standing
+## at a wall ("wall"), the slide, the jump ("rise", "fall"), standing still, the run; "!" on the
+## end while he's stumbling.
+func _pose_pick(s: Dictionary) -> String:
+	var pose := "run"
+	match String(s.get("cover", "")):
+		"crouch":
+			pose = "crouch"
+		"stand":
+			pose = "wall"
+		_:
+			if s.get("sliding", false):
+				pose = "slide"
+			elif s.get("airborne", false):
+				pose = "rise" if s.get("rising", true) else "fall"
+			elif _run < 0.05 and float(s.get("run", 0.0)) <= 0.0:
+				pose = "stand"  # (not while he's told to run: out of cover he's straight into it, at any frame rate)
+	return pose + ("!" if float(s.get("stun", 0.0)) > 0.0 else "")
+
+
+## How long a change from pose `a` to `b` takes (see POSE_CHANGE).
+static func _change_time(a: String, b: String) -> Vector3:
+	var from := a.trim_suffix("!")
+	var to := b.trim_suffix("!")
+	var hit := b.ends_with("!") and not a.ends_with("!")
+	if from == to:
+		return POSE_CHANGE["stun"] if hit else POSE_CHANGE["unstun"]
+	var span: Vector3 = POSE_CHANGE.get(from + ">" + to, POSE_CHANGE[to])
+	if a.ends_with("!") != b.ends_with("!"):
+		# (the hit, or its end, as the pose changes: his body and arms always move then, as quickly
+		# as the hit)
+		var st: Vector3 = POSE_CHANGE["stun" if hit else "unstun"]
+		for part in [1, 2]:
+			if span[part] == 0.0:
+				span[part] = st[part]
+			elif hit:
+				span[part] = minf(span[part], st[part])
+	return span
+
+
+## A change begins, the new pose posed: from `from` (as _pose_snapshot), each part of him over
+## `span` (s; 0: that part goes on as it was); `low`, his boots' lowest in what he showed (-INF:
+## the floor not kept, see SOLE).
+func _change_begin(from: Array, span: Vector3, low: float) -> void:
+	var js := _change_list()
+	if _change_off.size() != js.size():
+		_change_off.resize(js.size())
+	if span.x > 0.0:
+		_change_hips = (from[0] as Vector3) - hips.position
+		_change_low = low
+	for i in js.size():
+		if span[CHANGE_PART[i]] > 0.0:
+			_change_off[i] = (from[i + 1] as Quaternion) * js[i].quaternion.inverse()
+	for part in 3:
+		if span[part] > 0.0:
+			_change_t[part] = 0.0
+			_change_len[part] = span[part]
+
+
+## The change under way, a frame on (`delta` 0: a shot's re-pose, no further on): the gap still to
+## go on each part, eased away, on top of the new pose as it is now.
+func _change_step(delta: float) -> void:
+	var left := Vector3.ZERO
+	for part in 3:
+		var t: float = _change_t[part]
+		if t < 0.0:
+			continue
+		t += delta
+		_change_t[part] = t if t < _change_len[part] else -1.0
+		left[part] = 1.0 - _change_ease(t / _change_len[part])
+	if left == Vector3.ZERO:
+		return
+	var keep := left.x > 0.0 and _change_low > -INF
+	var low_to := _sole_low() if keep else 0.0  # (the new pose's boots)
+	hips.position += _change_hips * left.x
+	var js := _change_list()
+	for i in js.size():
+		var k: float = left[CHANGE_PART[i]]
+		if k > 0.0:
+			js[i].quaternion = Quaternion.IDENTITY.slerp(_change_off[i], k) * js[i].quaternion
+	if keep:
+		hips.position.y += maxf(0.0, minf(low_to, _change_low) - _sole_low())
+
+
+## 0..1 over `u` 0..1, from rest to rest: three quarters of the way by u 0.46, nine tenths by 0.58,
+## then settling in (Bollo's quintic, Gears of War's inertialization, starting still).
+static func _change_ease(u: float) -> float:
+	var x := clampf(u, 0.0, 1.0)
+	var w := 1.0 - x
+	return 1.0 - w * w * w * w * (1.0 + 4.0 * x)
+
+
+## What he shows this frame, before the aim: what the next change eases from.
+func _change_keep() -> void:
+	var js := _change_list()
+	_shown.resize(js.size() + 1)
+	_shown[0] = hips.position
+	for i in js.size():
+		_shown[i + 1] = js[i].quaternion
+
+
+## His joints (_all_joints), listed once.
+func _change_list() -> Array[Node3D]:
+	if _change_joints.is_empty():
+		_change_joints = _all_joints()
+	return _change_joints
+
+
+## Pose `p` (see _pose_pick) is on the ground (not the jump).
+static func _grounded(p: String) -> bool:
+	return not (p.begins_with("rise") or p.begins_with("fall"))
+
+
+## The lowest point of his boot soles (rig units, y; see SOLE).
+func _sole_low() -> float:
+	var low := INF
+	for side in [-1, 1]:
+		var an: Node3D = ankles[side]
+		var flat := _in_rig(an.get_node(String(an.name) + "Flat") as Node3D)
+		for p: Vector3 in SOLE:
+			low = minf(low, (flat * p).y)
+	return low
+
+
+## Killed while his legs are part way into a new pose: they're there at once, so his death works his
+## fall out from his legs as the pose has them, as it always has (from part way down into a slide or
+## up off a knee, his ragdoll could flip a knee or put a hand through the floor); the rest of him it
+## carries on from as he showed it. (death_start calls it.) Returns how his hips and legs were shown
+## off that ("off": each joint's turn, "hips": their place) and how long they had left to get there
+## ("len", s), so his death eases from what was shown onto its own rather than snapping (pose_death);
+## empty if they weren't changing.
+func _change_drop() -> Dictionary:
+	if float(_change_t[0]) < 0.0 or _last_state.is_empty():
+		return {}
+	var shown := _pose_snapshot()
+	var left := maxf(_change_len.x - float(_change_t[0]), DIE_SHOWN_LEAST)
+	_change_t[0] = -1.0
+	animate(0.0, _last_state)
+	var now := _pose_snapshot()
+	var off: Array[Quaternion] = []
+	for k in range(1, now.size()):
+		off.append((shown[k] as Quaternion) * (now[k] as Quaternion).inverse() if CHANGE_PART[k - 1] == 0 else Quaternion.IDENTITY)
+	return {"hips": (shown[0] as Vector3) - (now[0] as Vector3), "off": off, "len": left}
 
 # --- Ready under the menu ---------------------------------------------------------------------
 # (user: "an active stance, alarmed mode, he checks his gun and he's looking around ... his start
@@ -707,8 +929,9 @@ const IDLE_LAUNCH_MAG := 0.15
 const IDLE_MAG_DROP := true
 const MAG_RAKE := -0.25
 
-## The loop, a channel at a time: [t (s), value, and how the segment arriving at it eases (0 or
-## none: smoothstep; 1 snap: fast out of a hold; 2 slap: fast into the key)]. G gaze yaw (+ his
+## The loop, a channel at a time: [t (s), value, and how the move arriving at it eases (see
+## IDLE_EASE; 0 or none: a move; 1 snap: out of a hold fast; 2 slap: fast into the key; 4: the hold
+## arriving at it a moving hold, creeping on instead of stopping)]. G gaze yaw (+ his
 ## left), P gaze pitch (+ up), B torso yaw (following the eyes), Tz head tilt (+ right ear up: the
 ## listen), D extra sink (the startle), A the gun pushed toward the threat, H the gun up for the
 ## check, R its roll (+ top to his left, the ejection port up), Y its yaw, X its extra dip, O pushed
@@ -720,17 +943,17 @@ const MAG_RAKE := -0.25
 ## his weight forward, eyes to the floor ahead.
 const IDLE_KEYS := {
 	"G": [[0.0, 0.0], [1.00, 0.0], [1.50, 0.12], [2.85, 0.12], [3.30, 0.22], [4.50, 0.22], [4.66, 0.0, 1],
-		[5.40, 0.0], [5.65, 1.10, 1], [6.15, 1.10], [6.40, 0.95], [6.70, 0.95], [7.80, -0.80], [8.70, -0.80],
+		[5.40, 0.0], [5.65, 1.10, 1], [6.15, 1.10], [6.40, 0.95], [6.70, 0.95, 4], [7.80, -0.80], [8.70, -0.80],
 		[9.15, 0.0], [10.00, 0.0], [10.20, -1.52, 1], [10.42, -1.45], [11.50, -1.45], [12.00, -0.35],
-		[12.50, -0.35], [12.85, 0.0], [13.60, 0.0], [14.20, 0.30], [14.80, 0.30], [15.40, 0.0], [16.0, 0.0]],
+		[12.50, -0.35, 4], [12.85, 0.0], [13.60, 0.0], [14.20, 0.30], [14.80, 0.30], [15.40, 0.0], [16.0, 0.0]],
 	"P": [[0.0, -0.08], [1.00, -0.08], [1.50, -0.62], [2.05, -0.62], [2.25, -0.70], [2.65, -0.70],
 		[2.85, -0.62], [3.40, -0.62], [3.56, -0.75], [4.10, -0.75], [4.50, -0.62], [4.66, 0.0, 1], [4.90, -0.08],
 		[5.40, -0.08], [5.65, -0.05, 1], [6.15, -0.05], [6.40, -0.18], [6.70, -0.18], [7.80, 0.22], [8.70, 0.22],
 		[9.15, -0.08], [10.00, -0.08], [10.20, -0.02, 1], [11.50, -0.02], [12.00, -0.10], [12.85, -0.08],
 		[13.60, -0.08], [14.20, -0.22], [14.80, -0.22], [15.40, -0.08], [16.0, -0.08]],
 	"B": [[0.0, 0.0], [1.00, 0.0], [1.50, 0.08], [4.55, 0.08], [5.00, 0.0], [5.47, 0.0], [5.80, 0.42],
-		[6.20, 0.42], [6.45, 0.36], [6.78, 0.36], [7.88, -0.30], [8.75, -0.30], [9.20, 0.0], [10.04, 0.0],
-		[10.30, -0.55, 1], [11.50, -0.55], [12.05, -0.12], [12.50, -0.12], [12.90, 0.0], [13.70, 0.0],
+		[6.20, 0.42], [6.45, 0.36], [6.78, 0.36, 4], [7.88, -0.30], [8.75, -0.30], [9.20, 0.0], [10.04, 0.0],
+		[10.30, -0.55, 1], [11.50, -0.55], [12.05, -0.12], [12.50, -0.12, 4], [12.90, 0.0], [13.70, 0.0],
 		[14.30, 0.10], [14.80, 0.10], [15.45, 0.0], [16.0, 0.0]],
 	"Tz": [[0.0, 0.0], [10.45, 0.0], [10.75, 0.07], [11.40, 0.07], [11.70, 0.0], [16.0, 0.0]],
 	"D": [[0.0, 0.0], [10.00, 0.0], [10.06, 0.012, 1], [10.25, 0.035], [11.50, 0.035], [12.10, 0.0], [16.0, 0.0]],
@@ -750,6 +973,37 @@ const IDLE_KEYS := {
 	"Ab": [[0.0, 1.0], [10.02, 1.0], [10.25, 0.25], [11.50, 0.25], [11.90, 1.6], [13.10, 1.6], [13.90, 1.0], [16.0, 1.0]],
 	"W": [[0.0, 0.0], [13.40, 0.0], [14.20, 1.0], [15.00, 1.0], [15.70, 0.0], [16.0, 0.0]],
 }
+## How the keys ease (user, 2026-10-06: "adding ease to the key frames"; every move was a smoothstep
+## from one dead stop to the next). A move eases out of a stop and into the next fuller, IDLE_EASE of
+## the way from smoothstep to smootherstep (no jolt at either end: slower away, a longer landing,
+## quicker between); a snap leaves its hold from rest but briskly (fastest a quarter of the way) and
+## lands long; a slap still drives into its key. The motion carries on through a key between a lower
+## and a higher one, and through a moving hold (kind 4: its ends IDLE_CREEP of the smaller move either
+## side apart about the key), at most IDLE_CARRY of the slower move's speed (never past a key). On
+## the IDLE_LIVE channels any other hold after a move drifts on IDLE_DRIFT of that move, easing to rest
+## (never the loop's last, so it wraps), and a snap into a hold carries IDLE_SNAP_KEEP of its speed on
+## into it, overshooting and settling back over about IDLE_SNAP_SETTLE s; each times the channel's
+## weight (his torso, heavier, half). IDLE_STOPS keep the old eases, stopping at every key: his left
+## hand's holds (hurried, his reach swings his shoulder round) and the slide, the magazine and the
+## slap (the check's sounds land on them).
+const IDLE_EASE := 1.0
+const IDLE_CARRY := 0.75
+const IDLE_CREEP := 0.2
+const IDLE_DRIFT := 0.04
+const IDLE_SNAP_KEEP := 0.5
+const IDLE_SNAP_SETTLE := 0.07
+const IDLE_LIVE := {"G": 1.0, "P": 1.0, "B": 0.5, "Tz": 1.0, "D": 1.0, "A": 1.0, "W": 1.0}
+const IDLE_STOPS := ["L", "S", "M", "Kd", "J"]
+## Overlapping action (s behind): his spine and then his hips taking the turn after his chest (B);
+## the pistol (IDLE_LAGGED: its lift, roll, turn, dip and push out) following his eyes.
+const IDLE_SPINE_LAG := 0.04
+const IDLE_HIPS_LAG := 0.09
+const IDLE_GUN_LAG := 0.05
+const IDLE_LAGGED := ["H", "R", "Y", "X", "O"]
+## The most his head and neck turn off his body together (rad, easing into it over the last
+## IDLE_NECK_KNEE): the alarm's snap, his eyes there before his body has come round, waits for it.
+const IDLE_NECK_MOST := 1.10
+const IDLE_NECK_KNEE := 0.3
 ## The gun check's sounds (user: "add them"), at their moments in the loop (s): the slide eased back
 ## and let home, the magazine out into his palm, the slap.
 const IDLE_SOUNDS := [[1.85, "slide_back"], [2.75, "slide_home"], [3.40, "mag_out"], [4.46, "mag_slap"]]
@@ -770,6 +1024,9 @@ var _idle_go := -1.0
 var _idle_pan := -1.0
 var _idle_on := false
 var _idle_c := {}
+## Each eased channel's keys as its curve passes them (_idle_bake), worked out the first time asked.
+static var _idle_baked := {}
+static var _idle_baked_of := {}
 ## Into the run: how long since he left the stance (s; -1: not leaving it), the stance he left, and
 ## the slide and magazine as they were.
 var _launch_t := -1.0
@@ -833,6 +1090,21 @@ func pose_set() -> void:
 	_pose_ready_all(0.0)
 
 
+## Channel `k` at `t` s into the loop (either side of it: a lagged channel's moment).
+static func _idle_at(k: String, t: float) -> float:
+	t = fposmod(t, IDLE_LOOP)
+	if k in IDLE_STOPS:
+		return _idle_stopping(IDLE_KEYS[k], t)
+	if not is_same(_idle_baked_of, IDLE_KEYS):
+		# (the keys were changed under it: a live script reload keeps static vars)
+		_idle_baked = {}
+		_idle_baked_of = IDLE_KEYS
+	if not _idle_baked.has(k):
+		_idle_baked[k] = _idle_bake(IDLE_KEYS[k], IDLE_LIVE.get(k, 0.0))
+	return _idle_curve(_idle_baked[k], t)
+
+
+## How far a move between two stops has gone `u` of its time (IDLE_STOPS: `kind` as in IDLE_KEYS).
 static func _idle_ease(u: float, kind: int) -> float:
 	match kind:
 		1:
@@ -843,8 +1115,8 @@ static func _idle_ease(u: float, kind: int) -> float:
 			return u * u * (3.0 - 2.0 * u)
 
 
-## A channel's value at `t` (its keys: see IDLE_KEYS).
-static func _idle_curve(keys: Array, t: float) -> float:
+## A channel stopping at every key (IDLE_STOPS) at `t`.
+static func _idle_stopping(keys: Array, t: float) -> float:
 	if t <= keys[0][0]:
 		return keys[0][1]
 	for i in range(1, keys.size()):
@@ -852,22 +1124,149 @@ static func _idle_curve(keys: Array, t: float) -> float:
 		if t < b[0]:
 			var a: Array = keys[i - 1]
 			var u := (t - float(a[0])) / (float(b[0]) - float(a[0]))
-			return lerpf(a[1], b[1], _idle_ease(u, int(b[2]) if b.size() > 2 else 0))
+			return lerpf(a[1], b[1], _idle_ease(u, _idle_kind(b)))
 	return keys[keys.size() - 1][1]
 
 
-## Every channel now; after START, eased to where it settles (a pulled slide let go first); "w" how
-## far settled, "set" how far into the set, "nod" the nod.
+## How the move arriving at a key eases (see IDLE_KEYS).
+static func _idle_kind(key: Array) -> int:
+	return int(key[2]) if key.size() > 2 else 0
+
+
+## A channel's keys (see IDLE_KEYS) as its eased curve passes them, its holds drifting and its snaps
+## settling `live` (IDLE_LIVE; 0: not at all): each [t, value, speed (per s), a snap's overshoot (per
+## s), its kind, whether a hold (not a moving one) follows it].
+static func _idle_bake(keys: Array, live: float) -> Array:
+	var out := []
+	var n := keys.size()
+	for i in n:
+		var hold := i < n - 1 and _idle_kind(keys[i + 1]) != 4 and float(keys[i + 1][1]) == float(keys[i][1])
+		out.append([float(keys[i][0]), _idle_key(keys, i, live), _idle_slope(keys, i, live),
+				_idle_overshoot(keys, i, live), _idle_kind(keys[i]), hold])
+	return out
+
+
+## An eased channel's value at `t` (its keys as _idle_bake has them). A pure function of `t`: the same
+## moment, the same pose.
+static func _idle_curve(baked: Array, t: float) -> float:
+	var n := baked.size()
+	if t <= float(baked[0][0]):
+		return baked[0][1]
+	if t >= float(baked[n - 1][0]):
+		return baked[n - 1][1]
+	var i := 1
+	while t >= float(baked[i][0]):
+		i += 1
+	var a: Array = baked[i - 1]
+	var b: Array = baked[i]
+	var h := float(b[0]) - float(a[0])
+	var u := (t - float(a[0])) / h
+	if int(b[4]) == 2:
+		return lerpf(a[1], b[1], u * u)  # (a slap: from rest, driven into its key)
+	if a[5]:
+		# A hold: drifting on, easing to rest; after a snap, overshooting and settling back too.
+		var over: float = a[3]
+		var tau := u * h
+		return _idle_move(u, a[1], b[1], (float(a[2]) - over) * h, 0.0, 0) \
+				+ over * tau * exp(-tau / IDLE_SNAP_SETTLE) * (1.0 - u * u * (3.0 - 2.0 * u))
+	return _idle_move(u, a[1], b[1], float(a[2]) * h, float(b[2]) * h, int(b[4]))
+
+
+## A move `u` (0..1) of its time from `va` to `vb`, leaving at `ma` and arriving at `mb` (each per its
+## whole time): eased IDLE_EASE of the way from the cubic's (smoothstep's) to the quintic's
+## (smootherstep's: no jolt at either end); a snap (`kind` 1) out from rest briskly instead.
+static func _idle_move(u: float, va: float, vb: float, ma: float, mb: float, kind: int) -> float:
+	var v := 1.0 - u
+	var u2 := u * u
+	var u3 := u2 * u
+	var e := lerpf(u2 * (3.0 - 2.0 * u), u3 * (10.0 + u * (6.0 * u - 15.0)), IDLE_EASE)
+	if kind == 1:
+		e = 1.0 - v * v * v * v * (1.0 + 4.0 * u)
+	var a := lerpf(u * v * v, u - u3 * (6.0 + u * (3.0 * u - 8.0)), IDLE_EASE)
+	var b := lerpf(-u2 * v, -u3 * (4.0 + u * (3.0 * u - 7.0)), IDLE_EASE)
+	return va + (vb - va) * e + ma * a + mb * b
+
+
+## Key `i`'s value as the curve passes it: a moving hold's ends (kind 4) IDLE_CREEP of the smaller
+## move either side apart about the key, the way he's going; the end of any other hold after a move
+## drifted on IDLE_DRIFT of that move, times `live` (never the loop's last key, so it wraps).
+static func _idle_key(keys: Array, i: int, live: float) -> float:
+	var n := keys.size()
+	var v: float = keys[i][1]
+	if i <= 0 or i >= n - 1:
+		return v
+	var j := i if _idle_kind(keys[i + 1]) == 4 else (i - 1 if _idle_kind(keys[i]) == 4 else -1)
+	if j >= 1 and j + 2 < n:
+		var before := v - float(keys[j - 1][1])
+		var after := float(keys[j + 2][1]) - v
+		if before * after <= 0.0:
+			return v
+		var c := IDLE_CREEP * signf(after) * minf(absf(before), absf(after))
+		return v - c / 2.0 if j == i else v + c / 2.0
+	if live <= 0.0 or float(keys[i - 1][1]) != v:
+		return v
+	var k := i - 1
+	while k > 0 and float(keys[k - 1][1]) == v:
+		k -= 1
+	if k == 0:
+		return v
+	return v + live * IDLE_DRIFT * (v - float(keys[k - 1][1]))
+
+
+## How fast a channel passes key `i` (per s): through a key between a lower and a higher one, or a
+## moving hold's, as fast as the moves either side allow (Fritsch-Carlson's slope, at most IDLE_CARRY
+## of the slower: never past either key); into another hold, its drift and a snap's overshoot; nowhere
+## else (a turning point, a hold's end, the loop's ends, either side of a slap).
+static func _idle_slope(keys: Array, i: int, live: float) -> float:
+	var n := keys.size()
+	if i <= 0 or i >= n - 1 or _idle_kind(keys[i]) == 2 or _idle_kind(keys[i + 1]) == 2:
+		return 0.0
+	var creep := _idle_kind(keys[i]) == 4 or _idle_kind(keys[i + 1]) == 4
+	var a1: float = keys[i][1]
+	if not creep and float(keys[i - 1][1]) == a1:
+		return 0.0
+	var h0 := float(keys[i][0]) - float(keys[i - 1][0])
+	var h1 := float(keys[i + 1][0]) - float(keys[i][0])
+	var v1 := _idle_key(keys, i, live)
+	var d1 := (_idle_key(keys, i + 1, live) - v1) / h1
+	if not creep and float(keys[i + 1][1]) == a1:
+		return 2.0 * d1 + _idle_overshoot(keys, i, live)
+	var d0 := (v1 - _idle_key(keys, i - 1, live)) / h0
+	if d0 * d1 <= 0.0:
+		return 0.0
+	var w0 := 2.0 * h1 + h0
+	var w1 := h1 + 2.0 * h0
+	var m := (w0 + w1) / (w0 / d0 + w1 / d1)
+	return signf(m) * minf(absf(m), IDLE_CARRY * minf(absf(d0), absf(d1)))
+
+
+## How fast (per s) a snap into a hold at key `i` carries on into it, to overshoot and settle back
+## (0: no live snap into a hold).
+static func _idle_overshoot(keys: Array, i: int, live: float) -> float:
+	if live <= 0.0 or i <= 0 or i >= keys.size() - 1 or _idle_kind(keys[i]) != 1 \
+			or _idle_kind(keys[i + 1]) == 4 or float(keys[i + 1][1]) != float(keys[i][1]):
+		return 0.0
+	return live * IDLE_SNAP_KEEP * (float(keys[i][1]) - _idle_key(keys, i - 1, live)) \
+			/ (float(keys[i][0]) - float(keys[i - 1][0]))
+
+
+## Every channel now (the pistol's IDLE_GUN_LAG behind his eyes; "Bs" and "Bh" the turn as his spine
+## and hips take it, behind his chest); after START, eased to where it settles (a pulled slide let go
+## first); "w" how far settled, "set" how far into the set, "nod" the nod.
 func _idle_values() -> Dictionary:
 	var c := {}
 	for k in IDLE_KEYS:
-		c[k] = _idle_curve(IDLE_KEYS[k], _idle_t)
+		c[k] = _idle_at(k, _idle_t - (IDLE_GUN_LAG if k in IDLE_LAGGED else 0.0))
+	c["Bs"] = _idle_at("B", _idle_t - IDLE_SPINE_LAG)
+	c["Bh"] = _idle_at("B", _idle_t - IDLE_HIPS_LAG)
 	var w := 0.0
 	if _idle_go >= 0.0:
 		w = smoothstep(0.0, IDLE_SETTLE, _idle_go)
 		c["S"] = float(c["S"]) * (1.0 - smoothstep(0.0, IDLE_SLIDE_GO, _idle_go))
 		for k in IDLE_GO:
 			c[k] = lerpf(c[k], IDLE_GO[k], w)
+		for k in ["Bs", "Bh"]:
+			c[k] = lerpf(c[k], IDLE_GO["B"], w)
 	c["w"] = w
 	if not IDLE_MAG_DROP:
 		c["M"] = 0.0
@@ -884,7 +1283,8 @@ func _pose_ready_body(c: Dictionary) -> void:
 	var st: float = c["set"]
 	var b := float(c["Ab"]) * sin(TAU * IDLE_BREATHS * _idle_b / IDLE_LOOP)
 	var sway := 0.012 * sin(TAU * IDLE_SWAYS * _idle_b / IDLE_LOOP)
-	var turn: float = c["B"]
+	# (the turn as his chest, spine and hips each take it: the chest first)
+	var turn := 0.5 * float(c["B"]) + 0.3 * float(c["Bs"]) + 0.2 * float(c["Bh"])
 	var gaze: float = c["G"]
 	var pitch: float = float(c["P"]) - IDLE_NOD * float(c["nod"])
 	var sink: float = c["D"]
@@ -892,16 +1292,25 @@ func _pose_ready_body(c: Dictionary) -> void:
 	hips.position = Vector3(lerpf(sway, -0.02, st) - 0.015 * weight,
 			_hip_y - IDLE_DROP - sink - IDLE_SET_DROP * st + 0.004 * b,
 			IDLE_HIPS_BACK - 0.03 * weight + IDLE_SET_AHEAD * st)
-	hips.rotation = Vector3(IDLE_HIPS_TIP - 0.02 * sink / 0.035, IDLE_HIPS_TURN + 0.2 * turn, 0.0)
-	spine.rotation = Vector3(IDLE_SPINE + IDLE_SET_LEAN * st, -0.55 * IDLE_HIPS_TURN + 0.3 * turn, 0.0)
-	chest.rotation = Vector3(IDLE_CHEST + 0.018 * b - 0.02 * st, -0.45 * IDLE_HIPS_TURN + 0.5 * turn, 0.0)
-	neck.rotation = Vector3(IDLE_NECK + 0.3 * minf(0.0, pitch - IDLE_GAZE), 0.3 * (gaze - turn), 0.0)
+	hips.rotation = Vector3(IDLE_HIPS_TIP - 0.02 * sink / 0.035, IDLE_HIPS_TURN + 0.2 * float(c["Bh"]), 0.0)
+	spine.rotation = Vector3(IDLE_SPINE + IDLE_SET_LEAN * st, -0.55 * IDLE_HIPS_TURN + 0.3 * float(c["Bs"]), 0.0)
+	chest.rotation = Vector3(IDLE_CHEST + 0.018 * b - 0.02 * st, -0.45 * IDLE_HIPS_TURN + 0.5 * float(c["B"]), 0.0)
+	# (his head and neck never more than IDLE_NECK_MOST off his body: turned faster than it follows,
+	# his eyes wait for it)
+	var off := _idle_soft(gaze - turn, IDLE_NECK_MOST, IDLE_NECK_KNEE)
+	neck.rotation = Vector3(IDLE_NECK + 0.3 * minf(0.0, pitch - IDLE_GAZE), 0.3 * off, 0.0)
 	head.rotation = Vector3(pitch - (hips.rotation.x + spine.rotation.x + chest.rotation.x + neck.rotation.x),
-			0.7 * (gaze - turn), float(c["Tz"]))
+			0.7 * off, float(c["Tz"]))
 	for side in [-1, 1]:
 		var f: Vector2 = IDLE_FEET[side]
 		var toe: float = IDLE_TOES[side]
 		_plant_ball(side, Vector3(f.x, (_ankle_rest[side] as Vector3).y, f.y), toe, IDLE_SET_HEEL * st if side > 0 else 0.0)
+
+
+## `x` held within `most` either way, easing into it from `knee` short of it (unchanged short of that).
+static func _idle_soft(x: float, most: float, knee: float) -> float:
+	var from := most - knee
+	return x if absf(x) <= from else signf(x) * (from + knee * tanh((absf(x) - from) / knee))
 
 
 ## A foot planted (the ankle where it stands flat, turned out by `toe`), its heel lifted `heel` rad
@@ -1333,6 +1742,9 @@ func _flash(delta: float) -> void:
 ## his 1.08 m to the unit).
 const DIE_HITS: Array[float] = [0.0]
 const DIE_LET_GO := 0.04
+## Killed mid-change: the least time (s, his death's clock) his legs take from as they were shown
+## onto his death's own.
+const DIE_SHOWN_LEAST := 0.06
 const DIE_LIFT := 0.1
 const DIE_LAND := 0.6
 const DIE_END := 1.9
@@ -1445,6 +1857,7 @@ static func fall_for(speed: float, free_ahead: float, sliding: bool, tt: Tuning)
 ## down first), "travel" (how far his momentum carries him), "room" (how far ahead is clear: rig units),
 ## "back" and "slide" (see fall_for), "lean" (his lean into a lane change, straightened out at once).
 func death_start(opts: Dictionary = {}) -> Dictionary:
+	var shown := _change_drop()  # (killed mid-change: his death from the pose itself, shown easing onto it)
 	hips.position.y += float(opts.get("lift", 0.0))
 	var joints: Array[Quaternion] = []
 	for j in _all_joints():
@@ -1455,7 +1868,7 @@ func death_start(opts: Dictionary = {}) -> Dictionary:
 	_mag_at(0.0)
 	_idle_on = false
 	_launch_t = -1.0
-	var from := {"hips": hips.position, "joints": joints, "prop": _death_prop_from(), "opts": opts}
+	var from := {"hips": hips.position, "joints": joints, "prop": _death_prop_from(), "opts": opts, "shown": shown}
 	var pts := _rag_points()
 	var roots := _rag_roots()
 	_rag = {"from": from, "opts": opts, "plan": _death_plan(), "pos": pts.duplicate(), "prev": pts.duplicate(), "n": 0,
@@ -1494,6 +1907,17 @@ func pose_death(t: float, from: Dictionary) -> void:
 	var joints: Array[Node3D] = _all_joints()
 	for k in joints.size():
 		joints[k].quaternion = (a[k + 1] as Quaternion).slerp(b[k + 1], f)
+	var shown: Dictionary = from.get("shown", {})
+	if not shown.is_empty():
+		# Killed mid-change: his hips and legs as they were shown, easing onto his death's own over the
+		# time the change had left (no snap as he's hit).
+		var k := 1.0 - _change_ease(t / float(shown["len"]))
+		if k > 0.0:
+			hips.position += (shown["hips"] as Vector3) * k
+			var off: Array = shown["off"]
+			for j in joints.size():
+				if CHANGE_PART[j] == 0:
+					joints[j].quaternion = Quaternion.IDENTITY.slerp(off[j], k) * joints[j].quaternion
 	_death_prop(t, from)
 	_apply()
 
