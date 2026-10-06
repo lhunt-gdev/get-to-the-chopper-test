@@ -14,7 +14,8 @@ extends Node3D
 ## one you don't take is thrown away when you commit. Branches closed by alert get a lockdown door.
 
 const ROUTE_PATH := "res://game/levels/prototype_slice/route.json"
-## The mission briefing after START (Briefing): the conversation's script.
+## The mission briefing after START (Briefing): the conversation's script, and the end-of-mission
+## conversations (one for each ending, played after the run and before the debrief).
 const BRIEFING_PATH := "res://game/levels/prototype_slice/briefing.json"
 const START_ALERT := 1
 const CEILING_Y := 4.6
@@ -319,7 +320,7 @@ var _frontend: Frontend
 ## The main menu is up (the camera sways slowly in front of you; no input reaches the game). It
 ## stays up under the mission briefing, so everything carries on as under the menu.
 var _menu_open := false
-## The mission briefing's script (Briefing.load_file()).
+## The mission briefing's script (Briefing.load_file()), with the end-of-mission conversations.
 var _briefing: Dictionary = {}
 var _menu_t := 0.0
 ## Where the menu camera's sway had got to at START (the opening pan eases out of it: IntroCamera).
@@ -463,6 +464,7 @@ func _ready() -> void:
 	_frontend.tally_landed.connect(func() -> void: _audio.play("thunk", -3.0, 0.03, "UI"))
 	_frontend.typed.connect(func() -> void: _audio.play("tick", -8.0, 0.05, "UI"))
 	_frontend.briefing_cue.connect(func(sound: String, db: float) -> void: _audio.play(sound, db, 0.0, "UI"))
+	_frontend.debrief_opened.connect(_on_debrief_opened)
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
 
@@ -493,8 +495,8 @@ func _begin_intro() -> void:
 
 
 func _pause() -> void:
-	if not GameState.run_active or get_tree().paused or _ko >= 0:
-		return
+	if not GameState.run_active or get_tree().paused or _ko >= 0 or _player.halted:
+		return  # (caught: his capture, its conversation and the debrief follow)
 	set_fire_held(false)
 	get_tree().paused = true
 	_frontend.show_pause()
@@ -7029,8 +7031,8 @@ func _update_security(delta: float, sec: SecurityTrooper, d: float, alert: int) 
 		# on (it's short of the next door: he'd otherwise be pulled into the middle and stop ~2 m from
 		# the panel, slamming nothing).
 		sec.x = move_toward(sec.x, _through_doors(sec.at, sec.x), 7.0 * delta)
-	if sec.is_running() and sec.state == SecurityTrooper.State.RUN:
-		_hud.show_runner(sec.progress())
+	if sec.is_running() and sec.state == SecurityTrooper.State.RUN and GameState.run_active:
+		_hud.show_runner(sec.progress())  # (not once the run's over: the bar stays gone)
 	if sec.is_alive() and sec.visible and absf(sec.at - d) < 0.6 \
 			and absf(sec.x - _player.track_x) <= tuning.lane_width * 0.5 + 0.15:
 		sec.knock_down()
@@ -7521,10 +7523,26 @@ func _damage_player(why: String) -> void:
 		_end(&"killed")
 
 
-## Killed: the end screen opens once his death has played out, with the game-over sting.
+## The ending has played out (killed: he lies still): the end-of-mission conversation for it (user:
+## "Before the debrief"; Briefing.conversation()), under the cinema bars with the area's ambience
+## ducked, then the debrief. Every run has it, Retry's too; SKIP or tapping through it goes straight
+## to the debrief. An ending without a conversation (dead_end: no route can reach it) opens the
+## debrief at once.
 func _open_end(reason: StringName, stats: Dictionary) -> void:
-	_audio.play("gameover", -2.0, 0.0, "UI")
-	_frontend.show_end(reason, stats)
+	var talk := Briefing.conversation(_briefing, String(reason))
+	if not Briefing.lines_of(talk).is_empty():
+		_hud.set_letterbox(true, 0.3)
+		_audio.duck_ambience(true)
+	_frontend.show_end(reason, stats, talk)
+
+
+## The debrief is up (after the conversation, or at once): the cinema bars go, the ambience comes
+## back, and the end's sting plays now (not under the conversation): the extraction jingle, or the
+## game-over sting.
+func _on_debrief_opened(reason: StringName) -> void:
+	_hud.set_letterbox(false, 0.15)
+	_audio.duck_ambience(false)
+	_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")
 
 
 ## How far the way ahead of him is clear (m), for his fall: to the nearest thing he'd fall into
@@ -7702,8 +7720,8 @@ func _on_run_ended(reason: StringName) -> void:
 	_hud.set_firing(false)
 	_hud.show_cover_hint(false)
 	_hud.show_end(reason, RunLog.route_summary())
-	# The end screen, a moment later (so you see what happened): the result, the debrief and the
-	# route taken (the LOCKED post-run route record).
+	# A moment later (so you see what happened), the end-of-mission conversation, then the end
+	# screen: the result, the debrief and the route taken (the LOCKED post-run route record).
 	# The debrief: the route map (the areas and where in the last one it ended) and the tally.
 	var stats := RunLog.tally()
 	stats.merge({"time": _clock.elapsed, "alert": GameState.alert_level, "route": RunLog.route_summary().split(" > "),
@@ -7718,11 +7736,11 @@ func _on_run_ended(reason: StringName) -> void:
 			get_tree().create_timer(tuning.death_hold, true, false, true).timeout.connect(func() -> void: _open_end(reason, stats)),
 			CONNECT_ONE_SHOT)
 	else:
-		get_tree().create_timer(1.1).timeout.connect(func() -> void: _frontend.show_end(reason, stats))
+		# (Captured: he's down with his hands up, the guards round him; extracted: at the chopper,
+		# the boss's KO replay long over; the chopper gone.)
+		get_tree().create_timer(1.1).timeout.connect(func() -> void: _open_end(reason, stats))
 	_audio.fade_loops(2.5)
-	_audio.stop_music()
-	if not (reason == GameState.END_KILLED and _player.dying):
-		_audio.play("jingle" if reason == GameState.END_EXTRACTED else "gameover", -2.0, 0.0, "UI")  # (killed: as the end screen opens)
+	_audio.stop_music()  # (the end's sting plays as the debrief opens: _on_debrief_opened)
 
 
 func _on_swipe(dir: Vector2i) -> void:

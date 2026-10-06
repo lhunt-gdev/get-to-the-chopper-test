@@ -35,6 +35,7 @@ func _run() -> void:
 	_test_cross_death()
 	_test_end_typing()
 	_test_briefing()
+	_test_end_talk()
 	_test_cross_ready()
 	_test_cross_eased()
 	_test_intro_camera()
@@ -862,6 +863,186 @@ func _said_by(lines: Array, who: String) -> String:
 		if l["who"] == who:
 			return l["text"]
 	return ""
+
+
+## The end-of-mission conversations (user: "the same briefing convo but for when the player
+## successfully gets to the chopper and when the players dies/gets captured"): one for each ending,
+## in the briefing's file, each valid and its codenames from the cast; after the run the conversation
+## plays, then the debrief opens (tapped through, or SKIP), once; never the opening pan. Killed
+## (user: "Signal lost"): CROSS's card static under SIGNAL LOST, his waveform flat the whole way, and
+## he never speaks. An ending with no conversation (dead_end: no route in this mission can reach it)
+## opens the debrief at once.
+func _test_end_talk() -> void:
+	var was_scale := Engine.time_scale
+	Engine.time_scale = 1.0
+	var data := Briefing.load_file("res://game/levels/prototype_slice/briefing.json")
+	var main := ["extracted", "killed", "captured", "chopper_left"]
+	# The script: every conversation valid (Briefing.problems checks them all), one for each ending.
+	_check(Briefing.problems(data).is_empty(), "end talk: every conversation in the script is valid (%s)" % ", ".join(Briefing.problems(data)))
+	for id: String in main:
+		var talk := Briefing.conversation(data, id)
+		var lines := Briefing.lines_of(talk)
+		var who := {}
+		for l in lines:
+			who[l["who"]] = true
+		_check(lines.size() >= 3 and lines.size() <= 6 and String(talk.get("title", "")) != "" and talk.get("id") == id,
+				"end talk %s: its own conversation, %d placeholder lines and a tag (%s)" % [id, lines.size(), talk.get("title", "")])
+		_check(who.has("general") and who.has("briefer") and (who.has("cross") != (id == "killed")),
+				"end talk %s: BISHOP and VESPER speak; CROSS %s" % [id, "doesn't (his signal's lost)" if id == "killed" else "does"])
+		_check(bool(talk.get("signal_lost", false)) == (id == "killed"), "end talk %s: CROSS's signal lost only when he's killed" % id)
+		# Its tag in the top bar, clear of where we are and SKIP on the narrowest phone.
+		var tag_end := 8.0 + String(talk["title"]).length() * 6.0 + 14.0
+		var count_w := ("%d/%d" % [lines.size(), lines.size()]).length() * 6.0 + 14.0
+		_check(tag_end + 4.0 + count_w < Briefing.layout(Vector2(270, 480))["skip"].position.x,
+				"end talk %s: its tag '%s' fits the top bar beside the count and SKIP" % [id, talk["title"]])
+	_check(Briefing.conversation(data, "dead_end").is_empty() and Briefing.lines_of(Briefing.conversation(data, "dead_end")).is_empty(),
+			"end talk: none for dead_end (the debrief opens at once)")
+	_check(Briefing.conversation(data, Briefing.BRIEFING)["lines"] == data["lines"] and not Briefing.conversation(data).has("endings"),
+			"end talk: the START briefing is still the file's own lines")
+	# Each codename set once: rename the General and the briefer in the cast and the endings follow.
+	var renamed: Dictionary = data.duplicate(true)
+	renamed["cast"]["general"]["name"] = "VIPER"
+	renamed["cast"]["briefer"]["name"] = "ROOK"
+	var said := ""
+	for id: String in main:
+		said += " ".join(Briefing.lines_of(Briefing.conversation(renamed, id)).map(func(l: Dictionary) -> String: return l["text"]))
+	_check(said.contains("[VIPER] ") and said.contains("[ROOK] ") and said.contains(", VIPER.") and not said.contains("BISHOP") and not said.contains("VESPER"),
+			"end talk: the codenames set once, in the cast ({general} and {briefer} in the endings follow them)")
+	# What it catches in an ending: CROSS speaking with his signal lost, an ending the game hasn't got,
+	# a tag too long for the top bar or with no words, a letter the font hasn't got, a line too long.
+	var bad: Dictionary = data.duplicate(true)
+	bad["endings"]["killed"]["lines"].append({"who": "cross", "text": "I'm still here."})
+	bad["endings"]["extract"] = {"title": "OUT", "lines": [{"who": "general", "text": "Typo."}]}
+	bad["endings"]["captured"]["title"] = "AGENT CAPTURED BY THE ENEMY"
+	bad["endings"]["chopper_left"]["title"] = " "
+	bad["endings"]["extracted"]["lines"][0]["text"] = "Café."
+	bad["endings"]["extracted"]["lines"][1]["text"] = "word ".repeat(45)
+	var found := Briefing.problems(bad)
+	var lost_line := "killed line %d" % bad["endings"]["killed"]["lines"].size()
+	_check(found.size() == 6 and found.any(func(p: String) -> bool: return p.begins_with(lost_line) and p.contains("signal is lost")),
+			"end talk: a bad ending is caught, CROSS speaking when he's killed among it (%s)" % ", ".join(found))
+	_check(Briefing.lines_of(Briefing.conversation(bad, "killed")).all(func(l: Dictionary) -> bool: return l["who"] != "cross"),
+			"end talk: CROSS never speaks with his signal lost, even with a line of his in the file")
+	var old := {"cast": data["cast"], "lines": data["lines"]}
+	_check(Briefing.problems(old).is_empty() and Briefing.conversation(old, "killed").is_empty(),
+			"end talk: a script with only the briefing still works (no conversations after the run)")
+	# dead_end can't happen in this mission: wherever you are, at any alert, there's a way on.
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var stuck: Array[String] = []
+	for id: StringName in g._nodes:
+		for alert in [1, 2, 3]:
+			if g.end_type(id) == "" and g.available_next(id, alert).is_empty():
+				stuck.append("%s@%d" % [id, alert])
+	_check(stuck.is_empty(), "end talk: no dead end in this mission (every area has a way on at every alert: %s)" % ", ".join(stuck))
+	# After the run: each ending's conversation, tapped through, then the debrief; once, never the pan.
+	for id: String in main:
+		var r := _end_talk_run(data, id, false)
+		_check(r["opened"] and r["shown"] == r["count"] and r["count"] >= 3 and r["debrief"] == 1 and r["reason"] == id and r["pan"] == 0 \
+				and r["title"] != "" and r["order"],
+				"end talk %s: the conversation, every line (%d of %d), then the debrief once (%d, as %s, titled %s), not the pan (%d)" % [
+				id, r["shown"], r["count"], r["debrief"], r["reason"], r["order"], r["pan"]])
+		_check(r["cues"].count("codec") == 1 and r["cues"].count("codec_open") == 1 and r["cues"].count("codec_close") == 1,
+				"end talk %s: the codec's sounds, as the briefing's (%s)" % [id, r["cues"]])
+		_check(r["guarded"], "end talk %s: the debrief's RETRY and MAIN MENU wait a moment (a tap meant for the conversation can't press them)" % id)
+		if id == "killed":
+			_check(r["lost"] and r["cross_spoke"] == 0 and r["static_min"] >= Briefing.LOST_STATIC - 0.001 and r["wave_max"] == 0.0 and r["lit_max"] <= Briefing.DIMMED + 0.001,
+					"end talk killed: SIGNAL LOST: CROSS's card static the whole way (%.2f), his waveform flat (%.2f), dimmed (%.2f), and he never speaks (%d)" % [
+					r["static_min"], r["wave_max"], r["lit_max"], r["cross_spoke"]])
+			_check(r["cues"].count("codec_static") >= 1, "end talk killed: static as CROSS's card comes on (%s)" % [r["cues"]])
+		else:
+			_check(not r["lost"] and r["cross_spoke"] > 0 and r["static_min"] == 0.0 and r["wave_max"] > 0.25,
+					"end talk %s: CROSS on his card and speaking (his waveform up to %.2f)" % [id, r["wave_max"]])
+		# SKIP: straight to the debrief, once.
+		var s := _end_talk_run(data, id, true)
+		_check(s["opened"] and s["shown"] <= 1 and s["debrief"] == 1 and s["pan"] == 0 and s["order"] and s["skip_frames"] >= 0 \
+				and s["skip_frames"] <= ceili(Briefing.CLOSE_TIME * 60.0) + 2,
+				"end talk %s: SKIP goes straight to the debrief (%d frames), once" % [id, s["skip_frames"]])
+	# No conversation for an ending: the debrief at once.
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	var opened: Array[StringName] = []
+	fe.debrief_opened.connect(func(reason: StringName) -> void: opened.append(reason))
+	fe.show_end(&"dead_end", {}, Briefing.conversation(data, "dead_end"))
+	_check(fe.in_debrief() and opened.size() == 1 and opened[0] == &"dead_end", "end talk: no conversation for dead_end: the debrief at once (%s)" % [opened])
+	# RETRY and MAIN MENU on the debrief, as before.
+	var asked := {"retry": 0, "menu": 0}
+	fe.retry_requested.connect(func() -> void: asked["retry"] += 1)
+	fe.menu_requested.connect(func() -> void: asked["menu"] += 1)
+	for b in fe.find_children("*", "Button", true, false):
+		if (b as Button).text in ["RETRY", "MAIN MENU"]:
+			(b as Button).pressed.emit()
+	_check(asked["retry"] == 1 and asked["menu"] == 1, "end talk: RETRY and MAIN MENU on the debrief after it (%s)" % [asked])
+	fe.free()
+	Engine.time_scale = was_scale
+
+
+## One end-of-mission conversation on a frontend, as the level shows it after the run: tapped through
+## (the odd lines tapped part way, then a tap for the next once each is all there) or SKIPped as its
+## first line types. What it saw.
+func _end_talk_run(data: Dictionary, id: String, skip: bool) -> Dictionary:
+	var dt := 1.0 / 60.0
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	var out := {"opened": false, "shown": 0, "count": 0, "debrief": 0, "reason": "", "pan": 0, "cues": [], "lost": false,
+			"cross_spoke": 0, "static_min": 1.0, "wave_max": 0.0, "lit_max": 0.0, "title": "", "order": true, "skip_frames": -1, "guarded": false}
+	fe.debrief_opened.connect(func(reason: StringName) -> void:
+		out["debrief"] += 1
+		out["reason"] = String(reason)
+		out["order"] = out["order"] and fe.in_debrief())
+	fe.briefing_done.connect(func() -> void: out["pan"] += 1)
+	fe.briefing_cue.connect(func(c: String, _db: float) -> void: out["cues"].append(c))
+	fe.show_end(StringName(id), {"time": 30.0}, Briefing.conversation(data, id))
+	var br: Briefing = null
+	for c in fe.find_children("*", "", true, false):
+		if c is Briefing:
+			br = c
+	out["opened"] = br != null and fe.in_end_talk() and fe.is_open() and not fe.in_debrief() and not fe.in_briefing() and br.conversation_id() == id
+	if br == null:
+		fe.free()
+		return out
+	out["count"] = br.line_count()
+	out["lost"] = br.signal_lost()
+	out["title"] = br.title()
+	var seen := {}
+	var f := 0
+	var skipped_at := -1
+	while out["debrief"] == 0 and f < 6000:
+		br._process(dt)
+		f += 1
+		if br.is_talking():
+			seen[br.line_index()] = true
+			if br.speaker() == "cross":
+				out["cross_spoke"] += 1
+		if br.power("right") >= 1.0 and not br.is_closing():
+			out["static_min"] = minf(out["static_min"], br.static_on("right"))
+			out["wave_max"] = maxf(out["wave_max"], br.wave_peak("right", Briefing.WAVE_MOST))
+		if br.power("right") > 0.0:
+			out["lit_max"] = maxf(out["lit_max"], br.lit("right"))  # (from his card's first light)
+		if skip:
+			if br.is_talking() and skipped_at < 0 and br.shown() > 3:
+				br.skip_button.pressed.emit()
+				skipped_at = f
+		elif br.is_talking():
+			if br.line_index() % 2 == 1 and br.shown() == 6:
+				br.tap()  # (part way: the whole line)
+			elif br.line_done() and f % 12 == 0:
+				br.tap()
+	out["shown"] = seen.size()
+	out["skip_frames"] = f - skipped_at if skipped_at >= 0 else -1
+	# The debrief: the end screen's title for this ending.
+	var want: String = (load("res://game/ui/menu/frontend.gd") as GDScript).get_script_constant_map()["END_TITLES"][StringName(id)][0]  # (not by class name: it needs the autoloads)
+	var titled := false
+	for c in fe.find_children("*", "Label", true, false):
+		titled = titled or (c as Label).text == want
+	out["order"] = out["order"] and titled and fe.in_debrief()
+	# RETRY and MAIN MENU wait a moment after the conversation (a tap meant for it can't press them).
+	var guarded := true
+	for c in fe.find_children("*", "Button", true, false):
+		if (c as Button).text in ["RETRY", "MAIN MENU"]:
+			guarded = guarded and (c as Button).disabled and (c as Button).mouse_filter == Control.MOUSE_FILTER_IGNORE
+	out["guarded"] = guarded
+	fe.free()
+	return out
 
 
 ## CROSS ready under the menu (user: "an active stance, alarmed mode, he checks his gun and he's

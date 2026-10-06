@@ -31,6 +31,8 @@ var _menu_music: AudioStreamPlayer
 var _menu_wanted := false
 ## dB the menu music is lowered by (under the mission briefing).
 var _menu_duck := 0.0
+## dB the area's ambience is lowered by (under the end-of-mission conversation).
+var _amb_duck := 0.0
 
 
 func _ready() -> void:
@@ -96,6 +98,12 @@ func play_menu_music() -> void:
 ## (it moves there at the music's usual 20 dB a second).
 func duck_menu_music(on: bool) -> void:
 	_menu_duck = tuning.briefing_music_duck_db if on else 0.0
+
+
+## The area's ambience quieter under the end-of-mission conversation (Tuning.end_talk_ambience_duck_db),
+## or back up for the debrief (it moves there at the ambience's usual 40 dB a second).
+func duck_ambience(on: bool) -> void:
+	_amb_duck = tuning.end_talk_ambience_duck_db if on else 0.0
 
 
 func stop_menu_music(seconds: float = 1.5) -> void:
@@ -208,7 +216,7 @@ func _fade_ambience(delta: float) -> void:
 		var p := _amb[i]
 		if not p.playing:
 			continue
-		var target := _mix("Ambience") if i == _amb_active else -80.0
+		var target := _mix("Ambience") + _amb_duck if i == _amb_active else -80.0
 		p.volume_db = move_toward(p.volume_db, target, delta * 40.0)
 		if p.volume_db <= -79.0 and i != _amb_active:
 			p.stop()

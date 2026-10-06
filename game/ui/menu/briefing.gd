@@ -19,6 +19,11 @@ extends Control
 ##
 ## The script is data (briefing.json, next to the level): load_file(), then problems(). Each cast
 ## member's name is set once there; "{general}" in a line becomes the General's name.
+##
+## The same screen plays the end-of-mission conversations (user: "the same briefing convo but for
+## when the player successfully gets to the chopper and when the players dies/gets captured"): after
+## the run, before the DEBRIEF, one for each ending, in the same file (conversation()). When CROSS is
+## killed his card is static under SIGNAL LOST, his waveform flat, and only the others speak.
 
 ## Closed (SKIP, or a tap after the last line), once its screen has gone.
 signal finished
@@ -31,6 +36,21 @@ enum Phase { OPENING, TALKING, CLOSING, DONE }
 
 ## Who's always in the right card; everyone else takes the left.
 const PLAYER := "cross"
+## The conversations a script holds: the START briefing (its own "lines"), and one for each ending
+## of a run (GameState's end reasons) under "endings", played after the run and before the DEBRIEF.
+const BRIEFING := "briefing"
+const ENDINGS := ["extracted", "killed", "captured", "chopper_left", "dead_end"]
+## The endings where CROSS is gone (user: "Signal lost"): his card in static under SIGNAL LOST, his
+## waveform flat for the whole conversation, and only the others speak.
+const SIGNAL_LOST := ["killed"]
+## The top bar's tag: the START briefing's (an ending's is its "title"), and the most letters a tag
+## can have (it shares the top bar with where we are and SKIP).
+const TAG := "MISSION BRIEFING"
+const TAG_MOST := 18
+## CROSS's card when his signal's lost: this much static over his face (a ghost of it under the
+## snow), and the words across it.
+const LOST_STATIC := 0.86
+const LOST_TEXT := "SIGNAL LOST"
 ## The most letters a name can have: it's shown big on the name plate by its card.
 const NAME_MOST := 12
 ## Letters a text row holds, and rows a line can have (the speaker's [NAME] included).
@@ -152,6 +172,11 @@ var _close_t := 0.0
 var _power_from := {}
 var _tap_frame := -1
 var _open_cued := false
+## CROSS's signal is lost (killed: conversation()): his card static under SIGNAL LOST, his waveform
+## flat; and the top bar's tag.
+var _lost := false
+var _lost_cued := false
+var _title := TAG
 var _pics := {}
 var _rect := {}
 var _front: Layer
@@ -205,9 +230,30 @@ static func wrap_rows(text: String, cols: int) -> Array:
 	return rows
 
 
+## One conversation of a script, ready to play (a Briefing's data): the START briefing (BRIEFING,
+## the file's own lines), or the one for an ending of the run (one of ENDINGS, under "endings"), with
+## the file's cast, its top bar's tag ("title") and whether CROSS's signal is lost. {} if the script
+## has none for it (then there's nothing to play: the debrief opens at once).
+static func conversation(d: Dictionary, id: String = BRIEFING) -> Dictionary:
+	if id == BRIEFING:
+		var out := d.duplicate()
+		out["id"] = BRIEFING
+		out["title"] = String(d.get("title", TAG))
+		out.erase("endings")
+		return out
+	var endings = d.get("endings")
+	if not endings is Dictionary or not (endings as Dictionary).get(id) is Dictionary:
+		return {}
+	var e: Dictionary = endings[id]
+	return {"id": id, "cast": d.get("cast", {}), "lines": e.get("lines", []), "title": String(e.get("title", "")),
+			"signal_lost": id in SIGNAL_LOST}
+
+
 ## What's wrong with a script (empty: nothing): the cast (CROSS in it; each a name short enough for
-## its plate and a picture), and every line (a known speaker, some words, only letters the font has,
-## every {name} known, and short enough for the strips).
+## its plate and a picture), and every line of every conversation (a known speaker, some words, only
+## letters the font has, every {name} known, and short enough for the strips); each ending's tag (some
+## letters the font has, short enough for the top bar), an ending the game has, and none of CROSS's
+## lines where his signal's lost.
 static func problems(d: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	var cast = d.get("cast")
@@ -226,42 +272,88 @@ static func problems(d: Dictionary) -> Array[String]:
 			out.append("cast %s: '%s' is longer than %d letters (its name plate)" % [id, c["name"], NAME_MOST])
 		if not ResourceLoader.exists(String(c.get("portrait", ""))):
 			out.append("cast %s: no picture at '%s'" % [id, c.get("portrait", "")])
-	var lines = d.get("lines")
+	out.append_array(_tag_problems(String(d.get("title", TAG)), "the briefing"))
+	out.append_array(_line_problems(d, d.get("lines"), "", false))
+	var endings = d.get("endings", {})
+	if not endings is Dictionary:
+		out.append("\"endings\" must be a set of conversations, by ending (%s)" % ", ".join(ENDINGS))
+		return out
+	for id: String in endings:
+		if id.begins_with("_"):
+			continue  # (a note)
+		if not id in ENDINGS:
+			out.append("endings: the game has no ending called '%s' (%s)" % [id, ", ".join(ENDINGS)])
+			continue
+		var e = endings[id]
+		if not e is Dictionary:
+			out.append("%s: not a conversation" % id)
+			continue
+		out.append_array(_tag_problems(String(e.get("title", "")), id))
+		out.append_array(_line_problems(d, e.get("lines"), id + " ", id in SIGNAL_LOST))
+	return out
+
+
+## A conversation's lines' problems ("line 3: ...", or "killed line 3: ..." with `prefix`); `lost`:
+## CROSS mustn't speak.
+static func _line_problems(d: Dictionary, lines, prefix: String, lost: bool) -> Array[String]:
+	var out: Array[String] = []
+	var cast: Dictionary = d["cast"]
 	if not lines is Array or (lines as Array).is_empty():
-		out.append("no lines")
+		out.append("%sno lines" % prefix)
 		return out
 	for i in (lines as Array).size():
 		var l = lines[i]
 		if not l is Dictionary or not cast.has(String(l.get("who", ""))):
-			out.append("line %d: who's speaking? ('%s')" % [i + 1, l.get("who", "") if l is Dictionary else l])
+			out.append("%sline %d: who's speaking? ('%s')" % [prefix, i + 1, l.get("who", "") if l is Dictionary else l])
+			continue
+		if lost and String(l["who"]) == PLAYER:
+			out.append("%sline %d: %s's signal is lost: he can't speak" % [prefix, i + 1, PLAYER.to_upper()])
 			continue
 		if plain(String(l.get("text", ""))) == "":
-			out.append("line %d: no words" % (i + 1))
+			out.append("%sline %d: no words" % [prefix, i + 1])
 			continue
 		var text := line_text(d, l)
 		var brace := text.find("{")
 		if brace >= 0:
-			out.append("line %d: no one called %s in the cast" % [i + 1, text.substr(brace, text.find("}", brace) - brace + 1)])
+			out.append("%sline %d: no one called %s in the cast" % [prefix, i + 1, text.substr(brace, text.find("}", brace) - brace + 1)])
 			continue
 		for ch in text:
 			if not _has_glyph(ch):
-				out.append("line %d: the font has no '%s'" % [i + 1, ch])
+				out.append("%sline %d: the font has no '%s'" % [prefix, i + 1, ch])
 				break
 		var rows := wrap_rows(text, COLS).size()
 		if rows > ROWS:
-			out.append("line %d: %d rows, the speech holds %d (%d letters)" % [i + 1, rows, ROWS, text.length()])
+			out.append("%sline %d: %d rows, the speech holds %d (%d letters)" % [prefix, i + 1, rows, ROWS, text.length()])
 	return out
 
 
-## The lines it can play: those with a known speaker and some words.
+## A tag's problems (the top bar's red label): some words, letters the font has, short enough.
+static func _tag_problems(tag: String, of: String) -> Array[String]:
+	var out: Array[String] = []
+	tag = plain(tag)
+	if tag == "":
+		out.append("%s: no title (its tag in the top bar)" % of)
+	elif tag.length() > TAG_MOST:
+		out.append("%s: the title '%s' is longer than %d letters (the top bar)" % [of, tag, TAG_MOST])
+	for ch in tag:
+		if not _has_glyph(ch):
+			out.append("%s: the title's font has no '%s'" % [of, ch])
+			break
+	return out
+
+
+## The lines it can play: those with a known speaker and some words (none of CROSS's where his
+## signal's lost).
 static func lines_of(d: Dictionary) -> Array:
 	var out := []
 	var cast = d.get("cast")
 	var lines = d.get("lines")
 	if not cast is Dictionary or not lines is Array:
 		return out
+	var lost := bool(d.get("signal_lost", false))
 	for l in lines:
-		if l is Dictionary and (cast as Dictionary).has(String(l.get("who", ""))) and plain(String(l.get("text", ""))) != "":
+		if l is Dictionary and (cast as Dictionary).has(String(l.get("who", ""))) and plain(String(l.get("text", ""))) != "" \
+				and not (lost and String(l["who"]) == PLAYER):
 			out.append({"who": String(l["who"]), "text": line_text(d, l)})
 	return out
 
@@ -338,6 +430,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP  # a tap anywhere (but SKIP) is "next"
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
 	_lines = lines_of(data)
+	_lost = bool(data.get("signal_lost", false))
+	_title = plain(String(data.get("title", TAG))).to_upper()
+	if _title == "":
+		_title = TAG
 	# Who's on the left card first: the first in the script who isn't CROSS.
 	for l in _lines:
 		if l["who"] != PLAYER:
@@ -443,6 +539,20 @@ func is_closing() -> bool:
 	return _phase == Phase.CLOSING or _phase == Phase.DONE
 
 
+## Which conversation this is (BRIEFING, or an ending), its tag in the top bar, and whether CROSS's
+## signal is lost (his card static under SIGNAL LOST, his waveform flat; he never speaks).
+func conversation_id() -> String:
+	return String(data.get("id", BRIEFING))
+
+
+func title() -> String:
+	return _title
+
+
+func signal_lost() -> bool:
+	return _lost
+
+
 ## Who's on the left card, and who's speaking.
 func left_who() -> String:
 	return _left
@@ -521,6 +631,9 @@ func _process(delta: float) -> void:
 			if _t >= OPEN_FROM + 0.2 and not _open_cued:
 				_open_cued = true
 				cue.emit("codec_open", -6.0)
+			if _lost and _t >= POWER_RIGHT_AT and not _lost_cued:
+				_lost_cued = true
+				cue.emit("codec_static", -10.0)  # (CROSS's card comes on to nothing but static)
 			if _t >= FIRST_LINE_AT:
 				_phase = Phase.TALKING
 				_start_line(0)
@@ -547,6 +660,8 @@ func _process(delta: float) -> void:
 		var want := 1.0 if who == _speaker and _phase == Phase.TALKING else DIMMED
 		if _phase == Phase.OPENING:
 			want = 1.0  # both on full as they warm up
+		if _lost and side == "right":
+			want = DIMMED  # (SIGNAL LOST: never lit, never forward)
 		_rising[side] = want > _lit[side] or (_rising[side] and _lit[side] < 1.0 and want == 1.0)
 		_lit[side] = move_toward(_lit[side], want, dt * 6.0)
 	# The voice: up with each letter, falling back to a flicker (the face lifts a little with it).
@@ -559,6 +674,8 @@ func _process(delta: float) -> void:
 		for side in ["left", "right"]:
 			var on: bool = talking and _side(_speaker) == side
 			var v := _level * _wave_rng.randf_range(0.35, 1.0) if on else _wave_rng.randf_range(0.02, 0.07)
+			if _lost and side == "right":
+				v = 0.0  # (no signal: not even the hiss)
 			var w: PackedFloat32Array = _wave[side]
 			w.remove_at(0)
 			w.append(clampf(v, 0.0, 1.0))
@@ -572,7 +689,7 @@ func _process(delta: float) -> void:
 	pl.power = _power_at(POWER_LEFT_AT)
 	pr.power = _power_at(POWER_RIGHT_AT)
 	pl.static_amt = burst
-	pr.static_amt = 0.0
+	pr.static_amt = LOST_STATIC if _lost else 0.0
 	pl.lit = _lit["left"]
 	pr.lit = _lit["right"]
 	pl.talk = _level if _speaker == _left else 0.0
@@ -744,10 +861,10 @@ func _draw() -> void:
 	var shade := _shade()
 	draw_rect(Rect2(Vector2.ZERO, s), Color(0.0, 0.012, 0.018, SHADE * shade))
 	var f := UiKit.font()
-	var tag := Rect2(8, 15, 16 * 6 + 14, 14)
+	var tag := Rect2(8, 15, _title.length() * 6 + 14, 14)
 	_slab(self, Rect2(tag.position + Vector2(2, 2), tag.size), 3.0, Color(UiKit.INK, 0.8 * shade))
 	_slab(self, tag, 3.0, Color(UiKit.RED, shade))
-	draw_string(f, Vector2(tag.position.x + 8, tag.position.y + 11), "MISSION BRIEFING", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, shade))
+	draw_string(f, Vector2(tag.position.x + 8, tag.position.y + 11), _title, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, shade))
 	# Where we are (3/9), next to it.
 	if _line >= 0:
 		var count_s := "%d/%d" % [_line + 1, _lines.size()]
@@ -799,8 +916,25 @@ func _draw_front(ci: CanvasItem) -> void:
 		return
 	_draw_plate(ci, "left")
 	_draw_plate(ci, "right")
+	if _lost:
+		_draw_lost(ci)
 	if _line >= 0:
 		_draw_speech(ci)
+
+
+## SIGNAL LOST across CROSS's card (user: killed), on a red block that rides with the card (kept
+## square to the screen, so the pixel font stays crisp); its words blink. It's stamped on once his
+## card's static is up, and goes the moment it starts switching off.
+func _draw_lost(ci: CanvasItem) -> void:
+	if (_pics["right"] as Portrait).power < 0.7 or is_closing():
+		return
+	var at: Vector2 = _card_pose("right")["at"]
+	var w := LOST_TEXT.length() * 6.0 + 18.0
+	var r := Rect2(roundf(at.x - w / 2.0), roundf(at.y - 8.0), w, 16.0)
+	_slab(ci, Rect2(r.position + Vector2(2, 2), r.size), 4.0, Color(UiKit.INK, 0.9))
+	_slab(ci, r, 4.0, UiKit.RED)
+	var lit := fmod(_t, 1.0) < 0.65
+	ci.draw_string(UiKit.font(), r.position + Vector2(10.0, 12.0), LOST_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, 1.0 if lit else 0.3))
 
 
 ## A name plate: a chunky slanted block with the name big, solid in its owner's colour while they
@@ -846,6 +980,10 @@ func _draw_wave(ci: CanvasItem, side: String, plate: Rect2, k: float, acc: Color
 	# (the plate leans PLATE_SLANT over its height: the wave's ends follow its slant)
 	var x0 := r.position.x + PLATE_SLANT * (0.0 if side == "left" else 1.0)
 	var x1 := r.end.x - PLATE_SLANT * (1.0 if side == "left" else 0.0)
+	if _lost and side == "right":
+		# No signal (user: "Signal lost"): a flat line, unbroken, in red.
+		ci.draw_rect(Rect2(x0, mid, x1 - x0, 1), Color(UiKit.RED, 0.85))
+		return
 	for x in range(int(x0), int(x1), 4):
 		ci.draw_rect(Rect2(x, mid, 2, 1), Color(acc, 0.25 + 0.2 * k))
 	var w: PackedFloat32Array = _wave[side]
@@ -865,7 +1003,7 @@ func _draw_wave(ci: CanvasItem, side: String, plate: Rect2, k: float, acc: Color
 ## types: "[NAME]" solid in the speaker's colour at its start, the words in paper. The rows hug the
 ## speaker's card (the top of the band for the left card, the bottom for CROSS). Under them, once the
 ## line's all there, TAP and a blinking arrow (TAP TO CONTINUE the first time, TAP TO END on the last
-## line).
+## line, or TAP FOR DEBRIEF after the run).
 func _draw_speech(ci: CanvasItem) -> void:
 	var band: Rect2 = _rect["text"]
 	var f := UiKit.font()
@@ -925,7 +1063,8 @@ func _draw_speech(ci: CanvasItem) -> void:
 	if _phase == Phase.TALKING and line_done():
 		# TAP under the rows (the left card's speaker), or under the bar at the left (CROSS's: his
 		# card's at the right).
-		var hint := "TAP TO END" if _line + 1 >= _lines.size() else ("TAP TO CONTINUE" if _line == 0 else "TAP")
+		var last := "TAP TO END" if conversation_id() == BRIEFING else "TAP FOR DEBRIEF"  # (after the run: what's next)
+		var hint := last if _line + 1 >= _lines.size() else ("TAP TO CONTINUE" if _line == 0 else "TAP")
 		var hr := hint_rect(band, n, top, hint)
 		hr.position.x = foot.x if top else hr.position.x
 		_slab(ci, Rect2(hr.position + Vector2(2, 2), hr.size), 3.0, Color(UiKit.INK, 0.9))

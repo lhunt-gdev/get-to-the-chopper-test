@@ -5,11 +5,12 @@ extends Node
 ## Every bot but "naive" holds FIRE while there's a trooper to shoot (alarm boxes only in the
 ## alarm scenarios). Scenarios:
 ##   naive        - never moves or shoots; should be killed. It watches his death (the play camera
-##                  kept, normal time, none of him through the ground, the end screen opening only
-##                  once he's still) and the end screen typing and counting to its end: RESULT ends
+##                  kept, normal time, none of him through the ground, the end conversation opening
+##                  only once he's still), taps through the end conversation (SIGNAL LOST: see
+##                  below), and watches the end screen typing and counting to its end: RESULT ends
 ##                  death=ok end=typed
-##   naive_skip   - as naive, but taps the end screen while it's typing: everything at once
-##                  (end=skipped)
+##   naive_skip   - as naive, but presses SKIP in the end conversation, and taps the end screen
+##                  while it's typing: everything at once (end=skipped)
 ##   menu_start   - as ground, but through the real main menu: START pressed 2.3 s in (mid gun
 ##                  check), the mission briefing (it taps through every line, some typed out, some
 ##                  tapped part way), the opening pan, then the run. It watches CROSS's ready stance
@@ -71,11 +72,24 @@ extends Node
 ## Every bot that gets to the helipad fights the boss: while his minigun spins up it steps to the
 ## nearest of his 2 free lanes, and holds FIRE (he's the target). RESULT ends boss=down/hits/attacks.
 ## His pattern is fixed for each scenario (a seed from its name), so a run repeats.
+## The end-of-mission conversation (TALK: naive, naive_skip, ground, boss_skip, miss_ladder,
+## squad_caught, camper, boss_hold_fire stay on after the run for it): it must open when the ending
+## has played out (killed: once he's lain still for the hold; else the end screen's 1.1 s), be the
+## one for the ending, and get nothing of the run going under it (a swipe, FIRE, a tap or the pause
+## button doing nothing; no clock), with the ambience ducked and no sting yet; killed: CROSS's signal
+## lost the whole way (his card static, SIGNAL LOST, his waveform flat) and he never speaks. The bot
+## taps through it (the odd lines part way, then a tap for the next once each is all there) or
+## presses SKIP in its first line; then the debrief must open as it closes, with its title, the
+## ambience back and the end's sting playing. RESULT ends talk=ending/tapped or skipped/ok.
 
 const LEVEL := preload("res://game/levels/prototype_slice/prototype_slice.tscn")
 const LOOK_AHEAD := 9.0
 const ACT_DISTANCE := 1.6
 const COVER_AT := 22.0
+## The bots that stay on after the run for the end-of-mission conversation and the debrief, and how
+## they get through the conversation: tap through every line, or SKIP.
+const TALK := {"naive": "tapped", "naive_skip": "skipped", "ground": "tapped", "boss_skip": "skipped", "miss_ladder": "tapped",
+		"squad_caught": "skipped", "camper": "tapped", "boss_hold_fire": "skipped"}
 
 var scenario := "ground"
 ## boss_hit: how many of the boss's attacks have finished (it takes the hit in the first).
@@ -86,6 +100,9 @@ var _boss_hidden := false
 ## naive / naive_skip: watching his death and the end screen, and what it found.
 var _death := {}
 var _death_report := ""
+## TALK: watching the end-of-mission conversation and the debrief opening after it, and the verdict.
+var _talk := {}
+var _talk_report := ""
 ## menu_start / intro_skip: watching the menu, START, the pan and the run's first second, and what
 ## it found.
 var _intro := {}
@@ -402,17 +419,24 @@ func _junction_soon() -> bool:
 
 
 func _on_end(reason: StringName) -> void:
+	if TALK.has(scenario):
+		# Stay on for the end-of-mission conversation and the debrief (_watch_talk).
+		_talk = {"reason": String(reason), "how": TALK[scenario], "f": 0, "bad": "", "open_f": -1, "dead_f": -1, "closed_f": -1,
+				"debrief_f": -1, "count": 0, "lines": 0, "tapped": 0, "skipped": 0, "seen": {}, "full": {}}
 	if reason == GameState.END_KILLED and scenario in ["naive", "naive_skip"]:
 		# Watch his death and the end screen (_process) before reporting.
 		_death = {"reason": String(reason), "fov": _level._camera.fov, "cam": _level._camera, "frames": 0, "low": INF,
-				"bad": "", "open_at": -1, "dead_at": -1, "tapped": false}
+				"bad": "", "open_at": -1, "dead_at": -1, "deb_at": -1, "tapped": false}
 		return
+	if not _talk.is_empty():
+		return  # (it reports once the debrief opens)
 	_report(String(reason))
 
 
-## naive / naive_skip: his death, then the end screen, frame by frame.
+## naive / naive_skip: his death, the end conversation, then the end screen, frame by frame.
 func _process(_delta: float) -> void:
 	_watch_intro()
+	_watch_talk()
 	if _death.is_empty() or _death.has("done"):
 		return
 	var d := _death
@@ -430,11 +454,18 @@ func _process(_delta: float) -> void:
 		if _player.is_dead() and int(d["dead_at"]) < 0:
 			d["dead_at"] = f
 		if open:
-			d["open_at"] = f
+			d["open_at"] = f  # (the end conversation: _watch_talk takes it through to the debrief)
 			if not _player.is_dead():
 				d["bad"] += " opened-before-he-was-still"
 	else:
-		if scenario == "naive_skip" and not d["tapped"] and f >= int(d["open_at"]) + 30:
+		if int(d["deb_at"]) < 0:
+			if not fe.in_debrief():
+				if f > int(d["open_at"]) + 3600:
+					d["bad"] += " no-debrief"
+					d["deb_at"] = f
+				return
+			d["deb_at"] = f
+		if scenario == "naive_skip" and not d["tapped"] and f >= int(d["deb_at"]) + 30:
 			# A tap on the screen, clear of the buttons, into the end screen's skip area (a headless run
 			# doesn't route a pushed tap to the controls; the unit test checks the area covers the screen).
 			d["tapped"] = true
@@ -448,7 +479,7 @@ func _process(_delta: float) -> void:
 			d["skip_at"] = f
 			return
 		var done := _end_screen_done()
-		if done.is_empty() and f < int(d["open_at"]) + 900:
+		if done.is_empty() and f < int(d["deb_at"]) + 900:
 			return
 		if scenario == "naive_skip" and (not d.has("skip_at") or f > int(d["skip_at"]) + 2):
 			d["bad"] += " skip-not-at-once"
@@ -457,6 +488,143 @@ func _process(_delta: float) -> void:
 		_death_report = " death=%s end=%s" % ["ok" if ok else "bad(%s low=%.3f dead=%d open=%d)" % [d["bad"], d["low"], d["dead_at"], d["open_at"]],
 				("skipped" if scenario == "naive_skip" else "typed") + ("" if done == "ok" else "/" + done)]
 		_report(String(d["reason"]))
+
+
+## TALK, every frame after the run: the end-of-mission conversation (see the top), then the debrief.
+func _watch_talk() -> void:
+	if _talk.is_empty() or _talk.has("done"):
+		return
+	var t := _talk
+	t["f"] += 1
+	var f: int = t["f"]
+	var fe = _level._frontend
+	var killed: bool = t["reason"] == String(GameState.END_KILLED)
+	# Nothing of the run once it's over (whatever's pressed: see _drive_talk); the sting waits.
+	if GameState.run_active or get_tree().paused or _level._fire_held or _level._clock.running:
+		_talk_bad(t, "run-after-end")
+	if int(t["debrief_f"]) < 0 and not fe.in_debrief() and _sting_playing():
+		_talk_bad(t, "sting-before-debrief")
+	if _player.is_dead() and int(t["dead_f"]) < 0:
+		t["dead_f"] = f
+	if int(t["open_f"]) < 0:
+		if fe.in_end_talk():
+			t["open_f"] = f
+			# When the ending's played out: killed, once he's lain still for the hold; else the end
+			# screen's moment (1.1 s).
+			var want := int(t["dead_f"]) + roundi(_player.tuning.death_hold * 60.0) if killed else 66
+			if (killed and (not _player.is_dead() or int(t["dead_f"]) < 0)) or absi(f - want) > 4:
+				_talk_bad(t, "opened-at-%d-not-%d" % [f, want])
+		elif fe.is_open() or f > 3600:
+			_talk_bad(t, "no-conversation")
+			_talk_verdict(t)
+		return
+	if int(t["debrief_f"]) < 0:
+		if fe.in_debrief():
+			t["debrief_f"] = f
+			# The debrief as the conversation closes, its title, the ambience back, the sting now.
+			if int(t["closed_f"]) < 0 or f - int(t["closed_f"]) > 2:
+				_talk_bad(t, "debrief-not-as-it-closed")
+			var want_title := String((fe.get_script() as GDScript).get_script_constant_map()["END_TITLES"][StringName(t["reason"])][0])
+			if not fe.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == want_title):
+				_talk_bad(t, "no-debrief-title")
+			if _level._audio._amb_duck != 0.0:
+				_talk_bad(t, "ambience-still-ducked")
+			if not _sting_playing():
+				_talk_bad(t, "no-sting")
+			_talk_verdict(t)
+			return
+		if not fe.in_end_talk() or f > int(t["open_f"]) + 3600:
+			_talk_bad(t, "conversation-went-without-a-debrief")
+			_talk_verdict(t)
+			return
+		_drive_talk(t, f, killed)
+
+
+## The end conversation itself: what must hold while it's up, and the bot reading it (tapping
+## through, as a phone delivers a tap, or SKIP in its first line).
+func _drive_talk(t: Dictionary, f: int, killed: bool) -> void:
+	var fe = _level._frontend
+	var br: Briefing = null
+	for n in fe.find_children("*", "", true, false):
+		if n is Briefing:
+			br = n
+	if br == null:
+		return
+	if int(t["count"]) == 0:
+		t["count"] = br.line_count()
+		if br.conversation_id() != String(t["reason"]):
+			_talk_bad(t, "the-%s-conversation" % br.conversation_id())
+		br.finished.connect(func() -> void: t["closed_f"] = int(t["f"]))
+	if _level._audio._amb_duck >= 0.0:
+		_talk_bad(t, "ambience-not-ducked")
+	# Nothing reaches the ended run under it: a swipe, FIRE, a tap at the level, the pause button.
+	if f == int(t["open_f"]) + 30:
+		var lane := _player.lane
+		_level._on_swipe(Vector2i.LEFT)
+		_level._on_fire()
+		_level._on_tap(Vector2(135, 240))
+		_level._pause()
+		if _player.lane != lane or _level._fire_held or get_tree().paused or not fe.in_end_talk():
+			_talk_bad(t, "input-reached-the-run")
+	# Killed (user: "Signal lost"): CROSS's card static the whole way, SIGNAL LOST, his waveform
+	# flat, and he never speaks.
+	var lost_ok: bool = br.signal_lost() and br.speaker() != "cross" and br.wave_peak("right", Briefing.WAVE_MOST) == 0.0 \
+			and (br.power("right") < 1.0 or br.is_closing() or br.static_on("right") >= Briefing.LOST_STATIC - 0.001)
+	if killed and not lost_ok:
+		_talk_bad(t, "signal-not-lost")
+	elif not killed and br.signal_lost():
+		_talk_bad(t, "signal-lost")
+	if not br.is_talking():
+		return
+	var i := br.line_index()
+	t["lines"] = maxi(int(t["lines"]), i + 1)
+	if not t["seen"].has(i):
+		t["seen"][i] = f
+	var since: int = f - int(t["seen"][i])
+	if t["how"] == "skipped":
+		if since == 20 and int(t["skipped"]) == 0:
+			br.skip_button.pressed.emit()
+			t["skipped"] += 1
+		return
+	if not br.line_done():
+		if i % 2 == 1 and since == 15:
+			_tap_briefing(br)  # (part way: it must finish the line, nothing more)
+			if not br.line_done() or br.line_index() != i:
+				_talk_bad(t, "tap-on-line-%d-didn't-just-finish-it" % (i + 1))
+		return
+	if not t["full"].has(i):
+		t["full"][i] = f
+	if f - int(t["full"][i]) < 15:
+		return  # (reading it)
+	_tap_briefing(br)
+	t["tapped"] += 1
+
+
+func _talk_bad(t: Dictionary, what: String) -> void:
+	if not String(t["bad"]).contains(what):
+		t["bad"] += " " + what
+
+
+## The verdict, once the debrief has opened (or it went wrong): RESULT's talk=; the bots other than
+## naive / naive_skip report now (those go on to watch the end screen).
+func _talk_verdict(t: Dictionary) -> void:
+	t["done"] = true
+	var n: int = t["count"]
+	var read_ok: bool = int(t["lines"]) == n and int(t["tapped"]) == n if t["how"] == "tapped" else int(t["lines"]) == 1 and int(t["skipped"]) == 1
+	var ok: bool = String(t["bad"]) == "" and n >= 3 and read_ok
+	_talk_report = " talk=%s/%s/%s" % [t["reason"], t["how"], "ok" if ok else "bad(lines %d/%d tapped %d skipped %d open %d dead %d closed %d debrief %d%s)" % [
+			t["lines"], n, t["tapped"], t["skipped"], t["open_f"], t["dead_f"], t["closed_f"], t["debrief_f"], t["bad"]]]
+	if _death.is_empty():
+		_report(String(t["reason"]))
+
+
+## The end's sting (the extraction jingle or the game-over sting) playing.
+func _sting_playing() -> bool:
+	var stings := [SoundBank.get_stream("jingle"), SoundBank.get_stream("gameover")]
+	for p: AudioStreamPlayer in _level._audio._pool:
+		if p.playing and p.stream in stings:
+			return true
+	return false
 
 
 ## The end screen typed and counted to its end, with the exact words ("ok"), or what isn't ("": not
@@ -534,7 +702,7 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _intro_report)
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report)
 	get_tree().quit()
 
 

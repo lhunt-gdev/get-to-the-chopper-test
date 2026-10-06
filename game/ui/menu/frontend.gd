@@ -2,8 +2,8 @@ class_name Frontend
 extends CanvasLayer
 ## Every menu screen, in the game's espionage style (UiKit): the main menu (over the slowly
 ## swaying opening camera), the mission briefing after START (Briefing), SETTINGS, CONTROLS, the
-## pause menu, and the end screens. It keeps working while the game is paused. The level listens to
-## its signals.
+## pause menu, and the end screens (the end-of-mission conversation, then the debrief). It keeps
+## working while the game is paused. The level listens to its signals.
 
 signal start_requested
 signal resume_requested
@@ -18,10 +18,15 @@ signal tally_landed
 signal typed
 ## The mission briefing closed (SKIP, or a tap after its last line): the opening pan comes next.
 signal briefing_done
-## A sound for the briefing to play (the call, the codec opening and closing, static).
+## A sound for the briefing (or the end-of-mission conversation) to play (the call, the codec
+## opening and closing, static).
 signal briefing_cue(sound: String, volume_db: float)
+## The run's over and the debrief (the route map and the tally) has opened: after the end-of-mission
+## conversation, or at once without one (the level plays the end's sting now).
+signal debrief_opened(reason: StringName)
 
-enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING }
+## END_TALK: the end-of-mission conversation (a Briefing), between the run and the debrief (END).
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK }
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
@@ -83,16 +88,42 @@ func in_briefing() -> bool:
 	return _screen == Screen.BRIEFING
 
 
-## The run's over. stats: the tally's numbers (Tally.rows_for), and for the route map graph,
-## visited, discovered, end_into (how far into the last area it ended) and end_ramp (the stairs
-## at its start).
-func show_end(reason: StringName, stats: Dictionary) -> void:
+## The run's over: the end-of-mission conversation in `talk` (Briefing.conversation() for the end's
+## reason) first, then, when it closes (SKIP, or a tap after its last line), the debrief; with no
+## lines to play, the debrief at once. stats: the tally's numbers (Tally.rows_for), and for the route
+## map graph, visited, discovered, end_into (how far into the last area it ended) and end_ramp (the
+## stairs at its start).
+func show_end(reason: StringName, stats: Dictionary, talk: Dictionary = {}) -> void:
 	_end_reason = reason
 	_end_stats = stats
+	if Briefing.lines_of(talk).is_empty():
+		_open_debrief()
+		return
+	_briefing_script = talk
+	_show(Screen.END_TALK)
+
+
+func in_end_talk() -> bool:
+	return _screen == Screen.END_TALK
+
+
+## The debrief (the end screen), up.
+func in_debrief() -> bool:
+	return _screen == Screen.END
+
+
+func _open_debrief() -> void:
+	_end_guard = _screen == Screen.END_TALK
 	_show(Screen.END)
+	debrief_opened.emit(_end_reason)
 
 
 var _end_reason: StringName = &"extracted"
+## Straight after an end conversation: the debrief's buttons wait END_GUARD s before they take a tap
+## or Enter, so one meant for the conversation's last line can't retry or quit before the debrief's
+## been seen (a tap on them meanwhile reaches the screen behind: the debrief shown at once).
+const END_GUARD := 0.6
+var _end_guard := false
 var _end_stats: Dictionary = {}
 var _briefing_script: Dictionary = {}
 
@@ -102,8 +133,9 @@ func _show(s: Screen) -> void:
 	for c in _root.get_children():
 		c.queue_free()
 	_dim.visible = s != Screen.NONE
-	# (The briefing darkens the screen behind itself as it opens, from the main menu's dim.)
-	_dim.color = Color(0.0, 0.02, 0.03, 0.35 if s in [Screen.MAIN, Screen.BRIEFING] else 0.7)
+	# (The briefing darkens the screen behind itself as it opens, from the main menu's dim; the end
+	# conversation the same, over the run's last moment.)
+	_dim.color = Color(0.0, 0.02, 0.03, 0.35 if s in [Screen.MAIN, Screen.BRIEFING, Screen.END_TALK] else 0.7)
 	match s:
 		Screen.MAIN:
 			_build_main()
@@ -115,7 +147,7 @@ func _show(s: Screen) -> void:
 			_build_pause()
 		Screen.END:
 			_build_end()
-		Screen.BRIEFING:
+		Screen.BRIEFING, Screen.END_TALK:
 			_build_briefing()
 
 
@@ -149,13 +181,19 @@ static func build_label() -> String:
 		return "BUILD DEV"
 	return ("BUILD %s - %s" % [info.get("commit", "?"), info.get("built", "")]).strip_edges().to_upper()
 
-## The mission briefing: its own screen (Briefing), its typing ticking like the end screen's.
+## The mission briefing (or the end-of-mission conversation): its own screen (Briefing), its typing
+## ticking like the end screen's. The briefing closing starts the pan (briefing_done); the end
+## conversation closing opens the debrief.
 func _build_briefing() -> void:
 	var b := Briefing.new()
 	b.data = _briefing_script
 	b.typed.connect(func() -> void: typed.emit())
 	b.cue.connect(func(sound: String, db: float) -> void: briefing_cue.emit(sound, db))
-	b.finished.connect(func() -> void: briefing_done.emit())
+	b.finished.connect(func() -> void:
+		if _screen == Screen.END_TALK:
+			_open_debrief()
+		else:
+			briefing_done.emit())
 	_root.add_child(b)  # (connected first: it calls as it opens)
 	b.skip_button.pressed.connect(func() -> void: clicked.emit())  # (a button's click, like the rest)
 
@@ -293,8 +331,26 @@ func _build_end() -> void:
 		tally.skip())
 	_root.add_child(skip)
 	var first := _button("RETRY", 380, func() -> void: retry_requested.emit())
-	_button("MAIN MENU", 408, func() -> void: menu_requested.emit())
-	first.grab_focus()
+	var second := _button("MAIN MENU", 408, func() -> void: menu_requested.emit())
+	if _end_guard:
+		for b: Button in [first, second]:
+			b.disabled = true
+			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# (the wait is the button's own: it goes with the screen if that's closed first)
+		var wait := Timer.new()
+		wait.one_shot = true
+		wait.wait_time = END_GUARD
+		wait.ignore_time_scale = true
+		wait.process_mode = Node.PROCESS_MODE_ALWAYS
+		first.add_child(wait)
+		wait.timeout.connect(func() -> void:
+			for b: Button in [first, second]:
+				b.disabled = false
+				b.mouse_filter = Control.MOUSE_FILTER_STOP
+			first.grab_focus())
+		wait.start()
+	else:
+		first.grab_focus()
 
 
 # --- Building blocks ------------------------------------------------------------------
