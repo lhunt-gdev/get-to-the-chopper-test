@@ -628,8 +628,8 @@ func _test_briefing() -> void:
 	var who := {}
 	for l in lines:
 		who[l["who"]] = true
-	_check(lines.size() >= 8 and who.has("cross") and who.has("general") and who.has("briefer"),
-			"briefing: placeholder lines for CROSS, the General and the briefer (%d lines)" % lines.size())
+	_check(lines.size() >= 4 and who.has("cross") and who.has("general") and who.has("briefer"),
+			"briefing: mission 1's lines for CROSS, the General and the briefer (%d lines)" % lines.size())
 	_check(String(lines[0]["text"]).begins_with("[BISHOP] ") and _said_by(lines, "briefer").begins_with("[VESPER] "),
 			"briefing: a line starts with its speaker's name, the codenames set in the cast (%s)" % lines[0]["text"])
 	for id in ["cross", "general", "briefer"]:
@@ -637,6 +637,7 @@ func _test_briefing() -> void:
 	# Each name set once: rename the General in the cast and every line follows.
 	var renamed: Dictionary = data.duplicate(true)
 	renamed["cast"]["general"]["name"] = "VIPER"
+	(renamed["lines"] as Array).append({"who": "cross", "text": "I hear you, {general}."})  # (a line naming him)
 	var said := " ".join(Briefing.lines_of(renamed).map(func(l: Dictionary) -> String: return l["text"]))
 	_check(said.contains("[VIPER] ") and said.contains("you, VIPER.") and not said.contains("BISHOP"),
 			"briefing: the General's name is set once, in the cast ({general} in a line follows it)")
@@ -674,7 +675,17 @@ func _test_briefing() -> void:
 	fe.typed.connect(func() -> void: ticks[0] += 1)
 	var clicks := [0]
 	fe.clicked.connect(func() -> void: clicks[0] += 1)
-	fe.show_briefing(data)
+	# (how it plays, on a conversation of its own, so the script can change: the General calls, CROSS
+	# answers, the General twice more, then the briefer comes on)
+	var demo := {"cast": data["cast"], "lines": [
+		{"who": "general", "text": "Cross. You're in. Listen carefully, we don't have long."},
+		{"who": "cross", "text": "I hear you, {general}. Where's my ride out?"},
+		{"who": "general", "text": "A chopper, on the helipad. It won't wait for you."},
+		{"who": "general", "text": "{briefer} has the layout. {briefer}, go ahead."},
+		{"who": "briefer", "text": "Three ways to the pad: the main floor, the roofs or the tunnels."},
+		{"who": "cross", "text": "Understood."},
+	]}
+	fe.show_briefing(demo)
 	var br: Briefing = null
 	for c in fe.find_children("*", "", true, false):
 		if c is Briefing:
@@ -886,7 +897,7 @@ func _test_end_talk() -> void:
 		for l in lines:
 			who[l["who"]] = true
 		_check(lines.size() >= 3 and lines.size() <= 6 and String(talk.get("title", "")) != "" and talk.get("id") == id,
-				"end talk %s: its own conversation, %d placeholder lines and a tag (%s)" % [id, lines.size(), talk.get("title", "")])
+				"end talk %s: its own conversation, %d lines and a tag (%s)" % [id, lines.size(), talk.get("title", "")])
 		_check(who.has("general") and who.has("briefer") and (who.has("cross") != (id == "killed")),
 				"end talk %s: BISHOP and VESPER speak; CROSS %s" % [id, "doesn't (his signal's lost)" if id == "killed" else "does"])
 		_check(bool(talk.get("signal_lost", false)) == (id == "killed"), "end talk %s: CROSS's signal lost only when he's killed" % id)
@@ -903,6 +914,7 @@ func _test_end_talk() -> void:
 	var renamed: Dictionary = data.duplicate(true)
 	renamed["cast"]["general"]["name"] = "VIPER"
 	renamed["cast"]["briefer"]["name"] = "ROOK"
+	(renamed["endings"]["captured"]["lines"] as Array).append({"who": "cross", "text": "Sorry, {general}. Tell {briefer} too."})  # (a line naming them)
 	var said := ""
 	for id: String in main:
 		said += " ".join(Briefing.lines_of(Briefing.conversation(renamed, id)).map(func(l: Dictionary) -> String: return l["text"]))

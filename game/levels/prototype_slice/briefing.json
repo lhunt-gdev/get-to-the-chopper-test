@@ -1,61 +1,55 @@
 {
-	"_note": "The mission's conversations (Briefing): the mission briefing after START MISSION (\"lines\"), and one for each ending of the run (\"endings\": extracted, killed, captured, chopper_left), played after the ending and before the DEBRIEF (user, 2026-10-06). PLACEHOLDER LINES (user: 'We need to work on this. Use place holder text for now.'). Each cast member's name is set once, here (the General is BISHOP and the briefer VESPER, for now: user, 2026-10-06): {general} or {briefer} in a line is replaced by their name, so a codename changes in one place (12 letters at most: it fits its name plate). CROSS is always the right card, whoever he's talking to the left. Killed: his signal is lost (his card static under SIGNAL LOST), so he has no lines there. An ending's \"title\" is its red tag in the top bar (18 letters at most). Letters: A-Z, 0-9, spaces and . , : ; ! ? - + = / ' \" ( ) < > % # & @ [ ]; curly quotes, dashes and ... are turned into plain ones. A line holds 5 rows of 39 letters, its speaker's [NAME] included.",
+	"_note": "Mission 1's conversations (Briefing): the briefing after START MISSION (\"lines\"), and one for each ending of the run (\"endings\": extracted, killed, captured, chopper_left), played after the ending and before the DEBRIEF. The story (decision log, \"The story: CONDOR against VORHALT\"): VORHALT buys secrets and sells them to whoever pays the most; CONDOR, a small broke agency, sends Ernest Cross to grab each one before the sale; he runs past VORHALT's pad guard (always called ARDBALLS, a new one each mission) to a chopper CONDOR rents by the minute. Each cast member's name is set once, here (the General is BISHOP and the briefer VESPER): {general} or {briefer} in a line is replaced by their name, so a codename changes in one place (12 letters at most: it fits its name plate). CROSS is always the right card, whoever he's talking to the left. Killed: his signal is lost (his card static under SIGNAL LOST), so he has no lines there. An ending's \"title\" is its red tag in the top bar (18 letters at most). Letters: A-Z, 0-9, spaces and . , : ; ! ? - + = / ' \" ( ) < > % # & @ [ ]; curly quotes, dashes and ... are turned into plain ones. A line holds 5 rows of 39 letters, its speaker's [NAME] included.",
 	"cast": {
 		"cross": {"name": "CROSS", "portrait": "res://assets/textures/portraits/cross.jpg"},
 		"general": {"name": "BISHOP", "portrait": "res://assets/textures/portraits/general.jpg"},
 		"briefer": {"name": "VESPER", "portrait": "res://assets/textures/portraits/briefer.jpg"}
 	},
 	"lines": [
-		{"who": "general", "text": "Cross. You're in. Listen carefully, we don't have long."},
-		{"who": "cross", "text": "I hear you, {general}. Where's my ride out?"},
-		{"who": "general", "text": "A chopper, on the helipad. It won't wait for you. Miss it and you're on your own."},
-		{"who": "general", "text": "{briefer} has the layout. {briefer}, go ahead."},
-		{"who": "briefer", "text": "Three ways to the pad: through the main floor, over the roofs, or down through the tunnels. Every one ends at the chopper."},
-		{"who": "briefer", "text": "Tripwires raise the alert. Shoot an alarm box to bring it back down. Raise it and the stairs down to the tunnels seal."},
-		{"who": "cross", "text": "And the guards?"},
-		{"who": "briefer", "text": "Riflemen on every floor. Dogs, if they get nervous. Whatever happens, keep running."},
-		{"who": "general", "text": "Placeholder briefing ends here. Good luck, Cross. Get to the chopper."}
+		{"who": "general", "text": "CROSS! VORHALT'S SELLING A MUSEUM'S ALARM PLANS TO A GANG OF ART THIEVES. GO AND GET THEM!"},
+		{"who": "briefer", "text": "HE'S ALREADY GOT THEM, GENERAL. HE'S RUNNING FOR THE CHOPPER."},
+		{"who": "general", "text": "THAT'S MY BOY! AND THAT CHOPPER'S ON THE METER, SON. FUEL DOESN'T GROW ON TREES."},
+		{"who": "briefer", "text": "IT COMES OUT OF THE COFFEE MACHINE BUDGET. WHICH IS WHY WE DON'T HAVE A COFFEE MACHINE."},
+		{"who": "briefer", "text": "ONE GUARD ON THE PAD. HUGE. MINIGUN. SKULL ON HIS CHEST. NAME TAG SAYS ARDBALLS."},
+		{"who": "cross", "text": "KEEP THE METER RUNNING."}
 	],
 	"endings": {
 		"extracted": {
-			"title": "EXTRACTION",
+			"title": "EXFIL COMPLETE",
 			"lines": [
-				{"who": "general", "text": "Cross. Tell me that's you on the chopper."},
-				{"who": "cross", "text": "It's me, {general}. Wheels up. Tell the pilot to keep it low."},
-				{"who": "briefer", "text": "Their radios are going crazy. You've woken up the whole building."},
-				{"who": "cross", "text": "They'll get over it."},
-				{"who": "general", "text": "Good work. Get some sleep on the way back. {briefer} will have the debrief ready."}
+				{"who": "general", "text": "GOOD RIDDANCE, ARDBALLS! SON, ARE THE ALARM PLANS SAFE?"},
+				{"who": "cross", "text": "NO NEED TO BE ALARMED."},
+				{"who": "briefer", "text": "FOUR OUT OF TEN."},
+				{"who": "general", "text": "FOUR? THAT'S ERNEST CROSS YOU'RE SCORING!"},
+				{"who": "briefer", "text": "STILL A FOUR. AND WHILE WE'RE ON NUMBERS, I'D LIKE A RAISE."},
+				{"who": "general", "text": "DENIED. NOW GLIDE HOME, SON. SAVES FUEL."}
 			]
 		},
 		"killed": {
 			"title": "AGENT DOWN",
 			"lines": [
-				{"who": "briefer", "text": "Cross? Cross, respond... {general}, I've lost his signal."},
-				{"who": "general", "text": "Keep trying."},
-				{"who": "briefer", "text": "His vitals are flat. There's nothing there. He's gone."},
-				{"who": "general", "text": "Then it's over. Pull the chopper out before they shoot it down."},
-				{"who": "briefer", "text": "Understood. Pulling it out."}
+				{"who": "briefer", "text": "CROSS? CROSS, COME IN. ...HIS SIGNAL'S GONE, GENERAL."},
+				{"who": "general", "text": "KEEP THE METER RUNNING."},
+				{"who": "briefer", "text": "GENERAL..."},
+				{"who": "general", "text": "ONE MORE MINUTE. I'LL PAY."}
 			]
 		},
 		"captured": {
 			"title": "AGENT CAPTURED",
 			"lines": [
-				{"who": "briefer", "text": "{general}, they've got him. He's surrounded, hands up."},
-				{"who": "cross", "text": "Sorry, {general}. They were waiting for me."},
-				{"who": "general", "text": "Not a word to them, Cross. Name and number, nothing else."},
-				{"who": "cross", "text": "You'll come for me?"},
-				{"who": "general", "text": "We don't leave our people behind. Hold on."},
-				{"who": "briefer", "text": "They've found his radio. We're losing him..."}
+				{"who": "briefer", "text": "THEY'VE GOT HIM, GENERAL. I RANG VORHALT: \"YOUR SECRETS ARE IMPORTANT TO US. PLEASE HOLD.\""},
+				{"who": "general", "text": "HOLD? ON MY PHONE BILL? ...HANG ON, THERE'S MUSIC. IT'S ACTUALLY QUITE NICE."},
+				{"who": "cross", "text": "TAKE YOUR TIME, GENERAL. I'M NOT GOING ANYWHERE."}
 			]
 		},
 		"chopper_left": {
-			"title": "NO EXTRACTION",
+			"title": "METER RAN OUT",
 			"lines": [
-				{"who": "briefer", "text": "Cross, the chopper's gone. The pilot couldn't wait any longer."},
-				{"who": "cross", "text": "I heard it go. Tell me it's coming back, {briefer}."},
-				{"who": "general", "text": "It isn't. You were too slow, Cross. You're on your own in there."},
-				{"who": "cross", "text": "Then find me another way out."},
-				{"who": "general", "text": "We'll try. Stay out of sight and stay alive until we do."}
+				{"who": "briefer", "text": "THE CHOPPER'S GONE, GENERAL. YOUR MINUTES RAN OUT."},
+				{"who": "general", "text": "ALREADY? I PAID FOR MINUTES! PLURAL!"},
+				{"who": "briefer", "text": "AND YOU SPENT THE TOP-UP ON CIGARS."},
+				{"who": "cross", "text": "I'LL GET THE BUS."},
+				{"who": "general", "text": "PAY YOUR OWN FARE, SON."}
 			]
 		}
 	}
