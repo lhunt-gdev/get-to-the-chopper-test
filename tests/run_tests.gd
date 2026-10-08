@@ -15,18 +15,25 @@ func _run() -> void:
 	await process_frame  # let the root viewport enter the tree
 	_test_route_json_is_valid()
 	_test_alert_gating()
+	_test_door_cues()
 	_test_pick_edge()
 	_test_route_rules()
+	_test_stair_exit_clear()
+	_test_fair_reaction()
 	_test_trooper_rules()
 	_test_chopper_stages()
 	_test_seen_troopers_stay()
 	_test_mission_layout()
 	_test_trooper_tiers()
+	_test_runner_doors()
 	_test_squad_rules()
 	_test_corner_rule()
 	_test_searchlights()
 	_test_swipe_direction()
 	_test_sounds()
+	await _test_sound_turns()
+	_test_menu_music_pace()
+	_test_texture_makers()
 	_test_route_map()
 	_test_tally()
 	_test_snipers()
@@ -39,6 +46,12 @@ func _run() -> void:
 	_test_cross_ready()
 	_test_cross_eased()
 	_test_intro_camera()
+	_test_start_room()
+	_test_cutout()
+	_test_lamp_slots()
+	_test_lamp_views()
+	_test_hanging()
+	await _test_locked_doors()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -247,6 +260,9 @@ func _test_boss() -> void:
 	var amb := Ambience.new()
 	amb.tuning = tt
 	root.add_child(amb)
+	var view_cam := Camera3D.new()  # looking at them from 8 m off (its focus on them)
+	root.add_child(view_cam)
+	view_cam.position = Vector3(0.0, 0.0, Ambience.FOCUS_AHEAD)
 	var near_lamps: Array[Node3D] = []
 	for i in Ambience.SLOTS:
 		var n := Node3D.new()
@@ -258,21 +274,22 @@ func _test_boss() -> void:
 	root.add_child(flash_boss)
 	amb.add_lamp(flash_boss.flash_lamp, Color.ORANGE, 8.0, {"alert": false, "second_slot": true})
 	flash_boss.flash_lamp.global_position = Vector3(0, 1, -100)
-	amb.update(1.0 / 60.0, Vector3.ZERO, 1)
+	amb.update(1.0 / 60.0, view_cam, 1)
 	var before := amb.slot_nodes.slice(0, Ambience.SLOTS)
 	flash_boss.flash_lamp.visible = true
 	flash_boss.flash_lamp.set_meta("power", 0.7)
-	amb.update(1.0 / 60.0, Vector3.ZERO, 1)
+	amb.update(1.0 / 60.0, view_cam, 1)
 	_check(amb.slot_nodes.slice(0, Ambience.SLOTS) == before and before.all(func(x) -> bool: return x != null)
 			and amb.slot_nodes[Ambience.SLOTS + 1] == flash_boss.flash_lamp and is_equal_approx(amb.slot_lit[Ambience.SLOTS + 1], 0.7),
 			"boss: his flash lights in a slot of its own, no level lamp put out (user)")
 	flash_boss.flash_lamp.visible = false
-	amb.update(1.0 / 60.0, Vector3.ZERO, 1)
+	amb.update(1.0 / 60.0, view_cam, 1)
 	_check(amb.slot_nodes[Ambience.SLOTS + 1] == null, "boss: his flash's slot is dark when it's out")
 	for n in near_lamps:
 		n.queue_free()
 	flash_boss.queue_free()
 	amb.queue_free()
+	view_cam.queue_free()
 	# His stance (user: "a cool action ready stance"): down low, both feet planted where they go, flat
 	# on the deck, and still planted as he turns to sweep.
 	var rig := GuardRig.new(GuardRifle.Kind.MINIGUN, Boss.MODEL, "BOSS")
@@ -1429,6 +1446,555 @@ func _test_intro_camera() -> void:
 	_check(approved and forward, "the opening pan: then exactly the approved path (user: \"keep the current values\"), never turning back, ending on the play camera")
 
 
+## The start room (user, 2026-10-07: "a bit smaller ... a window on the back wall"): it holds every
+## camera before the run (the menu at every sway on a 480-high screen and a tall phone, the opening
+## pan from every sway, eased off the menu or cut, and the play camera it ends on), each at least
+## 0.5 m inside its side and back walls and 0.35 m under its ceiling, with the door wall 0.5 m
+## ahead; and the back wall's windows land between the menu's title (y 180) and its buttons (y 290).
+func _test_start_room() -> void:
+	var tt := Tuning.new()
+	var k: Dictionary = (load("res://game/levels/prototype_slice/prototype_slice.gd") as Script).get_script_constant_map()
+	var half: float = k["START_ROOM_HALF"]
+	var top: float = k["CEILING_Y"]
+	var S := tt.start_offset
+	var L := tt.start_room_length
+	var play_look := Vector3(0.0, 1.0, -10.0)
+	var worst := INF
+	var at := ""
+	var eyes: Array[Vector3] = []
+	for h in [480.0, 585.0]:
+		var s := -IntroCamera.SWAY
+		while s <= IntroCamera.SWAY + 1e-4:
+			eyes.append(IntroCamera.menu(s, 0.0, h)[0])
+			s += 0.05
+		for s0 in [-0.7, -0.35, 0.0, 0.35, 0.7]:
+			for fm in [0.0, tt.intro_from_menu]:
+				for i in 101:
+					eyes.append(IntroCamera.pan(i / 100.0, 0.0, s0, fm, play_look, h)[0])
+	eyes.append(Vector3(0.0, 3.4, 5.5))  # (the play camera at the run's start, and on Retry)
+	for e in eyes:
+		var z := S + e.z  # (back from the door wall's face)
+		var m := minf(minf(half - absf(e.x), L - z), minf(z, (top - 0.35) - e.y + 0.5))
+		if m < worst:
+			worst = m
+			at = "x %+.2f y %.2f z %.2f" % [e.x, e.y, z]
+	_check(worst >= 0.5, "start room: every camera before the run 0.5 m or more inside its walls (closest %.2f m, at %s)" % [worst, at])
+	var cx: float = minf(0.25 * (L - S + IntroCamera.MENU_R), half - float(k["START_WIN_W"]) / 2.0 - 0.5)
+	var ok := cx > 1.5
+	var hi := INF
+	var lo := -INF
+	for h in [480.0, 585.0]:
+		var s := -IntroCamera.SWAY
+		while s <= IntroCamera.SWAY + 1e-4:
+			for x in [-cx, 0.0, cx]:
+				for side in [-0.5, 0.5]:  # (its corners on screen)
+					var wx: float = x + side * float(k["START_WIN_W"])
+					var head := _rd_screen(Vector3(wx, float(k["START_WIN_HEAD"]), L - S), s, h)
+					var sill := _rd_screen(Vector3(wx, float(k["START_WIN_SILL"]), L - S), s, h)
+					if head.x >= 0.0 and head.x <= 270.0:
+						ok = ok and head.y > 180.0 and sill.y < 290.0
+						hi = minf(hi, head.y)
+						lo = maxf(lo, sill.y)
+			s += 0.05
+	_check(ok, "start room: its back windows between the menu's title and its buttons at every sway, on a 480-high screen and a tall phone (y %.0f to %.0f)" % [hi, lo])
+
+
+## The lighting's lamp slots (Ambience): the 12 lamps nearest a point 8 m in front of the camera,
+## but one whose pool can't reach anything in view (behind the camera, off to the side) comes after
+## every one that can; with more lamps in view than slots, one that gets a slot or loses one while
+## you'd see it fades in or out over EASE s instead of popping, and one holding a slot keeps it
+## over one less than STICK m nearer; a camera cut just sets them.
+func _test_lamp_slots() -> void:
+	var tt := Tuning.new()
+	var amb := Ambience.new()
+	amb.tuning = tt
+	root.add_child(amb)
+	var cam := Camera3D.new()  # at the origin, looking down -z
+	root.add_child(cam)
+	var b := tt.brightness
+	var dt := 1.0 / 60.0
+	var made: Array[Node3D] = []
+	var add := func(p: Vector3) -> Node3D:
+		var n := Node3D.new()
+		root.add_child(n)
+		n.position = p
+		amb.add_lamp(n, Color.WHITE, 5.0, {"alert": false})
+		made.append(n)
+		return n
+	var lit_of := func(n: Node3D) -> float:
+		var i: int = amb.slot_nodes.find(n)
+		return amb.slot_lit[i] if i >= 0 and i < Ambience.SLOTS else -1.0  # (-1: no slot)
+	var tick := func(frames: int) -> void:
+		for f in frames:
+			amb.update(dt, cam, 1)
+	var ease_frames := ceili(Ambience.EASE / dt)
+	var full := func(n: Node3D) -> float:  # how lit it is with its slot, all the way on
+		return b * clampf((tt.lamp_fade_far - n.global_position.distance_to(cam.global_position - cam.global_basis.z * Ambience.FOCUS_AHEAD)) / 10.0, 0.0, 1.0)
+	var ahead: Array[Node3D] = []
+	for i in Ambience.SLOTS:
+		ahead.append(add.call(Vector3(0.0, 1.0, -10.0 - 2.0 * i)))  # 2 .. 24 m from the focus
+	var behind: Node3D = add.call(Vector3(0.0, 1.0, 10.0))  # 18 m from the focus, 10 m behind the lens (its pool 5 m)
+	tick.call(1)
+	var ok: bool = lit_of.call(behind) < 0.0
+	for n in ahead:
+		ok = ok and is_equal_approx(lit_of.call(n), full.call(n))
+	_check(ok, "lamps: one whose pool can't reach the view (10 m behind the camera) gives its slot to the 12 ahead, all lit full")
+	# Slots to spare: one out of view still has one, as before.
+	ahead[0].visible = false
+	tick.call(1)
+	_check(is_equal_approx(lit_of.call(behind), b) and lit_of.call(ahead[0]) < 0.0, "lamps: with a slot to spare, one out of view still has it, lit as before")
+	ahead[0].visible = true
+	tick.call(1)
+	# A lamp ahead, faded in by distance (32 m off: 0.2) but waiting for a slot, gets one: it comes on
+	# from dark over EASE s, not at once.
+	var far: Node3D = add.call(Vector3(0.0, 1.0, -40.0))
+	tick.call(1)
+	var waits: bool = lit_of.call(far) < 0.0
+	ahead[5].visible = false
+	var seq: Array[float] = []
+	for f in ease_frames + 3:
+		tick.call(1)
+		seq.append(lit_of.call(far))
+	var fade_far := clampf((tt.lamp_fade_far - far.position.distance_to(Vector3(0.0, 0.0, -Ambience.FOCUS_AHEAD))) / 10.0, 0.0, 1.0)
+	var eased: bool = waits and fade_far > 0.1 and seq[0] >= 0.0 and seq[0] < 0.05 * b
+	for i in range(1, seq.size()):
+		eased = eased and seq[i] >= seq[i - 1] - 1e-6
+	eased = eased and is_equal_approx(seq[seq.size() - 1], fade_far * b) and seq[ease_frames - 3] < fade_far * b
+	_check(eased, "lamps: one faded in by distance that gets a slot comes on over %.1f s (from %.2f to %.2f), not at once" % [Ambience.EASE, seq[0], seq[seq.size() - 1]])
+	ahead[5].visible = true
+	tick.call(ease_frames + 2)
+	# A lamp nearer than the farthest held by more than STICK: the farthest goes off over EASE s, still
+	# in its slot, and the new one only gets it then, coming on from dark.
+	var farthest_held := func() -> Node3D:
+		var w: Node3D = null
+		for n in amb.slot_nodes.slice(0, Ambience.SLOTS):
+			if n != null and (w == null or (n as Node3D).position.z < w.position.z):
+				w = n
+		return w
+	var farthest: Node3D = farthest_held.call()
+	var near: Node3D = add.call(Vector3(0.0, 1.0, -10.5))
+	var out: Array[float] = []
+	var new_in := -1
+	for f in ease_frames + 10:
+		tick.call(1)
+		out.append(lit_of.call(farthest))
+		if new_in < 0 and lit_of.call(near) >= 0.0:
+			new_in = f
+	var gone := out.find(-1.0)
+	var goes: bool = out[0] > 0.8 * b and out[0] < b and gone > 0 and gone <= ease_frames + 1 and new_in == gone
+	for i in range(1, gone if gone > 0 else out.size()):
+		goes = goes and out[i] < out[i - 1]
+	tick.call(ease_frames)
+	goes = goes and is_equal_approx(lit_of.call(near), full.call(near))
+	_check(goes, "lamps: one losing its slot in view goes off over %.1f s (%d frames), and the nearer one gets the slot then (frame %d), coming on from dark" % [Ambience.EASE, gone, new_in])
+	# STICK: a lamp just 0.5 m nearer than the farthest held doesn't take its slot at once, nor one
+	# swinging either side of it every few frames; one staying nearer gets it after STICK_TIME s.
+	farthest = farthest_held.call()
+	var spare: Node3D = null  # (a lamp in view without a slot: the one that went off)
+	for n in made:
+		if n.visible and n != behind and lit_of.call(n) < 0.0:
+			spare = n
+	var focus := Vector3(0.0, 0.0, -Ambience.FOCUS_AHEAD)
+	var d_far := farthest.position.distance_to(focus)
+	var way := Vector3(0.3, 1.0, -(d_far - 0.5)).normalized()  # (from the focus, ahead and a little aside)
+	var swings := true
+	for f in 120:  # 2 s, 0.3 m nearer, then 0.3 m farther, every 3 frames
+		spare.position = focus + way * (d_far + (0.3 if (f / 3) % 2 == 0 else -0.3))
+		tick.call(1)
+		swings = swings and is_equal_approx(lit_of.call(farthest), full.call(farthest)) and lit_of.call(spare) < 0.0
+	spare.position = focus + way * (d_far + 0.5)  # (back out of the way a moment)
+	tick.call(2)
+	spare.position = focus + way * (d_far - 0.5)
+	tick.call(floori(Ambience.STICK_TIME / dt) - 2)  # (just under STICK_TIME)
+	var sticks: bool = lit_of.call(spare) < 0.0 and is_equal_approx(lit_of.call(farthest), full.call(farthest))
+	tick.call(ceili((Ambience.STICK_TIME + 2.0 * Ambience.EASE) / dt) + 4)
+	sticks = sticks and is_equal_approx(lit_of.call(spare), full.call(spare)) and lit_of.call(farthest) < 0.0
+	_check(spare != null and swings and sticks, "lamps: one holding a slot keeps it over one swinging 0.3 m either side of it, and over one 0.5 m nearer for %.2f s (STICK %.1f m); then the nearer one gets it" % [Ambience.STICK_TIME, Ambience.STICK])
+	# A cut (the camera 200 m on in a frame): the slots are just set, every new lamp lit full at once.
+	var there: Array[Node3D] = []
+	for i in Ambience.SLOTS:
+		there.append(add.call(Vector3(0.0, 1.0, -210.0 - 2.0 * i)))
+	cam.position = Vector3(0.0, 0.0, -200.0)
+	tick.call(1)
+	var cut := true
+	for n in there:
+		cut = cut and is_equal_approx(lit_of.call(n), full.call(n))
+	_check(cut, "lamps: a camera cut sets the slots at once (the new place's 12 lamps lit full on its first frame)")
+	for n in made:
+		n.queue_free()
+	cam.queue_free()
+	amb.queue_free()
+
+
+## What the lamp slots (Ambience) count as in view, and the rear-view CCTV: whether a lamp's pool
+## reaches into a camera's picture is that camera's own frustum (Camera3D.get_frustum), whatever its
+## lens, shape and turn; while the rear monitor is up, a lamp behind the camera that it shows ranks by
+## its distance from the focus with the lamps ahead (as every lamp did before lamps out of view went
+## last), so it takes the farthest one's slot, and without it comes last again, going off at once (a
+## lamp on the screen never waits for it to fade) while the farthest comes back on from dark; and an
+## update makes nothing new, not even for a moment, with the rear camera or without.
+func _test_lamp_views() -> void:
+	# The view test against Camera3D.get_frustum: a play camera (portrait, turned), a long-lens CCTV in
+	# its own 128x72 picture, and one keeping its width.
+	var rear_vp := SubViewport.new()
+	rear_vp.size = Vector2i(128, 72)
+	root.add_child(rear_vp)
+	var play := Camera3D.new()
+	root.add_child(play)
+	play.position = Vector3(1.0, 3.4, 5.5)
+	play.rotation = Vector3(-0.35, 0.4, 0.05)
+	var cctv := Camera3D.new()
+	cctv.fov = 30.0
+	cctv.far = 70.0
+	rear_vp.add_child(cctv)
+	cctv.position = Vector3(0.0, 2.4, -1.0)
+	cctv.rotation = Vector3(-0.1, PI, 0.0)
+	var wide := Camera3D.new()
+	wide.keep_aspect = Camera3D.KEEP_WIDTH
+	wide.fov = 50.0
+	wide.near = 0.3
+	wide.far = 40.0
+	root.add_child(wide)
+	wide.rotation = Vector3(0.2, -1.1, 0.0)
+	var view := Ambience.View.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var wrong := 0
+	var ins := 0
+	var outs := 0
+	for c: Camera3D in [play, cctv, wide]:
+		view.aim(c)
+		var planes := c.get_frustum()
+		for k in 600:
+			var p := c.global_position + Vector3(rng.randf_range(-45, 45), rng.randf_range(-20, 20), rng.randf_range(-45, 45))
+			var r := rng.randf_range(0.5, 12.0)
+			var want := true
+			var edge := INF
+			for side in planes:
+				want = want and side.distance_to(p) < r
+				edge = minf(edge, absf(side.distance_to(p) - r))
+			if edge > 0.001 and view.reaches(p, r) != want:
+				wrong += 1
+			ins += int(want)
+			outs += int(not want)
+	_check(wrong == 0 and ins > 100 and outs > 100, "lamps: a pool reaching into the picture is the camera's own frustum, for a play camera, a long-lens CCTV and one keeping its width (%d of %d differ)" % [wrong, ins + outs])
+	# The rear monitor: 12 lamps ahead, 2 to 24 m from the focus, and one 6 m behind the camera (14 m
+	# from the focus), which only the rear camera sees.
+	var tt := Tuning.new()
+	var b := tt.brightness
+	var amb := Ambience.new()
+	amb.tuning = tt
+	root.add_child(amb)
+	var cam := Camera3D.new()  # at the origin, looking down -z
+	root.add_child(cam)
+	cctv.position = Vector3(0.0, 2.0, -1.0)
+	cctv.rotation = Vector3(-0.08, PI, 0.0)  # looking back, past the camera
+	var made: Array[Node3D] = []
+	for i in Ambience.SLOTS:
+		var n := Node3D.new()
+		root.add_child(n)
+		n.position = Vector3(0.0, 1.0, -10.0 - 2.0 * i)
+		amb.add_lamp(n, Color.WHITE, 5.0, {"alert": false})
+		made.append(n)
+	var behind := Node3D.new()
+	root.add_child(behind)
+	behind.position = Vector3(0.0, 1.0, 6.0)
+	amb.add_lamp(behind, Color.WHITE, 5.0, {"alert": false})
+	var farthest: Node3D = made[-1]
+	var dt := 1.0 / 60.0
+	var lit_of := func(n: Node3D) -> float:
+		var i: int = amb.slot_nodes.find(n)
+		return amb.slot_lit[i] if i >= 0 and i < Ambience.SLOTS else -1.0  # (-1: no slot)
+	var tick := func(frames: int, with_rear: Camera3D) -> void:
+		for f in frames:
+			amb.update(dt, cam, 1, with_rear)
+	tick.call(30, null)
+	var without: bool = lit_of.call(behind) < 0.0 and lit_of.call(farthest) > 0.0
+	var seen_rear := Ambience.View.new()
+	seen_rear.aim(cctv)
+	view.aim(cam)
+	var only_rear := seen_rear.reaches(behind.position, 5.0) and not view.reaches(behind.position, 5.0)
+	tick.call(ceili((Ambience.STICK_TIME + 2.0 * Ambience.EASE) / dt) + 4, cctv)
+	var fade_behind := clampf((tt.lamp_fade_far - behind.position.distance_to(Vector3(0.0, 0.0, -Ambience.FOCUS_AHEAD))) / 10.0, 0.0, 1.0)
+	var with_rear_up: bool = is_equal_approx(lit_of.call(behind), fade_behind * b) and lit_of.call(farthest) < 0.0
+	_check(only_rear and without and with_rear_up, "lamps: with the rear monitor up, a lamp behind the camera that it shows ranks by its distance with the lamps ahead and takes the farthest one's slot; without it, it comes last")
+	# The monitor still up, its lamp further back (28 m from the focus) loses its slot to the farthest
+	# one ahead: it goes off at once, so the farthest comes on from dark that frame, nothing waiting.
+	var full_far := clampf((tt.lamp_fade_far - farthest.position.distance_to(Vector3(0.0, 0.0, -Ambience.FOCUS_AHEAD))) / 10.0, 0.0, 1.0) * b
+	behind.position = Vector3(0.0, 1.0, 20.0)
+	var back_in: Array[float] = []
+	var gone_at_once := true
+	for f in ceili(Ambience.EASE / dt) + 2:
+		tick.call(1, cctv)
+		back_in.append(lit_of.call(farthest))
+		gone_at_once = gone_at_once and lit_of.call(behind) < 0.0
+	var eases: bool = back_in[0] >= 0.0 and back_in[0] < 0.2 * b and is_equal_approx(back_in[-1], full_far)
+	# The monitor gone, with its lamp back in a slot: it goes off at once too.
+	behind.position = Vector3(0.0, 1.0, 6.0)
+	tick.call(ceili((Ambience.STICK_TIME + 2.0 * Ambience.EASE) / dt) + 4, cctv)
+	var retaken: bool = lit_of.call(behind) > 0.0
+	tick.call(1, null)
+	gone_at_once = gone_at_once and retaken and lit_of.call(behind) < 0.0
+	_check(gone_at_once and eases, "lamps: a lamp only the rear monitor shows goes off at once when it loses its slot, or when the monitor goes (nothing on the screen waits for it), and the farthest one ahead comes on from dark that frame (%.2f to %.2f)" % [back_in[0], back_in[-1]])
+	# Nothing made in an update (memory held at a new high, then any allocation would raise it): first
+	# a check that this catches one.
+	tick.call(3, cctv)
+	var make := func() -> void:
+		var a := []
+		a.resize(8)
+	var caught := _allocates(make)
+	var main_only := amb.update.bind(dt, cam, 1, null)
+	var both := amb.update.bind(dt, cam, 1, cctv)
+	var made_new := 0
+	for k in 5:
+		made_new += _allocates(main_only) + _allocates(both)
+	_check(caught > 0 and made_new == 0, "lamps: an update makes nothing new, with the rear monitor up or not (%d bytes over 10 updates; a new array caught: %d)" % [made_new, caught])
+	for n in made:
+		n.queue_free()
+	behind.queue_free()
+	for n: Node in [play, wide, cam, rear_vp, amb]:
+		n.queue_free()
+
+
+## How much memory `c` takes while it runs, however briefly (bytes): the memory in use is first
+## brought up to its highest yet (held while `c` runs), so anything `c` makes raises the highest.
+func _allocates(c: Callable) -> int:
+	var hold := PackedByteArray()
+	hold.resize(OS.get_static_memory_peak_usage() - OS.get_static_memory_usage() + 65536)
+	var before := OS.get_static_memory_peak_usage()
+	c.call()
+	var grew := OS.get_static_memory_peak_usage() - before
+	hold = PackedByteArray()
+	return grew
+
+
+## Things hanging where the camera passes (3.4 m up, 5.5 m behind him, anywhere from 2.8 m left to
+## 2.8 m right): the WAREHOUSE's dome lamps and the SEWER's tubes hang half a metre or more over it
+## (their light still shines from where it did); a duck-under's cables, chains and rods dither away
+## near the lens (PsxMaterials.lens_faded, the PS1 shader's lens_fade); a light in the air (a beam, a
+## lamp's halo) fades out near it. The boss's tracers and the guards' glare keep their halo as it was.
+func _test_hanging() -> void:
+	var k: Dictionary = (load("res://game/levels/prototype_slice/prototype_slice.gd") as Script).get_script_constant_map()
+	var top: float = k["CEILING_Y"]
+	var cam_y := 3.4  # (the play camera's height over the floor: _place_camera)
+	var bulb: float = top - float(k["PENDANT_DROP"]) - 0.17  # the dome lamp's bulb, its lowest point
+	var tube: float = top - float(k["TUBE_DROP"]) - 0.10  # the sewer tube's glowing face
+	_check(bulb - cam_y >= 0.5 and tube - cam_y >= 0.5 and bulb < top - 0.3, "hanging lamps: the warehouse's dome lamps (bulb at %.2f m) and the sewer's tubes (%.2f m) hang 0.5 m or more over the camera (%.1f m), still under the ceiling" % [bulb, tube, cam_y])
+	var c := Color("2a2c2e")
+	var lf := PsxMaterials.lens_faded(c)
+	var plain = PsxMaterials.flat(c).get_shader_parameter("lens_fade")
+	var faded: bool = lf.shader == PsxMaterials.SHADER and lf.get_shader_parameter("albedo") == c and is_equal_approx(float(lf.get_shader_parameter("lens_fade")), PsxMaterials.LENS_FADE)
+	faded = faded and (plain == null or float(plain) == 0.0) and lf != PsxMaterials.flat(c) and PsxMaterials.lens_faded(c) == lf
+	faded = faded and PsxMaterials.SHADER.code.contains("uniform float lens_fade = 0.0;") and PsxMaterials.SHADER.code.contains("2.0 - 2.0 * distance(world_pos, CAMERA_POSITION_WORLD) / lens_fade")
+	_check(faded, "hanging lamps: a duck-under's hangers are their own colour, dithering away nearer the lens than %.1f m (gone at %.1f); plain colours never" % [PsxMaterials.LENS_FADE, PsxMaterials.LENS_FADE / 2.0])
+	var beam := PsxMaterials.beam(Color(1, 1, 1, 0.1))
+	var halo := PsxMaterials.lamp_halo(Color(1, 0.8, 0.5, 0.5))
+	var air: bool = beam.distance_fade_mode == BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA and is_equal_approx(beam.distance_fade_min_distance, PsxMaterials.BEAM_FADE.x) \
+			and is_equal_approx(beam.distance_fade_max_distance, PsxMaterials.BEAM_FADE.y)
+	air = air and halo.distance_fade_mode == BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA and is_equal_approx(halo.distance_fade_min_distance, PsxMaterials.HALO_FADE.x) \
+			and is_equal_approx(halo.distance_fade_max_distance, PsxMaterials.HALO_FADE.y) and halo.billboard_mode == BaseMaterial3D.BILLBOARD_ENABLED
+	air = air and PsxMaterials.halo(Color(1, 0.8, 0.5, 0.5)).distance_fade_mode == BaseMaterial3D.DISTANCE_FADE_DISABLED
+	_check(air, "hanging lamps: a beam fades out nearer the lens than %.1f m (none of it within %.1f), a lamp's halo nearer than %.1f m (none within %.1f); other halos as they were" % [PsxMaterials.BEAM_FADE.y, PsxMaterials.BEAM_FADE.x, PsxMaterials.HALO_FADE.y, PsxMaterials.HALO_FADE.x])
+
+
+## The cutout (Cutout; user: "anything in front of the camera between the lens and Cross is
+## faded/dissolved out"), the user's pick: a round hole 2.5 m round his chest (5 m across at his
+## distance; it was 1.8 m, too tight round him), the same size on screen all the way to the lens (a
+## cone), fully open in the middle and dithered over the outer 30% of its radius; only nearer the
+## lens than him, with a short fade; never the floor under him; up with his jump, and down into a
+## slide (eased over 0.12 s); on for the menu, the opening pan and the play camera, off on the
+## stairwells' security cameras, just out of a stairwell and in the boss's KO replay. CROSS's own
+## materials never dissolve (his pistol and his hit flash too); a guard's and the level's do, its
+## glass too (the same hole).
+func _test_cutout() -> void:
+	var feet := Vector3(2.0, 3.0, -40.0)
+	var eye := feet + Vector3(0.6, 3.4, 5.5)  # the play camera, behind and above him
+	Cutout.aim(eye, feet, true)
+	var chest := Cutout.centre(feet, 0.0)
+	var depth := eye.distance_to(chest)
+	var side := (chest - eye).cross(Vector3.UP).normalized()  # square to the view of him
+	# s of the way from the lens to his chest, k radii off the line to it (as seen from the lens).
+	var at := func(s: float, k: float) -> Vector3: return eye + (chest - eye) * s + side * (Cutout.RADIUS * k * s)
+	var cone := chest.is_equal_approx(feet + Vector3(0, 1.25, 0)) and is_equal_approx(Cutout.RADIUS, 2.5) and is_equal_approx(Cutout.EDGE, 0.3)
+	for s in [0.15, 0.4, 0.7]:
+		cone = cone and is_equal_approx(_cut_cover(at.call(s, 0.0)), 1.0) and is_equal_approx(_cut_cover(at.call(s, 0.69)), 1.0)
+		cone = cone and absf(_cut_cover(at.call(s, 0.85)) - 0.5) < 0.01 and _cut_cover(at.call(s, 1.01)) == 0.0
+	_check(cone, "the cutout: a round hole round his chest, 2.5 m in radius at his distance (5 m across), as big on screen all the way to the lens (a cone), open in the middle and dithered over the outer 30%")
+	# How far along the line to him a pixel is dissolved: up to his chest less 0.35 m, fading over 0.35 m.
+	var stop := (depth - Cutout.MARGIN) / depth
+	var fade := Cutout.DEPTH_FADE / depth
+	var near := is_equal_approx(_cut_cover(at.call(stop - fade * 1.05, 0.0)), 1.0) and absf(_cut_cover(at.call(stop - fade * 0.5, 0.0)) - 0.5) < 0.01
+	near = near and _cut_cover(at.call(stop + 0.01, 0.0)) == 0.0 and _cut_cover(at.call(1.0, 0.0)) == 0.0 and _cut_cover(at.call(1.3, 0.0)) == 0.0
+	_check(near, "the cutout: only what's nearer the lens than him (less 0.35 m, fading over 0.35 m): never him, nor anything beyond him")
+	# The floor under him: nothing lower than 6 cm over his feet, jumping too, the camera even below it.
+	var floor_kept := is_equal_approx(Cutout.misc.x, feet.y + 0.06)
+	Cutout.aim(eye, feet, true, Cutout.lift(1.28, 0.0))
+	floor_kept = floor_kept and is_equal_approx(Cutout.misc.x, feet.y + 0.06)
+	var low := feet + Vector3(0.0, -1.0, 5.0)
+	Cutout.aim(low, feet, true)
+	var to := chest - low
+	floor_kept = floor_kept and _cut_cover(low + to * 0.4) == 0.0 and is_equal_approx(_cut_cover(low + to * 0.6), 1.0)
+	_check(floor_kept, "the cutout: the floor under him never dissolves (nothing lower than 6 cm over his feet), jumping or not, even with the camera below it")
+	# It goes with him: up with his jump; down 0.65 m into a slide, eased over 0.12 s (and back).
+	Cutout.aim(eye, feet, true, Cutout.lift(1.28, 0.0))
+	var up := feet + Vector3(0.0, 1.25 + 1.28, 0.0)
+	var follows := Vector3(Cutout.fwd.x, Cutout.fwd.y, Cutout.fwd.z).is_equal_approx((up - eye).normalized())
+	follows = follows and is_equal_approx(_cut_cover(eye + (up - eye) * 0.5), 1.0)
+	var dt := 1.0 / 60.0
+	var slide := 0.0
+	var eased := true
+	var frames := 0
+	while slide < 1.0 and frames < 30:
+		var was := slide
+		slide = Cutout.slide_toward(slide, true, dt)
+		eased = eased and slide > was
+		frames += 1
+	var back := 0
+	while slide > 0.0 and back < 30:
+		slide = Cutout.slide_toward(slide, false, dt)
+		back += 1
+	follows = follows and eased and frames == ceili(0.12 / dt - 0.001) and back == frames
+	follows = follows and is_equal_approx(Cutout.lift(0.0, 1.0), -0.65) and is_equal_approx(Cutout.lift(0.4, 0.5), 0.4 - 0.325)
+	Cutout.aim(eye, feet, true, Cutout.lift(0.0, 1.0))
+	var down := feet + Vector3(0.0, 1.25 - 0.65, 0.0)
+	follows = follows and Vector3(Cutout.fwd.x, Cutout.fwd.y, Cutout.fwd.z).is_equal_approx((down - eye).normalized())
+	_check(follows, "the cutout: the hole goes with him, up with his jump and 0.65 m down into a slide, eased over 0.12 s (%d frames) either way" % frames)
+	# On for the menu, the opening pan and the play camera; off on the CCTV, just out, the KO replay.
+	var shots := Cutout.on_for(Cutout.Shot.PLAY) and Cutout.on_for(Cutout.Shot.MENU) and Cutout.on_for(Cutout.Shot.PAN)
+	shots = shots and not Cutout.on_for(Cutout.Shot.CCTV) and not Cutout.on_for(Cutout.Shot.JUST_OUT) and not Cutout.on_for(Cutout.Shot.KO)
+	Cutout.aim(eye, feet, false)
+	shots = shots and Cutout.cam.w == 0.0 and _cut_cover(at.call(0.4, 0.0)) == 0.0
+	Cutout.aim(chest + Vector3(0.0, 0.0, 0.3), feet, true)  # right at the lens: off
+	shots = shots and Cutout.cam.w == 0.0
+	_check(shots, "the cutout: on for the menu, the opening pan and the play camera; off on the stairwells' security cameras, just out of a stairwell and in the boss's KO replay (and with him right at the lens)")
+	# CROSS never: his body, his pistol and his hit flash; the guards and the level as they were.
+	var cross := SoldierRig.new()
+	cross.keep_solid()
+	var solid := 0
+	var all_solid := true
+	for mi: MeshInstance3D in cross._meshes:
+		if _psx(mi.material_override):
+			solid += 1
+			all_solid = all_solid and _cut_solid(mi.material_override)
+	var pistol := 0
+	for mi: MeshInstance3D in cross._pistol.find_children("*", "MeshInstance3D", true, false):
+		if _psx(mi.material_override):
+			pistol += 1
+			all_solid = all_solid and _cut_solid(mi.material_override)
+	cross.flash()
+	for mi: MeshInstance3D in cross._meshes:
+		all_solid = all_solid and (not _psx(mi.material_override) or _cut_solid(mi.material_override))
+	cross.tick_flash(0.2)
+	for i in cross._meshes.size():
+		all_solid = all_solid and cross._meshes[i].material_override == cross._materials[i]
+		all_solid = all_solid and (not _psx(cross._materials[i]) or _cut_solid(cross._materials[i]))
+	var guard := GuardRig.new(GuardRifle.Kind.CARBINE)
+	var guard_cut := 0
+	for mi: MeshInstance3D in guard._meshes:
+		if _psx(mi.material_override) and not _cut_solid(mi.material_override):
+			guard_cut += 1
+	var level_cut := not _cut_solid(PsxMaterials.flat(Color("d83a2a"))) and not _cut_solid(PsxMaterials.flat(Color("1c1c1e")))
+	_check(solid > 0 and pistol >= 5 and all_solid and guard_cut > 0 and level_cut, "the cutout: CROSS never dissolves (%d of his materials, %d of them his pistol's, and his hit flash); a guard's (%d) and the level's do" % [solid, pistol, guard_cut])
+	_test_cutout_figures(guard, eye, feet)
+	cross.free()
+	guard.free()
+	# The glass goes with the frames round it: its shader cuts with the PS1 surface's own code.
+	var inc := "#include \"res://assets/shaders/psx/psx_cutout.gdshaderinc\""
+	var glass := PsxMaterials.glass(Color(0.55, 0.68, 0.82, 0.22))
+	var same := PsxMaterials.is_glass(glass) and not PsxMaterials.is_glass(PsxMaterials.flat(Color("1c1c1e")))
+	for sh: Shader in [PsxMaterials.SHADER, PsxMaterials.GLASS_SHADER]:
+		same = same and sh.code.contains(inc) and sh.code.contains("cutout_drops(") and not sh.code.contains("float bayer4(")
+	_check(same, "the cutout: glass dissolves as the PS1 surfaces round it do (the same hole on the same dither, from one shared include), so a pane never hangs over CROSS once its frame has gone")
+
+
+## The cutout and the guards (and the dogs): one standing between the camera and CROSS dissolves all
+## the way down, boots and all (his materials have no floor rule: PsxMaterials.figure), while the
+## level keeps it (the floor under him stays); once he's down his body never dissolves (a guard who
+## falls, the boss killed, a dog shot: SoldierRig.keep_solid, DogRig.keep_solid), what hangs on him
+## too (a radio), so it doesn't melt away as you run past it; one still on his feet keeps
+## dissolving. `live`: a guard on his feet; `eye` and `feet`: the play camera and CROSS, as aimed.
+func _test_cutout_figures(live: GuardRig, eye: Vector3, feet: Vector3) -> void:
+	var guard := GuardRig.new(GuardRifle.Kind.CARBINE)
+	var dog := DogRig.new()
+	var figures := 0
+	var to_floor := true
+	for mi: MeshInstance3D in live._meshes + dog._meshes:
+		if _psx(mi.material_override):
+			figures += 1
+			to_floor = to_floor and _cut_to_floor(mi.material_override) and not _cut_solid(mi.material_override)
+	var tile := ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGB8))
+	var level_floor := not _cut_to_floor(PsxMaterials.flat(Color("1c1c1e"))) and not _cut_to_floor(PsxMaterials.textured(tile))
+	# The boots of a guard 1.4 m in front of him, toward the camera: 2 cm over the floor.
+	Cutout.aim(eye, feet, true)
+	var boot := feet + Vector3(eye.x - feet.x, 0.0, eye.z - feet.z).normalized() * 1.4 + Vector3.UP * 0.02
+	var boot_cut := _cut_cover(boot, false)
+	var floor_kept := _cut_cover(boot, true)
+	var lit_code: String = PsxMaterials.SHADER.code
+	var inc := FileAccess.get_file_as_string("res://assets/shaders/psx/psx_cutout.gdshaderinc")
+	var shader := lit_code.contains("uniform bool cutout_floor = true;") and lit_code.contains("FRAGCOORD.xy, cutout_floor)") 			and inc.contains("(keep_floor && at.y <= cutout_misc.x)") and PsxMaterials.GLASS_SHADER.code.contains("FRAGCOORD.xy, true)")
+	_check(figures >= 3 and to_floor and level_floor and boot_cut > 0.5 and floor_kept == 0.0 and shader,
+			"the cutout: a guard or a dog between the camera and CROSS dissolves all the way down (%d materials, boots and paws: %.2f of a boot cut), while the level's floor under him stays (%.2f)" % [figures, boot_cut, floor_kept])
+	# Down: solid, his rifle and his radio too; the boss killed; a dog shot.
+	var radio := MeshInstance3D.new()
+	radio.mesh = BoxMesh.new()
+	radio.material_override = PsxMaterials.flat(Color("1c1c1a"))
+	guard.chest.add_child(radio)
+	var cut_before := not _cut_solid(radio.material_override)
+	guard.fall()
+	var boss := GuardRig.new(GuardRifle.Kind.MINIGUN)
+	boss.death_start({"travel": 0.2, "lift": 0.0, "room": 50.0, "back": false, "slide": false})
+	dog.fall()
+	var down := 0
+	var all_down := cut_before
+	for body: Node in [guard, boss, dog]:
+		for mi: MeshInstance3D in body.find_children("*", "MeshInstance3D", true, false):
+			if _psx(mi.material_override):
+				down += 1
+				all_down = all_down and _cut_solid(mi.material_override)
+	var still_cut := 0
+	for mi: MeshInstance3D in live._meshes:
+		if _psx(mi.material_override) and not _cut_solid(mi.material_override):
+			still_cut += 1
+	_check(down >= 7 and all_down and still_cut == figures - dog._meshes.size(),
+			"the cutout: once down, a body never dissolves (%d materials: a guard who fell, his rifle and his radio, the boss killed, a dog shot), and one still on his feet still does (%d)" % [down, still_cut])
+	guard.free()
+	boss.free()
+	dog.free()
+
+
+## The shaders' cutout (psx_cutout.gdshaderinc), worked out the same way from what Cutout set: how
+## much of a pixel at `p` is dissolved (0 none .. 1 all of it; the shader drops it where this beats
+## the dither). keep_floor false: a material without the floor rule (a guard's, a dog's).
+func _cut_cover(p: Vector3, keep_floor := true) -> float:
+	var c := Cutout.cam
+	if c.w <= 0.0 or (keep_floor and p.y <= Cutout.misc.x):
+		return 0.0
+	var v := p - Vector3(c.x, c.y, c.z)
+	var f := Vector3(Cutout.fwd.x, Cutout.fwd.y, Cutout.fwd.z)
+	var along := v.dot(f)
+	var near := (Cutout.misc.y - along) * Cutout.misc.z
+	if near <= 0.0 or along <= 0.01:
+		return 0.0
+	var d := (v / along - f).length() * Cutout.fwd.w
+	return clampf((1.0 - d) * Cutout.misc.w, 0.0, 1.0) * minf(near, 1.0)
+
+
+func _psx(m: Material) -> bool:
+	return m is ShaderMaterial and (m as ShaderMaterial).shader == PsxMaterials.SHADER
+
+
+## A PS1 material the cutout never dissolves (its "cutout" switched off: PsxMaterials.solid).
+func _cut_solid(m: Material) -> bool:
+	var v: Variant = (m as ShaderMaterial).get_shader_parameter("cutout")
+	return typeof(v) == TYPE_BOOL and not v
+
+
+## A PS1 material the cutout dissolves all the way to the floor (its floor rule off: PsxMaterials.figure).
+func _cut_to_floor(m: Material) -> bool:
+	var v: Variant = (m as ShaderMaterial).get_shader_parameter("cutout_floor")
+	return typeof(v) == TYPE_BOOL and not v
+
+
 ## CROSS's pose changes eased (user, 2026-10-06: "adding easy to the key frames"; the decision log,
 ## "CROSS's animations eased"): into and out of a jump, a slide, cover (a box, a wall), the stumble,
 ## a stop and the surrender (caught with the gun up), no joint jumps (each frame's worst turn under
@@ -1693,12 +2259,12 @@ func _test_snipers() -> void:
 		_check(problems.contains(want), "sniper rule '%s' (%s)" % [want, problems])
 	# Into a roof by stairs: not on the flight or just off it (the stairs' clear exit).
 	var stair_in := {"id": "s", "tier": "ground", "length": 60, "next": [{"to": "e"}, {"to": "r", "side": "left", "via": "stairs"}]}
-	for at_m in [10.0, RouteGraph.STAIR_EXIT_CLEAR]:
+	for at_m in [10.0, RouteGraph.STAIR_CLEAR_TO - 1.0, RouteGraph.STAIR_CLEAR_TO]:
 		var rn := base.duplicate(true)
 		rn["snipers"] = [{"at": at_m, "side": "left"}]
 		var gs := RouteGraph.from_dict({"start": "s", "nodes": [stair_in, rn, {"id": "e", "tier": "ground", "length": 30, "end": "extract"}]})
 		var close := " | ".join(gs.validate()).contains("sniper at %s m is too close to the stairs" % at_m)
-		_check(close == (at_m < RouteGraph.STAIR_EXIT_CLEAR), "sniper: %s m into an area reached by stairs is %s" % [at_m, "too close" if at_m < RouteGraph.STAIR_EXIT_CLEAR else "fine"])
+		_check(close == (at_m < RouteGraph.STAIR_CLEAR_TO), "sniper: %s m into an area reached by stairs is %s" % [at_m, "too close" if at_m < RouteGraph.STAIR_CLEAR_TO else "fine"])
 	var ok := base.duplicate(true)
 	ok["snipers"] = [{"at": 10, "side": "left"}]
 	var fine := RouteGraph.from_dict({"start": "r", "nodes": [ok, {"id": "e", "tier": "ground", "length": 30, "end": "extract"}]})
@@ -1825,12 +2391,177 @@ func _test_sounds() -> void:
 	_check(unlooped.is_empty(), "ambience, music and other loops loop (not: %s)" % [unlooped])
 
 
+## The sounds are built in the background a few milliseconds a frame, under the main menu
+## (SoundBank.work: the menu stuttered while one sound took up to 57 ms in a go). Every Synth op
+## stops when a turn's time is up and carries on in the next. Built that way, in the smallest turns
+## there are (one chunk each), every op and every kind of sound comes out exactly as it does built
+## at once; and a sound asked for while it's half built is finished there and then.
+func _test_sound_turns() -> void:
+	var ops := ["tone", "noise", "lowpass", "highpass", "resonate", "echo", "crush", "drive", "gain", "normalize", "loopify", "swell", "mix_in", "to_stream"]
+	var differ: Array[String] = []
+	var unsplit: Array[String] = []
+	for op: String in ops:
+		var at_once := await _turns_synth()
+		await _turns_op(at_once, op)  # (nothing pacing it: it never waits)
+		var paced := await _turns_synth()
+		var took := _in_turns(func() -> void: await _turns_op(paced, op))
+		if paced.s != at_once.s or (op == "to_stream" and (paced.get_meta("wav") as AudioStreamWAV).data != (at_once.get_meta("wav") as AudioStreamWAV).data):
+			differ.append(op)
+		if took < 2:
+			unsplit.append(op)
+	_check(differ.is_empty() and unsplit.is_empty(), "sound turns: every Synth op, in turns of a chunk each, gives the samples it gives at once (differ: %s, not split: %s)" % [differ, unsplit])
+	# Every sound (so a recipe missing an await shows): built in the background, against built at once
+	# (by _test_sounds, just before).
+	var names := SoundBank.all_names()
+	var want := {}
+	for name: String in names:
+		want[name] = SoundBank.get_stream(name).data
+		SoundBank._cache.erase(name)
+		SoundBank.queue(name)
+	var turns := 0
+	while SoundBank.building() and turns < 100000:
+		SoundBank.work(0.0)
+		turns += 1
+	var wrong: Array[String] = []
+	for name: String in names:
+		if not SoundBank.has(name) or SoundBank.get_stream(name).data != want[name]:
+			wrong.append(name)
+	_check(wrong.is_empty() and turns > 100 * names.size(), "sound turns: sounds built in the background in turns of a chunk each are the sounds built at once (%d turns; differ: %s)" % [turns, wrong])
+	SoundBank._cache.erase("door_bars")
+	SoundBank.queue("door_bars")
+	for i in 3:
+		SoundBank.work(0.0)
+	var half: bool = SoundBank._building == "door_bars" and not SoundBank.has("door_bars")
+	var asked := SoundBank.get_stream("door_bars")
+	_check(half and asked != null and asked.data == want["door_bars"] and not SoundBank.building() and Synth.pace.go.get_connections().is_empty(),
+			"sound turns: a sound asked for half built is finished at once, the same sound, and nothing is left waiting")
+
+
+## A short buffer (a few chunks) with something in it, made at once.
+func _turns_synth() -> Synth:
+	var syn := Synth.create(0.15, Synth.CHUNK * 20, 5)
+	await syn.tone(0.0, 0.15, 220.0, 330.0, 0.5, Synth.Wave.SQUARE, 0.01, 2.0)
+	await syn.noise(0.02, 0.1, 0.4, 4000.0, 300.0, 0.002, 5.0)
+	return syn
+
+
+func _turns_op(syn: Synth, op: String) -> void:
+	match op:
+		"tone":
+			await syn.tone(0.01, 0.13, 300.0, 900.0, 0.5, Synth.Wave.SAW, 0.01, 3.0)
+		"noise":
+			await syn.noise(0.0, 0.14, 0.6, 3000.0, 200.0, 0.005, 4.0)
+		"lowpass":
+			await syn.lowpass(1500.0)
+		"highpass":
+			await syn.highpass(400.0)
+		"resonate":
+			await syn.resonate(900.0, 4.0, 0.7)
+		"echo":
+			await syn.echo(0.02, 0.4, 0.5)
+		"crush":
+			await syn.crush(8, 3)
+		"drive":
+			await syn.drive(1.7)
+		"gain":
+			await syn.gain(0.6)
+		"normalize":
+			await syn.normalize(0.8)
+		"loopify":
+			await syn.loopify(0.06)
+		"swell":
+			await syn.swell(2.0, 0.4)
+		"mix_in":
+			var other := Synth.create(0.12, syn.rate, 9)
+			await other.noise(0.0, 0.12, 0.5)
+			await syn.mix_in(other, 0.02, 0.7)
+		"to_stream":
+			syn.set_meta("wav", await syn.to_stream(true))
+
+
+## Runs `work` (a coroutine of Synth ops) in turns of one chunk each, as the background would with
+## no time to spare; the number of turns it took.
+func _in_turns(work: Callable) -> int:
+	var done := [false]
+	Synth.pace.until_usec = 1  # (always past: every op waits after each chunk)
+	(func() -> void:
+		await work.call()
+		done[0] = true).call()
+	var turns := 1
+	while not done[0] and turns < 100000:
+		Synth.pace.go.emit()
+		turns += 1
+	Synth.pace.until_usec = 0
+	return turns
+
+
+## The menu music is built faster (AudioDirector.MENU_MUSIC_BUDGET_MS) only while the main menu
+## itself is up and the music isn't built yet. From START (leave_menu) on, under the briefing and the
+## opening pan, the sounds go at the level's pace (build_ms), as those frames make the textures too:
+## the music, still building, starts a little later.
+func _test_menu_music_pace() -> void:
+	var built: Variant = SoundBank._cache.get("music_menu")
+	SoundBank._cache.erase("music_menu")
+	var script := load("res://game/audio/audio_director.gd") as GDScript  # (by path: it needs the autoloads)
+	var k := script.get_script_constant_map()
+	var build: float = k["BUILD_BUDGET_MS"]
+	var hurry: float = k["HURRY_BUDGET_MS"]
+	var menu_ms: float = k["MENU_MUSIC_BUDGET_MS"]
+	var a: Node = script.new()  # (not in the tree: nothing plays or builds)
+	a.set("_menu_music", AudioStreamPlayer.new())
+	var first: float = a.frame_budget_ms()
+	a.play_menu_music()
+	var menu: float = a.frame_budget_ms()
+	a.leave_menu()
+	var brief: float = a.frame_budget_ms()
+	a.build_ms = hurry
+	var pan: float = a.frame_budget_ms()
+	a.build_ms = build
+	_check(first == build and menu == menu_ms,
+			"menu music pace: built at %.0f ms a frame while the main menu is up (%.0f before; got %.1f, %.1f)" % [menu_ms, build, menu, first])
+	_check(brief == build and pan == hurry,
+			"menu music pace: from START, the level's pace, %.0f ms then %.0f (got %.1f, %.1f)" % [build, hurry, brief, pan])
+	a.play_menu_music()
+	SoundBank._cache["music_menu"] = built if built != null else AudioStreamWAV.new()
+	var done: float = a.frame_budget_ms()
+	SoundBank._cache.erase("music_menu")
+	a.stop_menu_music()
+	var stopped: float = a.frame_budget_ms()
+	_check(done == build and stopped == build,
+			"menu music pace: once it's built, or stopped (the run), the normal pace (got %.1f, %.1f)" % [done, stopped])
+	if built != null:
+		SoundBank._cache["music_menu"] = built
+	(a.get("_menu_music") as Node).free()
+	a.free()
+
+
+## The level makes every texture ahead of time, under the main menu, from PsxTextures.makers(): each
+## texture made with nothing passed (found by name), and every CCTV screen and menu board. Nothing
+## else: not the helpers, not those made from the caller's choices, not makers() itself.
+func _test_texture_makers() -> void:
+	var makers := PsxTextures.makers()
+	var count := {}
+	var bad: Array[String] = []
+	for c: Callable in makers:
+		if not c.is_valid():
+			bad.append(c.get_method())
+		count[c.get_method()] = int(count.get(c.get_method(), 0)) + 1
+	_check(bad.is_empty(), "the texture warm-up can call every one (not: %s)" % [bad])
+	for want in ["asphalt", "hazard", "lobby_floor", "grating", "roller_shutter", "water_streaks", "city_backdrop", "drain_wall"]:
+		_check(count.get(want, 0) == 1, "the texture warm-up makes %s once" % want)
+	_check(count.get("cctv_screen", 0) == PsxTextures.CCTV_VIEWS, "the texture warm-up makes every CCTV screen")
+	_check(count.get("menu_board", 0) == PsxTextures.MENU_ITEMS, "the texture warm-up makes every menu board")
+	for not_one in ["makers", "wall", "vending_front", "_finish", "_rng"]:
+		_check(not count.has(not_one), "the texture warm-up leaves out %s" % not_one)
+	_check(not makers.is_empty() and makers[0].call() is Texture2D, "a texture warm-up maker makes a texture")
+
+
 func _test_route_json_is_valid() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
 	_check(g != null, "route.json loads")
 	if g == null:
 		return
-	var problems := g.validate()
+	var problems := g.validate(load("res://game/config/default_tuning.tres") as Tuning)  # (the game's run and jump)
 	_check(problems.is_empty(), "route.json valid: %s" % ", ".join(problems))
 	_check(g.end_type(&"helipad") == "extract", "helipad is an extraction end")
 
@@ -1839,6 +2570,350 @@ func _test_alert_gating() -> void:
 	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
 	_check(g.available_next(&"building_main_floor", 1).size() == 2, "tunnel open at alert 1")
 	_check(g.available_next(&"building_main_floor", 2).size() == 1, "tunnel sealed at alert 2")
+
+
+## The stairs doors' cues (user, 2026-10-07: "3 arrows just before that are a bit transparent and
+## light up one after another, but if a door is locked there is a floating red lock in front of
+## the door"): which doors there are, on which side, and whether each is open at each alert.
+## Ladders aren't doors, so they get none.
+func _test_door_cues() -> void:
+	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	# [area, side, open at alert 1, 2, 3]
+	var doors := [
+		[&"main_floor_lobby", "right", [true, true, true]],
+		[&"rooftops", "left", [true, true, true]],
+		[&"building_main_floor", "left", [true, false, false]],
+		[&"warehouse", "left", [true, false, false]],
+	]
+	for d in doors:
+		for alert in [1, 2, 3]:
+			var got := g.stair_doors(d[0], alert)
+			_check(got.size() == 1, "%s has one stairs door (alert %d)" % [d[0], alert])
+			if got.size() != 1:
+				continue
+			_check(got[0]["side"] == d[1], "%s's stairs door is on the %s" % [d[0], d[1]])
+			_check(RouteGraph.via_of(got[0]["edge"]) == "stairs", "%s's door leads to stairs" % d[0])
+			var want: bool = d[2][alert - 1]
+			_check(got[0]["open"] == want, "%s's stairs door %s at alert %d" % [d[0], "open" if want else "locked", alert])
+	for id in [&"security_wing", &"roof_edge", &"storm_drain", &"service_tunnel"]:
+		for alert in [1, 2, 3]:
+			_check(g.stair_doors(id, alert).is_empty(), "%s has no stairs door (alert %d)" % [id, alert])
+	# (A locked door, built and run past in the real level: _test_locked_doors.)
+
+
+## A locked stairs door (user, 2026-10-08: "I don't want the locked door to be tucked beside the
+## lane, keep it the same as the unlocked door, doors and walls don't move unless I say so", then
+## "Locked doors can nudge CROSS into the next lane, that sounds fine"), in the real level, at the
+## MAIN FLOOR's TUNNEL door and the WAREHOUSE's PUMPS door. Locked, the door is the open stairwell's
+## way in: every mesh of it where one of the open one's is, in the same look, the same box or (the
+## stairwell's side walls and roof slab) the same box cut short at the back of the doorway, its
+## front end just as the whole one's; nothing of it further in; its sight boxes the open one's
+## there; the sign over the split as it is open; the padlock out in front of the middle of the
+## door; the hole in the wall walled up. Then CROSS, run up to it in its lane at 60 Hz: eased out of
+## that lane before he's at the door, the camera after him, a swipe back refused till he's past
+## it, then left alone; never touching the door or the padlock; and the squad kept out of that lane
+## there too.
+func _test_locked_doors() -> void:
+	var gs := root.get_node("GameState")
+	var was_alert: int = gs.alert_level
+	var was_active: bool = gs.run_active
+	gs.alert_level = 1
+	var level: Node = (load("res://game/levels/prototype_slice/prototype_slice.tscn") as PackedScene).instantiate()
+	root.add_child(level)
+	_check_warm_ups(level)
+	await process_frame
+	await process_frame
+	level.set_physics_process(false)  # (stepped by hand below)
+	level._player.set_physics_process(false)
+	for zone in [[&"building_main_floor"], [&"security_wing", &"staff_canteen", &"warehouse"]]:
+		gs.set_alert(1)
+		for want: StringName in zone:
+			var cur: Dictionary = level._current
+			for e: Dictionary in level._graph.all_next(cur["id"]):
+				if StringName(e["to"]) == want and RouteGraph.side_of(e) == "straight":
+					level._player.distance = float(cur["end"]) - 1.0
+					level._on_segment_needed(want, cur["end"], e)
+					level._on_node_entered(want)
+					level._runner.current = want
+					level._runner.segment_start = cur["end"]
+			await process_frame
+		await _locked_door_checks(level, gs)
+	level.queue_free()
+	await process_frame
+	gs.alert_level = was_alert
+	gs.run_active = was_active
+
+
+## Under the menu, as the level starts, each look the run would otherwise first draw in the middle of
+## it is drawn once in front of the camera (_warm_door_cues), so a phone builds its shader then: with
+## the stairs doors' arrows and padlock, the plain halo (the sniper's muzzle flash, the squad's
+## rifle-light glare) and the one keeping its scale (the sniper's glint), both clear (they add no
+## light: nothing shows). Each the same look as theirs, to the shader.
+func _check_warm_ups(level: Node) -> void:
+	var looks := {}  # each warmed halo's look -> its alpha
+	var warm: Node = level._camera.get_node_or_null("DoorCueWarmUp")
+	if warm != null:
+		for mi: MeshInstance3D in warm.find_children("*", "MeshInstance3D", true, false):
+			if mi.material_override is StandardMaterial3D:
+				looks[_halo_look(mi.material_override)] = (mi.material_override as StandardMaterial3D).albedo_color.a
+	var sniper := Sniper.new(Tuning.new())
+	root.add_child(sniper)
+	var squad := GuardRig.new(GuardRifle.Kind.CARBINE_LIGHT)
+	var theirs: Array[Material] = [sniper._flash.material_override, sniper._glint.material_override]
+	for mi: MeshInstance3D in squad.light().find_children("*", "MeshInstance3D", true, false):
+		if mi.material_override is StandardMaterial3D and (mi.material_override as StandardMaterial3D).billboard_mode != BaseMaterial3D.BILLBOARD_DISABLED:
+			theirs.append(mi.material_override)
+	var warmed := theirs.size() == 3
+	for m in theirs:
+		var look := _halo_look(m)
+		warmed = warmed and looks.has(look) and looks[look] == 0.0
+	_check(warmed, "warm-ups: under the menu, the plain halo (the sniper's flash, the squad's rifle-light glare) and the sniper's glint are drawn once, clear (%d looks warmed)" % looks.size())
+	sniper.free()
+	squad.free()
+
+
+## What picks a StandardMaterial3D's shader (the look; its colour doesn't).
+static func _halo_look(m: StandardMaterial3D) -> String:
+	return "%d %d %d %d %d %d %d %d %d %s" % [m.shading_mode, m.blend_mode, m.transparency, m.cull_mode, m.depth_draw_mode, m.billboard_mode,
+			int(m.billboard_keep_scale), m.distance_fade_mode, int(m.disable_fog), m.albedo_texture != null]
+
+
+## A mesh's look and place, kept (the open stairwell goes as its door locks): {xf, mesh, mat}.
+static func _mesh_snap(root_node: Node) -> Array:
+	var out := []
+	for m: MeshInstance3D in root_node.find_children("*", "MeshInstance3D", true, false):
+		out.append({"xf": m.global_transform, "mesh": m.mesh, "mat": m.material_override})
+	return out
+
+
+## Every line-of-sight box under `root_node`: [{xf, size}].
+static func _sight_snap(root_node: Node) -> Array:
+	var out := []
+	for b: StaticBody3D in root_node.find_children("*", "StaticBody3D", true, false):
+		for c in b.get_children():
+			if c is CollisionShape3D:
+				out.append({"xf": (c as CollisionShape3D).global_transform, "size": ((c as CollisionShape3D).shape as BoxShape3D).size})
+	return out
+
+
+static func _same_xf(a: Transform3D, b: Transform3D) -> bool:
+	return a.origin.distance_to(b.origin) < 0.0005 and a.basis.x.distance_to(b.basis.x) < 0.0005 \
+			and a.basis.y.distance_to(b.basis.y) < 0.0005 and a.basis.z.distance_to(b.basis.z) < 0.0005
+
+
+## True if the box `size` at `xf` is all inside the box `in_size` at `in_xf` (to a millimetre).
+static func _box_inside(xf: Transform3D, size: Vector3, in_xf: Transform3D, in_size: Vector3) -> bool:
+	var to := in_xf.affine_inverse()
+	for c in 8:
+		var q: Vector3 = to * (xf * (size * (Vector3(c & 1, (c >> 1) & 1, (c >> 2) & 1) - Vector3.ONE * 0.5)))
+		if absf(q.x) > in_size.x / 2.0 + 0.001 or absf(q.y) > in_size.y / 2.0 + 0.001 or absf(q.z) > in_size.z / 2.0 + 0.001:
+			return false
+	return true
+
+
+func _locked_door_checks(level: Node, gs: Node) -> void:
+	var k: Dictionary = (level.get_script() as GDScript).get_script_constant_map()
+	var seg: Dictionary = level._current
+	var id: StringName = seg["id"]
+	var area := String(id).to_upper()
+	var t: Tuning = level.tuning
+	var edge := {}
+	for e: Dictionary in level._graph.all_next(id):
+		if RouteGraph.via_of(e) == "stairs":
+			edge = e
+	var key: String = level._key(edge)
+	var split: float = seg["end"]
+	var road: Transform3D = seg["node"].global_transform * level._frame_in_leg(seg, seg["legs"].size() - 1, seg["length"])
+	var to_road := road.affine_inverse()
+	var cue_labels := func() -> Array:
+		var out := []
+		for n in seg["node"].get_node("ForkCue").get_children():
+			if n is Label3D:
+				out.append([(n as Label3D).text, (n as Node3D).global_position])
+		return out
+	# Open, as it was built: its stairwell's meshes and sight boxes, and the sign over the split.
+	var open_meshes := _mesh_snap(seg["branches"][key]["node"].get_node("Stairwell"))
+	var open_sights := _sight_snap(seg["branches"][key]["node"].get_node("Stairwell"))
+	var open_labels: Array = cue_labels.call()
+	gs.set_alert(2)
+	await process_frame
+	var stub: Node3D = seg["locked"].get(key)
+	_check(stub != null and stub.has_node("Stairwell"), "%s: locked, its stairs door is the stairwell's way in" % area)
+	if stub == null:
+		return
+	var from_stub := stub.global_transform.affine_inverse()
+	var exact := 0
+	var cut := 0
+	var odd := PackedStringArray()
+	var deepest := -INF
+	for m: MeshInstance3D in stub.find_children("*", "MeshInstance3D", true, false):
+		var a := m.get_aabb()
+		for c in 8:
+			deepest = maxf(deepest, -(from_stub * (m.global_transform * (a.position + a.size * Vector3(c & 1, (c >> 1) & 1, (c >> 2) & 1)))).z)
+		var twin := {}
+		for om: Dictionary in open_meshes:
+			if _same_xf(m.global_transform, om["xf"]) and m.material_override == om["mat"]:
+				twin = om
+		if twin.is_empty() or not twin["mesh"] is BoxMesh:
+			odd.append("%s (no twin)" % m.name)
+		elif m.mesh is BoxMesh and (m.mesh as BoxMesh).size.is_equal_approx((twin["mesh"] as BoxMesh).size):
+			exact += 1
+		elif m.mesh is ArrayMesh:
+			# Cut short: its front end vertex for vertex as the whole box's, texture and all.
+			var whole: Array = (twin["mesh"] as BoxMesh).get_mesh_arrays()
+			var mine: Array = (m.mesh as ArrayMesh).surface_get_arrays(0)
+			var wv: PackedVector3Array = whole[Mesh.ARRAY_VERTEX]
+			var mv: PackedVector3Array = mine[Mesh.ARRAY_VERTEX]
+			var wu: PackedVector2Array = whole[Mesh.ARRAY_TEX_UV]
+			var mu: PackedVector2Array = mine[Mesh.ARRAY_TEX_UV]
+			var front_same := wv.size() == mv.size()
+			for i in mini(wv.size(), mv.size()):
+				if wv[i].z > 0.0 and (not wv[i].is_equal_approx(mv[i]) or not wu[i].is_equal_approx(mu[i])):
+					front_same = false
+			if front_same:
+				cut += 1
+			else:
+				odd.append("%s (cut, its front end not the whole one's)" % m.name)
+		else:
+			odd.append("%s (another mesh)" % m.name)
+	_check(odd.is_empty() and exact == 7 and cut == 3,
+			"%s: locked, every mesh of its door is one of the open stairwell's, in its place and look: the door, its frame and the wall over it, the exit sign and the wall to the side wall the same boxes, the side walls' and slab's front ends cut from the same boxes (%d same, %d cut; %s)" % [area, exact, cut, ", ".join(odd)])
+	_check(deepest <= float(k["STAIR_MOUTH"]) + 0.001,
+			"%s: locked, nothing is built behind the door (%.3f m into the stairwell, the doorway's back at %.2f)" % [area, deepest, k["STAIR_MOUTH"]])
+	# Its sight boxes: the open way in's (the doorway's, the door's and the wall's to the side wall),
+	# and the cut walls' and slab's, inside the whole ones' and as long as what's left of them.
+	var sights := _sight_snap(stub)
+	var bad_sight := 0
+	var same_sight := 0
+	for s: Dictionary in sights:
+		var ok := false
+		for os: Dictionary in open_sights:
+			if _same_xf(s["xf"], os["xf"]) and (s["size"] as Vector3).is_equal_approx(os["size"]):
+				ok = true
+				same_sight += 1
+				break
+			if _box_inside(s["xf"], s["size"], os["xf"], os["size"]):
+				ok = true
+				break
+		if not ok:
+			bad_sight += 1
+	var mouth_open := 0  # the open stairwell's boxes all within its way in: each must be the locked one's too
+	for os: Dictionary in open_sights:
+		var all_in := true
+		for c in 8:
+			var q: Vector3 = os["xf"] * ((os["size"] as Vector3) * (Vector3(c & 1, (c >> 1) & 1, (c >> 2) & 1) - Vector3.ONE * 0.5))
+			all_in = all_in and -(from_stub * q).z <= float(k["STAIR_MOUTH"]) + 0.001
+		if all_in:
+			mouth_open += 1
+	_check(bad_sight == 0 and same_sight == mouth_open and mouth_open == 6,
+			"%s: locked, its door blocks sight as the open one's way in does there, and nothing else does (%d boxes, %d the open way in's of %d, %d not the open stairwell's)" % [area, sights.size(), same_sight, mouth_open, bad_sight])
+	var labels: Array = cue_labels.call()
+	var same_signs := labels.size() == open_labels.size() and labels.size() >= 2
+	for i in mini(labels.size(), open_labels.size()):
+		same_signs = same_signs and labels[i][0] == open_labels[i][0] and (labels[i][1] as Vector3).distance_to(open_labels[i][1]) < 0.001
+	_check(same_signs, "%s: locked, the sign over the split is as it is open (%s; open %s)" % [area, labels.map(func(l): return l[0]), open_labels.map(func(l): return l[0])])
+	var lock: Node3D = seg["node"].get_node("ForkCue").get_node_or_null("DoorLock_" + RouteGraph.side_of(edge))
+	var in_door := Vector3.INF
+	if lock != null:
+		in_door = (level._stair_door_frame(seg, edge) as Transform3D).affine_inverse() * (seg["node"].global_transform.affine_inverse() * lock.global_position)
+	_check(lock != null and absf(in_door.x) < 0.001 and absf(in_door.z - float(k["DOOR_LOCK_BEFORE"])) < 0.001 and absf(in_door.y - float(k["DOOR_LOCK_Y"])) < 0.001,
+			"%s: locked, the padlock floats %.1f m out in front of the middle of the door, %.2f m up (%s)" % [area, k["DOOR_LOCK_BEFORE"], k["DOOR_LOCK_Y"], in_door])
+	var road_on: Dictionary = {}
+	for b: Dictionary in seg["branches"].values():
+		if RouteGraph.side_of(b["edge"]) == "straight":
+			road_on = b
+	var plug: Node3D = level._hole_plug(road_on, edge)
+	_check(plug != null and plug.visible, "%s: locked, the hole its stairwell passes out through is walled up" % area)
+
+	# CROSS run up to it in its lane (lane 0: the door's on the left), at 60 Hz.
+	var p: Node3D = level._player
+	var lane: int = level._handover_lanes(edge).x
+	var into := lane + (1 if lane == 0 else -1)  # the next lane in
+	var bar: Dictionary = {}
+	for b: Dictionary in level._door_bars:
+		if b["stub"] == stub:
+			bar = b
+	_check(not bar.is_empty() and int(bar["lane"]) == lane, "%s: locked, its door bars the lane it stands across" % area)
+	if bar.is_empty():
+		return
+	gs.run_active = true
+	level._menu_open = false  # (the play camera, not the menu's)
+	level._cam_snap = true
+	p.distance = split - 20.0
+	p.lane = lane
+	p.track_x = p.lane_x(lane)
+	p.set("_speed_mul", 1.0)
+	p.set("_stun_left", 0.0)
+	var body := 0.35  # (half his width, arms and all)
+	var dt := 1.0 / 60.0
+	var left_at := INF  # where he left the lane
+	var out_at := INF  # where he was all the way into the next one
+	var refused := false
+	var stays := false
+	var allowed := false
+	var closest := INF  # his clearance from the door (or the padlock)
+	var cam_x := -INF  # the camera's x in the road's frame a metre before the split
+	var door_meshes: Array = []
+	for m: MeshInstance3D in stub.find_children("*", "MeshInstance3D", true, false):
+		if m.is_visible_in_tree():
+			door_meshes.append(m)
+	var lock_at: Vector3 = to_road * lock.global_position if lock != null else Vector3.INF
+	while p.distance < float(bar["to"]) + 3.0:
+		var was: float = p.distance
+		level._ease_past_locked_doors()
+		if p.lane != lane and left_at == INF:
+			left_at = was
+		p._physics_process(dt)
+		level._place_player()
+		level._update_camera(dt)
+		var d: float = p.distance
+		if absf(p.track_x - p.lane_x(into)) < 0.001 and out_at == INF:
+			out_at = d
+		if d >= split - 1.0 and cam_x == -INF:
+			cam_x = (to_road * level._camera.global_position).x
+		if d >= split - 2.0 and not refused and d < float(bar["to"]):
+			p.handle_swipe(Vector2i.LEFT if lane == 0 else Vector2i.RIGHT)
+			refused = p.lane == into
+		if d > float(bar["to"]) and not allowed:
+			level._ease_past_locked_doors()
+			stays = p.lane == into and p.barred_lane == -1
+			p.handle_swipe(Vector2i.LEFT if lane == 0 else Vector2i.RIGHT)
+			allowed = p.lane == lane
+		# His clearance from each piece of the door below his head, and from the padlock.
+		var at: Vector3 = p.global_position
+		for m: MeshInstance3D in door_meshes:
+			var a := m.get_aabb()
+			var q: Vector3 = m.global_transform.affine_inverse() * at
+			var low: float = (m.global_transform * a.position).y
+			if low > at.y + 1.9:
+				continue
+			var dx := maxf(maxf(a.position.x - q.x, q.x - a.end.x), 0.0)
+			var dz := maxf(maxf(a.position.z - q.z, q.z - a.end.z), 0.0)
+			closest = minf(closest, Vector2(dx, dz).length() - body)
+		var me: Vector3 = to_road * at
+		closest = minf(closest, Vector2(maxf(absf(me.x - lock_at.x) - 0.31, 0.0), maxf(absf(me.z - lock_at.z) - 0.2, 0.0)).length() - body)
+	gs.run_active = false
+	_check(split - left_at <= float(k["DOOR_NUDGE_AHEAD"]) and split - left_at > float(k["DOOR_NUDGE_AHEAD"]) - t.run_speed * dt - 0.001,
+			"%s: locked, CROSS in its lane is eased out of it %.1f m before the split (at %.2f m)" % [area, k["DOOR_NUDGE_AHEAD"], split - left_at])
+	var front: float = 0.0  # how far before the split the door reaches
+	for m: MeshInstance3D in door_meshes:
+		var a := m.get_aabb()
+		for c in 8:
+			front = maxf(front, (to_road * (m.global_transform * (a.position + a.size * Vector3(c & 1, (c >> 1) & 1, (c >> 2) & 1)))).z)
+	_check(split - out_at > front + body, "%s: locked, he's all the way into the next lane %.2f m before the split, before he's at the door (it reaches %.2f m before it)" % [area, split - out_at, front])
+	_check(absf(cam_x - p.lane_x(into) * 0.6) < 0.25, "%s: locked, the camera follows him over as it does a lane change (%.2f, his lane %.2f)" % [area, cam_x, p.lane_x(into)])
+	_check(refused, "%s: locked, a swipe back into its lane before he's past the door is refused" % area)
+	_check(stays and allowed, "%s: locked, past the door he stays in the lane he's in, and may swipe back (stays %s, allowed %s)" % [area, stays, allowed])
+	_check(closest > 0.0, "%s: locked, running past it CROSS never touches the door or its padlock (%.2f m clear at the closest)" % [area, closest])
+	# The squad (and the alarm runner) keep out of that lane there too, and only there.
+	var guard_x: float = level._through_doors(split - 2.0, p.lane_x(lane))
+	_check(absf(guard_x - p.lane_x(into)) < 0.001 and is_equal_approx(level._through_doors(split - 8.0, p.lane_x(lane)), p.lane_x(lane))
+			and level._barred_lane(float(bar["to"]) + 0.1) == -1,
+			"%s: locked, anyone after him keeps out of its lane by the door, and only there" % area)
+	# Unlocked, the bar's gone and the whole stairwell is back.
+	gs.set_alert(1)
+	await process_frame
+	_check(level._barred_lane(split - 2.0) == -1 and seg["branches"].has(key), "%s: unlocked, its lane is free and its stairwell is back" % area)
 
 
 func _test_pick_edge() -> void:
@@ -1872,12 +2947,12 @@ func _test_mission_layout() -> void:
 	var cramped := RouteGraph.from_dict({"start": "a", "nodes": [
 		{"id": "a", "tier": "ground", "next": [{"to": "e"}, {"to": "r", "side": "right", "via": "stairs"}]},
 		{"id": "r", "tier": "roof", "length": 60, "next": [{"to": "e", "side": "left", "via": "ladder"}],
-			"obstacles": [{"kind": "barrier", "lanes": [2], "at": 15}, {"kind": "box", "lanes": [1], "at": 25}]},
+			"obstacles": [{"kind": "barrier", "lanes": [2], "at": 15}, {"kind": "box", "lanes": [1], "at": 35}]},
 		{"id": "e", "tier": "ground", "end": "extract"},
 	]})
 	problems = " ".join(cramped.validate())
 	_check("barrier at 15" in problems and "too close to the stairs' exit" in problems, "nothing right outside a stairwell's exit door")
-	_check(not "box at 25" in problems, "things further on after the stairs are fine")
+	_check(not "box at 35" in problems, "things further on after the stairs are fine")
 	_check(not "node 'a' can never" in problems, "a node with one good route is fine")
 	var marked := RouteGraph.from_dict({"start": "a", "nodes": [
 		{"id": "a", "tier": "ground", "theme": "office", "length": 100, "marker": {"at": 50}, "next": [{"to": "e"}],
@@ -1971,6 +3046,63 @@ func _test_trooper_tiers() -> void:
 	sec.state = SecurityTrooper.State.RUN
 	_check(sec.get_threat_priority() > 60, "a running runner is shot before a charging dog or an aiming trooper")
 	sec.free()
+
+
+## The alarm runner's zone doors (user: "when the alert guard is running, the big doors should open
+## and close for him, so he doesn't just faze through them"): he opens one only on his way through
+## it, it's out of his way before he's at it, it never shuts on him (in it on his feet, or shot
+## down in the doorway; a shutter drops behind him over his head), and it's shut again before you
+## can get to it, at the least lead he ever has on you (the bot runner_escapes watches the real
+## thing: gates=1/1/ok).
+func _test_runner_doors() -> void:
+	var tt := Tuning.new()
+	var level: Dictionary = (load("res://game/levels/prototype_slice/prototype_slice.gd") as GDScript).get_script_constant_map()
+	_check(level.has("GATE_H") and level.has("BASH_AHEAD") and level.has("SHUTTER_OPEN_AHEAD"), "the level's door constants load")
+	if not level.has("GATE_H") or not level.has("BASH_AHEAD") or not level.has("SHUTTER_OPEN_AHEAD"):
+		return
+	var door := 200.0
+	var leaf := 1.5 * tt.lane_width - 0.05  # a double door's leaf: half its three-lane doorway
+	var ahead := SecurityTrooper.DOOR_AHEAD
+	_check(SecurityTrooper.opens_door(door - ahead + 0.1, 400.0, door, ahead), "he shoves a zone door open as he comes")
+	_check(not SecurityTrooper.opens_door(door - ahead - 1.0, 400.0, door, ahead), "not from further off")
+	_check(not SecurityTrooper.opens_door(door + 0.5, 400.0, door, ahead), "not one he's through")
+	_check(not SecurityTrooper.opens_door(door - 1.0, door - 0.5, door, ahead), "not one past his alarm (he stops short of it)")
+	# Out of his way before he's at it (his front at the door): the leaves' push (eased out) is all
+	# but done; a shutter's up over his head as he comes under it (his front 0.15 m short of it).
+	var push := sin(PI / 2.0 * minf((ahead - 0.35) / tt.security_speed / SecurityTrooper.DOOR_PUSH_TIME, 1.0))
+	_check(push > 0.95, "the leaves are right open before he's at them (%.2f of the way)" % push)
+	var open_h: float = float(level["GATE_H"]) - 0.05  # (as far as he rolls one up)
+	var up := sin(PI / 2.0 * minf((SecurityTrooper.SHUTTER_AHEAD - 0.5) / tt.security_speed / SecurityTrooper.SHUTTER_UP_TIME, 1.0)) * open_h
+	_check(up > 2.2, "a shutter's up over his head before he's under it (%.2f m)" % up)
+	# It never shuts on him.
+	_check(SecurityTrooper.in_door_way(door, 0.0, false, door, leaf, leaf), "in the doorway, it's held open")
+	_check(SecurityTrooper.in_door_way(door + leaf, 1.4, false, door, leaf, leaf), "still among its leaves, it's held open")
+	_check(not SecurityTrooper.in_door_way(door + leaf + 0.5, 0.0, false, door, leaf, leaf), "through and clear of its leaves, it shuts")
+	_check(SecurityTrooper.in_door_way(door - 1.0, 0.0, true, door, leaf, leaf), "shot down just short of it, he falls into the doorway: it stays open")
+	_check(SecurityTrooper.in_door_way(door + 1.0, 0.0, true, door, leaf, leaf), "shot down among its leaves: it stays open")
+	_check(not SecurityTrooper.in_door_way(door - SecurityTrooper.BODY_DOWN - 0.3, 0.0, true, door, leaf, leaf), "shot down further back, he falls clear of it: it shuts")
+	_check(not SecurityTrooper.in_door_way(door + 1.0, 3.35, false, door, leaf, leaf), "at an alarm on the wall beside the doorway, he's clear of it")
+	# A shutter (0.15 m deep) drops as soon as he's under it, slow enough off the top to stay over
+	# his head until he's out from under it.
+	_check(SecurityTrooper.in_door_way(door - 0.45, 0.0, false, door, 0.15, leaf), "coming under a shutter, he's in its way: it starts down behind him")
+	_check(not SecurityTrooper.in_door_way(door + 0.55, 0.0, false, door, 0.15, leaf), "a metre on, he's out from under it")
+	var over := SecurityTrooper.shutter_over_him(tt.security_speed, up, 0.15)
+	_check(over > 2.2, "a shutter dropping behind him is still over his head as he comes out from under it (%.2f m)" % over)
+	# Shut again before you can get to it. The least he's ever ahead of you: he spots you 40 m off
+	# (a frame's run short of that, at worst), stands startled while you close in (a frame longer, at
+	# worst), then runs on to his alarm, and you close on him by the difference in speed all the way.
+	var lead := tt.security_trigger_distance - tt.run_speed * (tt.security_startle_time + 2.0 / 60.0) \
+			- (tt.run_speed - tt.security_speed) * tt.security_alarm_distance / tt.security_speed
+	_check(lead > 13.0, "he's always well ahead of you (%.2f m at the least)" % lead)
+	# You burst through a door's leaves BASH_AHEAD short of them...
+	var to_leaves := (lead - float(level["BASH_AHEAD"])) / tt.run_speed
+	var shut := SecurityTrooper.door_shut_after(leaf, tt.security_speed, SecurityTrooper.DOOR_SHUT_TIME)
+	_check(shut < to_leaves - 0.2, "a door he's been through is shut %.2f s after him, well before you can get to it (%.2f s)" % [shut, to_leaves])
+	# ...but a shutter starts rolling up for you SHUTTER_OPEN_AHEAD out: it's down before then (a
+	# few frames' slack, for its last frame and the state change after it).
+	var to_shutter := (lead - float(level["SHUTTER_OPEN_AHEAD"])) / tt.run_speed
+	var down := SecurityTrooper.shutter_shut_after(tt.security_speed)
+	_check(down < to_shutter - 0.05, "a shutter's down %.2f s after him, before it starts rolling up for you (%.2f s)" % [down, to_shutter])
 
 
 ## The Alert 3 pursuit squad: each guard runs into cover in his own lane (and only his), and
@@ -2099,6 +3231,441 @@ func _test_trooper_rules() -> void:
 			"higher alert, less time to dodge")
 
 
+## The stairs' clear exit (user, 2026-10-07: "Rule that after the player exits the stairs up or
+## down objects can not be placed right outside, it's unfair as player can not react quick enough
+## to avoid."): nothing of any kind within RouteGraph.STAIR_EXIT_CLEAR m after a flight's exit
+## door, up or down. The flight is the area's first RouteGraph.STAIRS_FLIGHT m, so the door is that
+## far in: 1 m short of the clear stretch's end is refused, right at its end is fine.
+func _test_stair_exit_clear() -> void:
+	var tuning := load("res://game/config/default_tuning.tres") as Tuning
+	_check(tuning != null and is_equal_approx(tuning.tier_height * tuning.stairs_run, RouteGraph.STAIRS_FLIGHT),
+			"the stairs rule's flight is %s m, as long as the level builds it (tier_height x stairs_run)" % RouteGraph.STAIRS_FLIGHT)
+	var defaults := Tuning.new()
+	_check(is_equal_approx(defaults.tier_height * defaults.stairs_run, RouteGraph.STAIRS_FLIGHT), "...and as long as Tuning's defaults make it")
+	_check(is_equal_approx(RouteGraph.STAIR_EXIT_CLEAR, RouteGraph.MARKER_CLEAR_AFTER), "a stairs door gets the same room after it as a zone door")
+	_check(is_equal_approx(RouteGraph.STAIR_CLEAR_TO, RouteGraph.STAIRS_FLIGHT + RouteGraph.STAIR_EXIT_CLEAR),
+			"the clear stretch counts from the exit door, not from the start of the flight")
+	var end := {"id": "e", "tier": "ground", "end": "extract"}
+	# Up: from the ground onto a roof. Down: from a roof to the ground.
+	var flights := {
+		"up": func(dest: Dictionary) -> RouteGraph: return RouteGraph.from_dict({"start": "a", "nodes": [
+			{"id": "a", "tier": "ground", "length": 60, "next": [{"to": "e"}, {"to": "d", "side": "right", "via": "stairs"}]},
+			dest.merged({"tier": "roof", "next": [{"to": "e", "side": "left", "via": "ladder"}]}), end]}),
+		"down": func(dest: Dictionary) -> RouteGraph: return RouteGraph.from_dict({"start": "a", "nodes": [
+			{"id": "a", "tier": "roof", "length": 60, "next": [{"to": "r"}, {"to": "d", "side": "left", "via": "stairs"}]},
+			{"id": "r", "tier": "roof", "length": 60, "next": [{"to": "e", "side": "left", "via": "ladder"}]},
+			dest.merged({"tier": "ground", "next": [{"to": "e"}]}), end]}),
+	}
+	# [the list it's in, the thing, what the rule calls it]. Searchlights and snipers only go on roofs.
+	var things := [
+		["obstacles", {"kind": "barrier", "lanes": [2]}, "barrier"],
+		["obstacles", {"kind": "pipe", "lanes": [1, 2, 3]}, "pipe"],
+		["obstacles", {"kind": "tripwire", "lanes": [2]}, "tripwire"],
+		["obstacles", {"kind": "box", "lanes": [2]}, "box"],
+		["obstacles", {"kind": "wall", "lanes": [2]}, "wall"],
+		["enemies", {"kind": "rifle_trooper", "lane": 2}, "rifle_trooper"],
+		["enemies", {"kind": "rusher_dog", "lane": 2}, "rusher_dog"],
+		["enemies", {"kind": "security_trooper", "lane": 2}, "security_trooper"],  # the alarm runner
+		["searchlights", {"side": "left"}, "searchlight"],
+		["snipers", {"side": "left"}, "sniper"],
+	]
+	var cases := [[RouteGraph.STAIR_CLEAR_TO - 1.0, true], [RouteGraph.STAIR_CLEAR_TO, false]]
+	for way in flights:
+		for t in things:
+			if way == "down" and t[0] in ["searchlights", "snipers"]:
+				continue
+			for c in cases:
+				var item: Dictionary = t[1].merged({"at": c[0]})
+				var g: RouteGraph = flights[way].call({"id": "d", "length": 120, t[0]: [item]})
+				var refused := " | ".join(g.validate()).contains("%s at %s m is too close to the stairs' exit door" % [t[2], c[0]])
+				_check(refused == c[1], "stairs %s: a %s %s m in (%s m after the exit door) is %s" % [way, t[2], c[0],
+						c[0] - RouteGraph.STAIRS_FLIGHT, "refused" if c[1] else "fine"])
+	# What the old rule let through (20 m from the start of the area: 8 m after the door) is out now.
+	var old := RouteGraph.STAIR_EXIT_CLEAR + 1.0
+	var g_old: RouteGraph = flights["down"].call({"id": "d", "length": 120, "obstacles": [{"kind": "barrier", "lanes": [2], "at": old}]})
+	_check(" | ".join(g_old.validate()).contains("barrier at %s m is too close to the stairs' exit door" % old),
+			"stairs: a barrier %s m in, only %s m after the exit door, is refused now" % [old, old - RouteGraph.STAIRS_FLIGHT])
+
+
+## The fair-reaction rule (user, 2026-10-08, on a slide right after a jump: "But it only works as long
+## as there is still time for the player to land and swipe."): between two obstacles you have to act
+## on in the same lane, there is always time to land if you must, then a swipe's reaction time
+## (RouteGraph.REACTION_HARD, HARD's floor). For every pair of kinds (a barrier or a tripwire to jump,
+## a pipe to slide under), one 0.5 m too close is refused and one just far enough is fine; the gaps
+## follow Tuning; the real Player, stepped at 60 Hz, makes every gap whichever way he got past the
+## first; cover between them, another lane, a side exit's other lanes and a ladder don't count; the
+## join into the next area does.
+func _test_fair_reaction() -> void:
+	var t := Tuning.new()
+	var kinds := ["barrier", "tripwire", "pipe"]
+	var lanes_of := {"barrier": [1, 2], "tripwire": [0, 1, 2, 3, 4], "pipe": [1, 2, 3]}
+	var area := func(obstacles: Array) -> RouteGraph:
+		return RouteGraph.from_dict({"start": "a", "nodes": [{"id": "a", "tier": "ground", "length": 100, "end": "extract", "obstacles": obstacles}]})
+	for a: String in kinds:
+		for b: String in kinds:
+			var gap := RouteGraph.reaction_gap(a, b, t)
+			for c in [[gap - 0.5, true], [gap, false]]:
+				var at: float = 40.0 + c[0]
+				var g: RouteGraph = area.call([{"kind": a, "lanes": lanes_of[a], "at": 40.0}, {"kind": b, "lanes": lanes_of[b], "at": at}])
+				var refused := " | ".join(g.validate(t)).contains("%s at %s m is too soon after the %s at 40.0 m" % [b, at, a])
+				_check(refused == c[1], "fair reaction: a %s %.2f m after a %s in its lane is %s (%.2f m needed)" % [b, c[0], a,
+						"refused" if c[1] else "fine", gap])
+	# From the physics: two jumps need the whole jump (the latest one over the first: you land last)
+	# and the reaction; two slides only the reaction; a jump after a slide its lift too; a slide after a
+	# jump the drop from the air; each plus a frame (swipes are read, and hits checked, once a frame).
+	var air := 2.0 * t.jump_velocity / t.gravity
+	var up := (t.jump_velocity - sqrt(t.jump_velocity ** 2 - 2.0 * t.gravity * t.jump_clear_height)) / t.gravity
+	var react := RouteGraph.REACTION_HARD + 1.0 / Engine.physics_ticks_per_second
+	var zone := RouteGraph.DEPTHS["barrier"] + 2.0 * RouteGraph.HIT_REACH
+	_check(is_equal_approx(RouteGraph.reaction_gap("barrier", "barrier", t), t.run_speed * (air + react)),
+			"fair reaction: two barriers need the whole jump and the reaction (%.2f m)" % RouteGraph.reaction_gap("barrier", "barrier", t))
+	_check(is_equal_approx(RouteGraph.reaction_gap("pipe", "pipe", t), zone + t.run_speed * react),
+			"fair reaction: two pipes need only the reaction (%.2f m)" % RouteGraph.reaction_gap("pipe", "pipe", t))
+	_check(is_equal_approx(RouteGraph.reaction_gap("pipe", "barrier", t), zone + t.run_speed * (react + up)),
+			"fair reaction: a barrier after a pipe needs the reaction and the jump's lift (%.2f m)" % RouteGraph.reaction_gap("pipe", "barrier", t))
+	var j_s := RouteGraph.reaction_gap("barrier", "pipe", t)
+	_check(j_s > RouteGraph.reaction_gap("pipe", "pipe", t) and j_s < RouteGraph.reaction_gap("pipe", "pipe", t) + t.run_speed * 0.2,
+			"fair reaction: a pipe after a barrier needs the reaction and the drop from the air, no landing (%.2f m)" % j_s)
+	var fast := Tuning.new()
+	fast.run_speed = 22.0
+	_check(is_equal_approx(RouteGraph.reaction_gap("barrier", "barrier", fast), 2.0 * RouteGraph.reaction_gap("barrier", "barrier", t)),
+			"fair reaction: twice the run speed, twice the room between two barriers")
+	var floaty := Tuning.new()
+	floaty.jump_velocity = 9.0
+	_check(RouteGraph.reaction_gap("barrier", "barrier", floaty) > RouteGraph.reaction_gap("barrier", "barrier", t),
+			"fair reaction: a longer jump needs more room before the next one")
+	_check(is_equal_approx(RouteGraph.reaction_gap("pipe", "pipe", t, RouteGraph.REACTION_HARD + 0.1),
+			RouteGraph.reaction_gap("pipe", "pipe", t) + 0.1 * t.run_speed), "fair reaction: a slower swipe needs that much more road")
+	_check(RouteGraph.REACTION_HARD < RouteGraph.REACTION_MEDIUM and RouteGraph.REACTION_MEDIUM < RouteGraph.REACTION_EASY,
+			"fair reaction: MEDIUM and EASY give you more time than HARD")
+	# The rule's depths and reach are the level's own (KINDS, and _check_obstacles' HIT_REACH).
+	var kinds_built: Dictionary = (load("res://game/levels/prototype_slice/prototype_slice.gd") as GDScript).get_script_constant_map()["KINDS"]
+	for k: String in kinds:
+		_check(is_equal_approx(kinds_built[k]["size"].z, RouteGraph.DEPTHS[k]), "fair reaction: a %s is as deep as the level builds it" % k)
+	var level_src := FileAccess.get_file_as_string("res://game/levels/prototype_slice/prototype_slice.gd")
+	_check(level_src.contains("> o[\"depth\"] / 2.0 + RouteGraph.HIT_REACH:"), "fair reaction: the level's hit test reaches RouteGraph.HIT_REACH past an obstacle")
+	# The real Player, 60 times a second, for every pair: at the rule's gap there is always a swipe in
+	# time for the second (made a reaction time after he's past the first, and down if it's a jump
+	# after a jump), however he got past the first; 0.5 m less and some way past the first leaves none.
+	var gs := root.get_node("GameState")
+	var was_active: bool = gs.run_active
+	gs.run_active = true
+	var p: Node3D = (load("res://game/player/player.gd") as GDScript).new()  # (by path: it needs the autoloads)
+	p.tuning = load("res://game/config/default_tuning.tres") as Tuning
+	root.add_child(p)
+	p.set_physics_process(false)
+	p.set_process(false)
+	for a: String in kinds:
+		for b: String in kinds:
+			var gap := RouteGraph.reaction_gap(a, b, p.tuning)
+			var at_gap := _fair_sim(p, a, b, gap)
+			var closer := _fair_sim(p, a, b, gap - 0.5)
+			_check(at_gap.x == 0 and at_gap.y > 20, "fair reaction, the real player: a %s %.2f m after a %s, every way past it (%d) leaves time (%d don't)"
+					% [b, gap, a, at_gap.y, at_gap.x])
+			_check(closer.x > 0, "fair reaction, the real player: 0.5 m closer, some way past the %s leaves no time for the %s" % [a, b])
+	p.free()
+	gs.run_active = was_active
+	# Only what's in the same lane counts, cover between them stops you first, and a sidestep is no
+	# way out (the next lanes free beside the second doesn't help).
+	var near := RouteGraph.reaction_gap("barrier", "barrier", t) - 2.0
+	var g2: RouteGraph = area.call([{"kind": "barrier", "lanes": [2], "at": 30.0}, {"kind": "barrier", "lanes": [2], "at": 30.0 + near},
+			{"kind": "barrier", "lanes": [1], "at": 60.0}, {"kind": "pipe", "lanes": [2], "at": 62.0},
+			{"kind": "barrier", "lanes": [3], "at": 80.0}, {"kind": "box", "lanes": [3], "at": 83.0}, {"kind": "barrier", "lanes": [3], "at": 86.0}])
+	var found := " | ".join(g2.validate(t))
+	_check(found.contains("barrier at %s m is too soon after the barrier at 30.0 m in lane 2 " % (30.0 + near)),
+			"fair reaction: a barrier in only one lane is still too soon (a sidestep is no way out)")
+	_check(not found.contains("pipe at 62.0 m is too soon"), "fair reaction: a pipe in the next lane is no pair")
+	_check(not found.contains("barrier at 86.0 m is too soon"), "fair reaction: cover between them stops you first, so they're no pair")
+	# The join into the next area: straight on, every lane; a left exit only from lane 0, which becomes
+	# the branch's lane 4; up a ladder you climb.
+	var joined := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "length": 100, "obstacles": [{"kind": "barrier", "lanes": [0, 2], "at": 98.0}],
+			"next": [{"to": "b"}, {"to": "c", "side": "left", "via": "corridor"}]},
+		{"id": "b", "tier": "ground", "length": 60, "end": "extract", "obstacles": [{"kind": "pipe", "lanes": [2], "at": 2.0}]},
+		{"id": "c", "tier": "ground", "length": 60, "end": "extract", "obstacles": [
+			{"kind": "pipe", "lanes": [4], "at": 3.0}, {"kind": "pipe", "lanes": [0], "at": 4.0}]},
+	]})
+	found = " | ".join(joined.validate(t))
+	_check(found.contains("node 'a' into 'b': pipe at 2.0 m into 'b' is too soon after the barrier at 98.0 m in lane 2 "),
+			"fair reaction: straight on into the next area, the pair across the join is refused")
+	_check(found.contains("node 'a' into 'c': pipe at 3.0 m into 'c' is too soon after the barrier at 98.0 m in lane 0 "),
+			"fair reaction: at a left exit, lane 0 runs on into the branch's lane 4")
+	_check(not found.contains("pipe at 4.0 m into 'c'"), "fair reaction: ...and the branch's lane 0 isn't the lane you came in on")
+	var climbed := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "length": 100, "obstacles": [{"kind": "barrier", "lanes": [0], "at": 98.0}],
+			"next": [{"to": "b"}, {"to": "e", "side": "left", "via": "ladder"}]},
+		{"id": "b", "tier": "ground", "length": 60, "end": "extract"},
+		{"id": "e", "tier": "roof", "length": 60, "end": "extract", "obstacles": [{"kind": "pipe", "lanes": [0, 4], "at": 2.0}]},
+	]})
+	_check(not " | ".join(climbed.validate(t)).contains("too soon"), "fair reaction: up a ladder you climb, so there's no pair across it")
+	_test_one_jump(t, area)
+	_test_one_jump_across(t, area)
+
+
+## The fair-reaction rule's one-jump pairs over the join into the next area, timed as inside one
+## area: a wire at the end of one area and a barrier at the start of the next that one jump clears
+## are one obstacle, and what follows them (a pipe to slide, a barrier to jump) is timed from the
+## pair, passing and failing at the same gaps as the same layout inside one area, and told once, as
+## the pair across the join. Coming in another way that runs nothing on into the barrier, or up a
+## ladder, the barrier stands alone, and the same pipe is too soon after it.
+func _test_one_jump_across(t: Tuning, area: Callable) -> void:
+	var react := RouteGraph.REACTION_HARD + 1.0 / Engine.physics_ticks_per_second
+	var pipe_after := RouteGraph.DEPTHS["barrier"] / 2.0 + RouteGraph.HIT_REACH + t.run_speed * react + RouteGraph.DEPTHS["pipe"] / 2.0 + RouteGraph.HIT_REACH
+	var barrier_after := RouteGraph.reaction_gap("tripwire", "barrier", t) - 2.0  # (from the wire, as after its first)
+	var joined := func(a_obs: Array, b_obs: Array) -> RouteGraph:
+		return RouteGraph.from_dict({"start": "a", "nodes": [
+			{"id": "a", "tier": "ground", "length": 100, "obstacles": a_obs, "next": [{"to": "b"}]},
+			{"id": "b", "tier": "ground", "length": 60, "end": "extract", "obstacles": b_obs}]})
+	var wire := {"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 99.0}
+	var bar := {"kind": "barrier", "lanes": [2], "at": 1.0}
+	for follow: Array in [["pipe", pipe_after], ["barrier", barrier_after]]:
+		var kind: String = follow[0]
+		for c in [[0.0, false], [-0.5, true]]:
+			var gap: float = follow[1] + c[0]
+			var inside: RouteGraph = area.call([{"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 40.0}, {"kind": "barrier", "lanes": [2], "at": 42.0},
+					{"kind": kind, "lanes": [2], "at": 42.0 + gap}])
+			var across: RouteGraph = joined.call([wire], [bar, {"kind": kind, "lanes": [2], "at": 1.0 + gap}])
+			var one := " | ".join(inside.validate(t))
+			var two := " | ".join(across.validate(t))
+			var told := "%.2f m apart, %.2f m needed" % [gap, follow[1]]
+			var in_one := one.contains("%s at %s m is too soon after the tripwire at 40.0 m and the barrier at 42.0 m (one jump clears both) in lane 2 (%s" % [kind, 42.0 + gap, told])
+			var in_two := two.contains("node 'a' into 'b': %s at %s m into 'b' is too soon after the tripwire at 99.0 m and the barrier at 1.0 m into 'b' (one jump clears both) in lane 2 (%s" % [kind, 1.0 + gap, told])
+			_check(in_one == c[1] and in_two == c[1] and two.count("too soon") == (1 if c[1] else 0),
+					"one jump over a join: a %s %.2f m after the pair's barrier is %s, as inside one area (told from the pair, across the join)" % [kind, gap, "too soon" if c[1] else "fine"])
+	# Another way into the same area that runs nothing on into it (a branch with nothing at its end),
+	# and a ladder up into it: the barrier stands alone, so the pipe the pair allows is too soon.
+	_check(pipe_after < RouteGraph.reaction_gap("barrier", "pipe", t), "one jump over a join: a lone barrier needs more road before a pipe than the pair does")
+	var lone := "node 'b': pipe at %s m is too soon after the barrier at 1.0 m in lane 2 " % (1.0 + pipe_after)
+	var two_ways := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "length": 100, "obstacles": [wire], "next": [{"to": "b"}, {"to": "c", "side": "left", "via": "corridor"}]},
+		{"id": "c", "tier": "ground", "length": 60, "next": [{"to": "b"}]},
+		{"id": "b", "tier": "ground", "length": 60, "end": "extract", "obstacles": [bar, {"kind": "pipe", "lanes": [2], "at": 1.0 + pipe_after}]}]})
+	var found := " | ".join(two_ways.validate(t))
+	_check(found.contains(lone) and not found.contains("node 'a' into 'b': pipe"), "one jump over a join: in by another way, with nothing run on, the barrier stands alone and the pipe is too soon after it")
+	var laddered := RouteGraph.from_dict({"start": "a", "nodes": [
+		{"id": "a", "tier": "ground", "length": 100, "obstacles": [wire], "next": [{"to": "b"}, {"to": "c", "side": "left", "via": "corridor"}]},
+		{"id": "c", "tier": "ground", "length": 60, "next": [{"to": "b", "side": "left", "via": "ladder"}]},
+		{"id": "b", "tier": "roof", "length": 60, "end": "extract", "obstacles": [bar, {"kind": "pipe", "lanes": [2], "at": 1.0 + pipe_after}]}]})
+	_check(" | ".join(laddered.validate(t)).contains(lone), "one jump over a join: up a ladder into it, the barrier stands alone too")
+
+
+## The fair-reaction rule's one-jump pairs (user: "there is still time for the player to land and
+## swipe": if one jump clears both, there's no landing between them to need time for). Obstacles to
+## jump close enough for one jump to keep his feet above jump_clear_height over both stretches (less a
+## frame: he can only take off on one) count as one; just too far apart for that, the second needs
+## the whole reaction_gap. Pipes never pair up (a slide is its own swipe). What comes after the pair
+## is timed from the pair's end; the real Player, stepped at 60 Hz, clears every pair the rule allows
+## in one jump, and none 0.5 m further apart.
+func _test_one_jump(t: Tuning, area: Callable) -> void:
+	var lanes_of := {"barrier": [1, 2], "tripwire": [0, 1, 2, 3, 4]}
+	var root_ := sqrt(t.jump_velocity ** 2 - 2.0 * t.gravity * t.jump_clear_height)
+	var above := 2.0 * root_ / t.gravity  # his feet above clear height, s
+	_check(is_equal_approx(RouteGraph.one_jump_reach(t), t.run_speed * (above - 1.0 / Engine.physics_ticks_per_second)),
+			"one jump: it carries him over %.2f m of road above clear height, less a frame's run" % RouteGraph.one_jump_reach(t))
+	for a: String in ["barrier", "tripwire"]:
+		for b: String in ["barrier", "tripwire"]:
+			var most := RouteGraph.one_jump_gap(a, b, t)
+			_check(most > 1.5 and most < RouteGraph.reaction_gap(a, b, t) - 5.0,
+					"one jump: a %s up to %.2f m after a %s clears with it; from there to %.2f m apart is too close for two" % [b, most, a, RouteGraph.reaction_gap(a, b, t)])
+			for c in [[most, false], [most + 0.05, true]]:
+				var at: float = 40.0 + c[0]
+				var g: RouteGraph = area.call([{"kind": a, "lanes": lanes_of[a], "at": 40.0}, {"kind": b, "lanes": lanes_of[b], "at": at}])
+				var found := " | ".join(g.validate(t))
+				_check(found.contains("%s at %s m is too soon after the %s at 40.0 m" % [b, at, a]) == c[1],
+						"one jump: a %s %.2f m after a %s is %s" % [b, c[0], a, "too far for one jump and too close for two: refused" if c[1] else "one jump over both: fine"])
+	# The LOADING DOCK's: the wire at 38 m in every lane, the bumper blocks 2 m behind it in three.
+	var dock: RouteGraph = area.call([{"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 38.0}, {"kind": "barrier", "lanes": [0, 1, 2], "at": 40.0}])
+	_check(not " | ".join(dock.validate(t)).contains("too soon"), "one jump: the dock's wire and bumper blocks 2 m apart are one jump")
+	# Only jumps pair up: a slide is a swipe of its own, so 2 m is too close whatever the order.
+	for pair in [["pipe", "pipe"], ["barrier", "pipe"], ["pipe", "barrier"], ["pipe", "tripwire"]]:
+		var g: RouteGraph = area.call([{"kind": pair[0], "lanes": [2], "at": 40.0}, {"kind": pair[1], "lanes": [2], "at": 42.0}])
+		_check(" | ".join(g.validate(t)).contains("%s at 42.0 m is too soon after the %s at 40.0 m" % [pair[1], pair[0]]),
+				"one jump: a %s 2 m after a %s is still refused (no one jump over a slide)" % [pair[1], pair[0]])
+	# After a pair, the next one is timed from the pair, as after its first: the latest jump that clears
+	# them both is the latest over the first, and he's past the second still in it. Before it, as before
+	# its first.
+	var after := 40.0 + RouteGraph.reaction_gap("tripwire", "barrier", t)
+	for c in [[after, false], [after - 0.5, true]]:
+		var g: RouteGraph = area.call([{"kind": "tripwire", "lanes": [2], "at": 40.0}, {"kind": "barrier", "lanes": [2], "at": 42.0},
+				{"kind": "barrier", "lanes": [2], "at": c[0]}])
+		var found := " | ".join(g.validate(t))
+		_check(found.contains("barrier at %s m is too soon after the tripwire at 40.0 m and the barrier at 42.0 m (one jump clears both) in lane 2 (%.2f m apart, %.2f m needed"
+				% [c[0], c[0] - 42.0, after - 42.0]) == c[1], "one jump: a barrier %.2f m after the pair's wire is %s (told from the pair's last one)" % [c[0] - 40.0, "too soon" if c[1] else "fine"])
+	# A slide after it: the swipe can't come till he's past the pair's last one. The latest jump over
+	# the pair is down by the time the reaction is up, so he slides from the ground.
+	var up := (t.jump_velocity - root_) / t.gravity
+	var pair_end := 42.0 + RouteGraph.DEPTHS["barrier"] / 2.0 + RouteGraph.HIT_REACH
+	var pair_start := 40.0 - RouteGraph.DEPTHS["tripwire"] / 2.0 - RouteGraph.HIT_REACH
+	var left_in_air := 2.0 * t.jump_velocity / t.gravity - up - (pair_end - pair_start) / t.run_speed
+	var slide_at := pair_end + t.run_speed * (RouteGraph.REACTION_HARD + 1.0 / Engine.physics_ticks_per_second) + RouteGraph.DEPTHS["pipe"] / 2.0 + RouteGraph.HIT_REACH
+	_check(left_in_air < RouteGraph.REACTION_HARD, "one jump: the latest jump over the pair is down %.2f s after it, inside the reaction" % left_in_air)
+	for c in [[slide_at, false], [slide_at - 0.5, true]]:
+		var g: RouteGraph = area.call([{"kind": "tripwire", "lanes": [2], "at": 40.0}, {"kind": "barrier", "lanes": [2], "at": 42.0},
+				{"kind": "pipe", "lanes": [2], "at": c[0]}])
+		_check(" | ".join(g.validate(t)).contains("pipe at %s m is too soon after the tripwire at 40.0 m and the barrier at 42.0 m (one jump clears both)" % c[0]) == c[1],
+				"one jump: a pipe %.2f m after the pair's last one is %s" % [c[0] - 42.0, "too soon" if c[1] else "fine"])
+	var before := 40.0 - RouteGraph.reaction_gap("pipe", "tripwire", t)
+	for c in [[before, false], [before + 0.5, true]]:
+		var g: RouteGraph = area.call([{"kind": "pipe", "lanes": [2], "at": c[0]}, {"kind": "tripwire", "lanes": [2], "at": 40.0},
+				{"kind": "barrier", "lanes": [2], "at": 42.0}])
+		var found := " | ".join(g.validate(t))
+		_check(found.contains("tripwire at 40.0 m and the barrier at 42.0 m (one jump clears both) is too soon after the pipe at %s m" % c[0]) == c[1],
+				"one jump: the pair %.2f m after a pipe is %s" % [40.0 - c[0], "too soon" if c[1] else "fine"])
+	# Three in a row that one jump can't clear together: the third is too soon after the pair.
+	var three: RouteGraph = area.call([{"kind": "barrier", "lanes": [2], "at": 40.0}, {"kind": "barrier", "lanes": [2], "at": 42.0},
+			{"kind": "barrier", "lanes": [2], "at": 45.5}])
+	_check(" | ".join(three.validate(t)).contains("barrier at 45.5 m is too soon after the barrier at 40.0 m and the barrier at 42.0 m (one jump clears both)"),
+			"one jump: three barriers over more road than one jump covers are refused")
+	var three_close: RouteGraph = area.call([{"kind": "tripwire", "lanes": [2], "at": 40.0}, {"kind": "tripwire", "lanes": [2], "at": 41.5},
+			{"kind": "tripwire", "lanes": [2], "at": 43.0}])
+	_check(not " | ".join(three_close.validate(t)).contains("too soon"), "one jump: three wires inside one jump's reach are one jump")
+	# The real Player at 60 Hz: for every pair, at the rule's furthest apart some take-off frame clears
+	# both at every frame alignment of the road; 0.5 m further apart, none does at any.
+	var gs := root.get_node("GameState")
+	var was_active: bool = gs.run_active
+	gs.run_active = true
+	var p: Node3D = (load("res://game/player/player.gd") as GDScript).new()  # (by path: it needs the autoloads)
+	p.tuning = load("res://game/config/default_tuning.tres") as Tuning
+	root.add_child(p)
+	p.set_physics_process(false)
+	p.set_process(false)
+	for a: String in ["barrier", "tripwire"]:
+		for b: String in ["barrier", "tripwire"]:
+			var most := RouteGraph.one_jump_gap(a, b, p.tuning)
+			var at_most := _one_jump_sim(p, a, b, most)
+			var further := _one_jump_sim(p, a, b, most + 0.5)
+			_check(at_most == 5, "one jump, the real player: a %s %.2f m after a %s, one jump clears both at %d of 5 alignments" % [b, most, a, at_most])
+			_check(further == 0, "one jump, the real player: 0.5 m further apart, no jump clears both (%d of 5)" % further)
+	p.free()
+	gs.run_active = was_active
+
+
+## For _test_one_jump: player `p` (a Player) runs at a `first` and a `second` obstacle to jump, `gap` m
+## apart in his lane, stepped at 60 Hz, with the road at 5 alignments to his frames. Returns how many
+## alignments have a take-off frame whose one jump clears both (the level's hit test, _check_obstacles).
+func _one_jump_sim(p: Node3D, first: String, second: String, gap: float) -> int:
+	var dt := 1.0 / 60.0
+	var t: Tuning = p.tuning
+	var step := t.run_speed * dt
+	var reach_a: float = RouteGraph.DEPTHS[first] / 2.0 + RouteGraph.HIT_REACH
+	var reach_b: float = RouteGraph.DEPTHS[second] / 2.0 + RouteGraph.HIT_REACH
+	var start := 20.0  # (where he starts, fixed: the road moves under his frames)
+	var cleared := 0
+	for k in 5:
+		var at_a := 30.0 + step * k / 5.0
+		var at_b := at_a + gap
+		var any := false
+		for fa in range(int((at_a - 8.0 - start) / step), int((at_a - start) / step) + 1):
+			p.distance = start
+			p.jump_y = 0.0
+			p.set("_y_velocity", 0.0)
+			p.set("_slide_left", 0.0)
+			p.set("_stun_left", 0.0)
+			p.set("_speed_mul", 1.0)
+			p.lane = t.lane_count / 2
+			p.track_x = p.lane_x(p.lane)
+			var hit := false
+			var f := 0
+			while p.distance <= at_b + reach_b and not hit:
+				if f == fa:
+					p.handle_swipe(Vector2i.UP)
+				p._physics_process(dt)
+				for o in [[at_a, reach_a], [at_b, reach_b]]:
+					if absf(o[0] - p.distance) <= o[1] and not p.clears_low_obstacle():
+						hit = true
+				f += 1
+			if not hit:
+				any = true
+				break
+		if any:
+			cleared += 1
+	return cleared
+
+
+## For _test_fair_reaction: player `p` (a Player) runs at a `first` obstacle and then a `second`, `gap`
+## m apart in his lane, stepped at 60 Hz. For every frame his swipe for the first could come on that gets
+## him past it, his swipe for the second may come no sooner than RouteGraph.REACTION_HARD after the
+## moment he left the first one's stretch (and for a jump after a jump, after the moment he's down, and
+## once he is). Returns (ways past the first that leave no swipe in time for the second, ways past it).
+## The hit test is the level's (_check_obstacles).
+func _fair_sim(p: Node3D, first: String, second: String, gap: float) -> Vector2i:
+	var dt := 1.0 / 60.0
+	var t: Tuning = p.tuning
+	var at_a := 30.0
+	var at_b := at_a + gap
+	var reach_a: float = RouteGraph.DEPTHS[first] / 2.0 + RouteGraph.HIT_REACH
+	var reach_b: float = RouteGraph.DEPTHS[second] / 2.0 + RouteGraph.HIT_REACH
+	var swipe := func(kind: String) -> void: p.handle_swipe(Vector2i.UP if RouteGraph.ACTIONS[kind] == "jump" else Vector2i.DOWN)
+	var passes := func(kind: String) -> bool: return p.clears_low_obstacle() if RouteGraph.ACTIONS[kind] == "jump" else p.is_sliding()
+	var put := func(s: Array) -> void:
+		p.distance = s[0]
+		p.jump_y = s[1]
+		p.set("_y_velocity", s[2])
+		p.set("_slide_left", s[3])
+		p.set("_stun_left", 0.0)
+		p.set("_speed_mul", 1.0)
+		p.lane = t.lane_count / 2
+		p.track_x = p.lane_x(p.lane)
+	var stuck := 0
+	var ways := 0
+	for fa in range(int((at_a - 10.0) / (t.run_speed * dt)), int((at_a + 1.0) / (t.run_speed * dt))):
+		put.call([0.0, 0.0, 0.0, 0.0])
+		var states: Array = []  # his state before each frame's swipe
+		var hit_a := false
+		var left_at := -1.0
+		var down_at := -1.0
+		var down_frame := -1
+		var was_up := false
+		var b_hits := 1 << 30  # the first frame the second trips him if he doesn't swipe for it
+		var f := 0
+		while p.distance < at_b + 1.0:
+			states.append([p.distance, p.jump_y, p.get("_y_velocity"), p.get("_slide_left")])
+			if f == fa:
+				swipe.call(first)
+			var d0: float = p.distance
+			var y0: float = p.jump_y
+			var vy0: float = p.get("_y_velocity")
+			p._physics_process(dt)
+			if absf(at_a - p.distance) <= reach_a and not passes.call(first):
+				hit_a = true
+			if b_hits > f and absf(at_b - p.distance) <= reach_b and not passes.call(second):
+				b_hits = f
+			if left_at < 0.0 and p.distance > at_a + reach_a:
+				left_at = (f + (at_a + reach_a - d0) / (p.distance - d0)) * dt  # (within the frame's step)
+			if f >= fa and p.is_airborne():
+				was_up = true
+			elif f >= fa and down_frame < 0 and (was_up or RouteGraph.ACTIONS[first] != "jump"):
+				down_frame = f
+				var v1 := vy0 - t.gravity * dt
+				down_at = (f + (y0 / (-v1 * dt) if v1 < 0.0 else 0.0)) * dt
+			f += 1
+		if hit_a:
+			continue
+		ways += 1
+		var from := left_at
+		var soonest := 0
+		if RouteGraph.ACTIONS[first] == "jump" and RouteGraph.ACTIONS[second] == "jump":
+			from = maxf(left_at, down_at)
+			soonest = down_frame + 1  # (an up swipe only works on the ground)
+		soonest = maxi(soonest, ceili((from + RouteGraph.REACTION_HARD) / dt - 0.0001))
+		var made_it := false
+		for fb in range(soonest, mini(b_hits + 1, states.size())):
+			put.call(states[fb])
+			swipe.call(second)
+			var hit_b := false
+			while p.distance <= at_b + reach_b:
+				p._physics_process(dt)
+				if absf(at_b - p.distance) <= reach_b and not passes.call(second):
+					hit_b = true
+					break
+			if not hit_b:
+				made_it = true
+				break
+		if not made_it:
+			stuck += 1
+	return Vector2i(stuck, ways)
+
+
 func _test_route_rules() -> void:
 	var bad := RouteGraph.from_dict({"start": "a", "nodes": [
 		{"id": "a", "tier": "ground", "next": [{"to": "b", "side": "left", "via": "corridor"}, {"to": "c"}]},
@@ -2146,13 +3713,13 @@ func _test_route_rules() -> void:
 			{"kind": "pipe", "lanes": [3, 4], "at": 22},
 			{"kind": "wall", "lanes": [0, 1], "at": 50}, {"kind": "barrier", "lanes": [2, 3, 4], "at": 51},
 			{"kind": "wall", "lanes": [3, 4], "at": 70}, {"kind": "box", "lanes": [2], "at": 70},
-			{"kind": "barrier", "lanes": [0, 1], "at": 80},
+			{"kind": "barrier", "lanes": [0, 1], "at": 86},  # (13 m after the tripwire: time to land and jump again)
 			{"kind": "tripwire", "lanes": [0, 1, 2, 3, 4], "at": 73}]},
 	]})
 	problems = " ".join(squeeze.validate())
 	_check("pipe at 22" in problems, "cover on 3 lanes + a pipe in the open lanes is rejected (forced swipe-and-jump)")
 	_check(not "barrier at 51" in problems, "cover on only 2 lanes leaves room: a barrier nearby is fine")
-	_check(not "barrier at 80" in problems, "a barrier well after the cover is fine")
+	_check(not "barrier at 86" in problems, "a barrier well after the cover is fine")
 	_check(not "tripwire" in problems, "a tripwire next to cover is fine (it only raises alert)")
 	var stacked := RouteGraph.from_dict({"start": "roof", "nodes": [
 		{"id": "roof", "tier": "roof", "next": [{"to": "sewer_straight"}, {"to": "sewer", "side": "left", "via": "stairs"}]},

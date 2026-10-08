@@ -70,7 +70,7 @@ enum TargetingMode {
 
 @export_group("Intro")
 ## Length of the start room, and how far behind its door the player starts (metres).
-@export var start_room_length: float = 14.0
+@export var start_room_length: float = 12.0
 @export var start_offset: float = 6.0
 ## How long the opening camera pan takes, front of the player round to behind.
 @export var intro_pan_time: float = 3.5

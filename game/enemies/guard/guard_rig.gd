@@ -214,7 +214,7 @@ func _build_rifle() -> void:
 	var gun := MeshInstance3D.new()
 	gun.name = "Gun"
 	gun.mesh = GuardRifle.mesh(kind)
-	gun.material_override = GuardRifle.material()
+	gun.material_override = PsxMaterials.figure(GuardRifle.material())  # (dissolves to the floor with him)
 	rifle.add_child(gun)
 	_meshes.append(gun)
 	_materials.append(gun.material_override)
@@ -232,7 +232,7 @@ func _build_rifle() -> void:
 		_barrels.position = GuardRifle.SPIN_AXIS - GuardRifle.GRIP
 		var b := MeshInstance3D.new()
 		b.mesh = GuardRifle.barrels_mesh()
-		b.material_override = GuardRifle.material()
+		b.material_override = PsxMaterials.figure(GuardRifle.material())
 		_barrels.add_child(b)
 		_meshes.append(b)
 		_materials.append(b.material_override)
@@ -312,9 +312,11 @@ func flinch() -> void:
 	_still = false
 
 
-## Down: he falls on his face (and stays there), on his own.
+## Down: he falls on his face (and stays there), on his own; from now on his body is never dissolved
+## (keep_solid), so it doesn't melt away as you run past it.
 func fall() -> void:
 	if _fall < 0.0:
+		keep_solid()
 		_fall_from = _snap()
 		_fall = 0.0
 		pose_to({})
@@ -326,8 +328,10 @@ func _death_plan() -> Dictionary:
 
 
 ## The boss is killed: his barrels' turn and spin (they spin down as the gun falls), and no more
-## holds or falls of his own (pose_death poses him from now on).
+## holds or falls of his own (pose_death poses him from now on). His body is never dissolved from
+## now on (keep_solid).
 func death_start(opts: Dictionary = {}) -> Dictionary:
+	keep_solid()
 	_barrels_from = _barrels.rotation.z if _barrels != null else 0.0
 	_spin_from = _spin
 	set_process(false)

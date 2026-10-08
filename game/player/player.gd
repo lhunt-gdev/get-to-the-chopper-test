@@ -21,6 +21,9 @@ var cover_crouch: bool = false
 ## Facing the boss at the chopper (user design): stopped at the standoff line; swipe left/right steps
 ## between lanes (you stay stopped), FIRE works, no jumping or sliding. Ends when he's down.
 var standoff: bool = false
+## A lane he can't go into just now, or -1: a locked stairs door stands across it just ahead (the
+## level sets it, and eases him out of it). A swipe into it is refused.
+var barred_lane := -1
 ## Placeholder damage model (Point 4 OPEN): this many hits and you're down.
 var hits_left: int = 3
 var _invulnerable: float = 0.0
@@ -62,6 +65,7 @@ func _ready() -> void:
 	hits_left = tuning.player_hits
 	_rig = SoldierRig.new()
 	add_child(_rig)
+	_rig.keep_solid()  # (never dissolved by the cutout: Cutout)
 	_rig.pose_set()  # (the set he springs into the run from: Retry and the bots, with no menu, too)
 	_rig.idle_beat.connect(func(sound: String) -> void: ready_beat.emit(sound))
 	_shadow = MeshInstance3D.new()
@@ -126,20 +130,20 @@ func handle_swipe(dir: Vector2i) -> void:
 	if standoff:
 		# Facing the boss: a step to the next lane, and nothing else.
 		if dir.y == 0:
-			lane = clampi(lane + dir.x, 0, tuning.lane_count - 1)
+			lane = _lane_toward(dir.x)
 		return
 	if in_cover:
 		# Swiping away from the cover (sideways) leaves it and resumes the run. Nothing else does.
 		var to := lane + (dir.x if dir.y == 0 else 0)
-		if dir.y == 0 and to >= 0 and to < tuning.lane_count:
+		if dir.y == 0 and to >= 0 and to < tuning.lane_count and to != barred_lane:
 			in_cover = false
 			lane = to
 		return
 	match dir:
 		Vector2i.LEFT:
-			lane = clampi(lane - 1, 0, tuning.lane_count - 1)
+			lane = _lane_toward(-1)
 		Vector2i.RIGHT:
-			lane = clampi(lane + 1, 0, tuning.lane_count - 1)
+			lane = _lane_toward(1)
 		Vector2i.UP:
 			if not is_airborne():
 				_slide_left = 0.0
@@ -148,6 +152,13 @@ func handle_swipe(dir: Vector2i) -> void:
 			_slide_left = tuning.slide_duration
 			if is_airborne():
 				_y_velocity = minf(_y_velocity, -tuning.jump_velocity)  # fast-fall into the slide
+
+
+## The lane a step `by` (-1 left, 1 right) takes him to: the next one over, unless that's off the
+## road or barred (barred_lane), when he stays where he is.
+func _lane_toward(by: int) -> int:
+	var to := clampi(lane + by, 0, tuning.lane_count - 1)
+	return lane if to == barred_lane else to
 
 
 ## The boss fight starts: stop at the standoff line (`stop_at`, route distance), up out of a slide.

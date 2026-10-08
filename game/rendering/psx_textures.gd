@@ -6,12 +6,18 @@ extends RefCounted
 ## palette per texture (like the PS1's colour tables). Nearest-filtered up close, with mipmaps so
 ## the detail doesn't sparkle far off. Real art replaces these later.
 ## Each texture is cached by key, and the noise uses a fixed seed so it looks the same every run.
+## Making one takes a few milliseconds (more on a phone), so the level makes them all ahead of
+## time, a few a frame (see makers()).
 ## Rows run top to bottom (y = 0 is the top of a wall).
 
 const SIZE := 64
 const ROAD := Color("3a3a37")
 ## Levels per colour channel after generating (PS1 colour-table look).
 const LEVELS := 28
+## How many different CCTV screens there are (cctv_screen's views), and menu boards (menu_board's
+## items).
+const CCTV_VIEWS := 4
+const MENU_ITEMS := 3
 
 static var _cache: Dictionary = {}
 
@@ -35,6 +41,24 @@ const GLYPHS := {
 	"W": ["101", "101", "111", "111", "101"], "X": ["101", "101", "010", "101", "101"],
 	"Y": ["101", "101", "010", "010", "010"], "-": ["000", "000", "111", "000", "000"],
 }
+
+
+## Every texture here that's made with nothing passed (each function below that takes no
+## arguments, found by name, so a new one is in without being listed), then each CCTV screen and
+## menu board: a Callable for each, to make it ahead of time. Those made from the caller's own
+## choices (wall's pattern and colour, vending_front's tint) only the caller knows, so it adds them.
+## Calling one that's already made costs next to nothing.
+static func makers() -> Array[Callable]:
+	var out: Array[Callable] = []
+	for m: Dictionary in (PsxTextures as Script).get_script_method_list():
+		var name: String = m["name"]
+		if not name.begins_with("_") and m["args"].is_empty() and m["return"].get("class_name", "") == &"Texture2D":
+			out.append(Callable(PsxTextures, name))
+	for view in CCTV_VIEWS:
+		out.append(cctv_screen.bind(view))
+	for item in MENU_ITEMS:
+		out.append(menu_board.bind(item))
+	return out
 
 
 ## One lane-width tile of road (4 m long): worn asphalt with cracks and oil stains, and a dashed
@@ -1181,8 +1205,9 @@ static func lobby_ceiling() -> Texture2D:
 	return _finish("lobby_ceiling", img)
 
 
-## The company's logo (ARGUS) for the lobby's logo wall: a pale emblem of three blades and the name
-## in stencil letters, on dark granite.
+## The company's logo for the lobby's logo wall and its banner: VORHALT, the story's company, as on
+## the start room's poster and computer (the user's choice: the lobby says it too). A pale emblem of
+## three blades and the name in stencil letters, on dark granite.
 static func company_logo() -> Texture2D:
 	if _cache.has("company_logo"):
 		return _cache["company_logo"]
@@ -1195,7 +1220,7 @@ static func company_logo() -> Texture2D:
 			for x in range(bx, bx + 6):
 				if x - bx <= (y - (40 - h)) / 2 + 1:
 					_put(img, x, y, pale)
-	_stencil(img, "ARGUS", 14, 46, pale, 1.0)
+	_stencil(img, "VORHALT", 17, 46, pale, 1.0, 1, 0.0)  # (centred under the emblem)
 	return _finish("company_logo", img)
 
 
@@ -1840,8 +1865,9 @@ static func _tiles(img: Image, w: int, h: int, grout: Color) -> void:
 				_shade(img, x, y, 0.85)
 
 
-## Worn stencil lettering in the 3x5 font; `scale` makes each font pixel bigger.
-static func _stencil(img: Image, text: String, x: int, y: int, color: Color, alpha: float, scale: int = 1) -> void:
+## Worn stencil lettering in the 3x5 font; `scale` makes each font pixel bigger. `wear`: the share of
+## its pixels worn away (none for print: a logo, a poster, a screen, which read as they should).
+static func _stencil(img: Image, text: String, x: int, y: int, color: Color, alpha: float, scale: int = 1, wear: float = 0.12) -> void:
 	var rng := _rng("stencil_" + text)
 	var cx := x
 	for ch in text:
@@ -1852,6 +1878,104 @@ static func _stencil(img: Image, text: String, x: int, y: int, color: Color, alp
 					if rows[gy][gx] == "1":
 						for sy in scale:
 							for sx in scale:
-								if rng.randf() > 0.12:  # worn
+								if rng.randf() > wear or wear <= 0.0:  # worn
 									_blend(img, cx + gx * scale + sx, y + gy * scale + sy, color, alpha)
 		cx += 4 * scale
+
+
+## The start room's computer screen (user: "an office table and computer"): VORHALT's blue log-in
+## screen, glowing (used unlit): a pale title bar with the name, lines of text, and a red ACCESS
+## DENIED box (CROSS tried it, then went through the filing cabinets instead), brighter in the
+## middle of the tube, with scanlines.
+static func crt_screen() -> Texture2D:
+	if _cache.has("crt_screen"):
+		return _cache["crt_screen"]
+	var img := _start("crt_screen", Color("1e4282"), 0.02)
+	for y in SIZE:
+		for x in SIZE:
+			var dx := (x - 31.5) / 32.0
+			var dy := (y - 31.5) / 32.0
+			_shade(img, x, y, 1.15 - 0.4 * (dx * dx + dy * dy))
+	_fill(img, Rect2i(0, 0, SIZE, 10), Color("c8d4dc"))
+	_stencil(img, "VORHALT", 4, 3, Color("1e3a6e"), 1.0, 1, 0.0)
+	for ly in [14, 18, 22]:  # USER / PASSWORD lines
+		for lx in range(6, 24 + (ly % 7) * 3):
+			_put(img, lx, ly, Color("9ab8d8"))
+		_fill(img, Rect2i(34, ly - 1, 24, 3), Color("0e2244"))
+	_fill(img, Rect2i(8, 32, 48, 17), Color("1a0a0a"))  # the alert box's shadow
+	_fill(img, Rect2i(6, 30, 48, 17), Color("c82418"))
+	_bevel(img, Rect2i(6, 30, 48, 17), 1.3, 0.6)
+	_stencil(img, "ACCESS", 18, 32, Color("ffffff"), 1.0, 1, 0.0)
+	_stencil(img, "DENIED", 18, 39, Color("ffffff"), 1.0, 1, 0.0)
+	for lx in range(6, 40):
+		_put(img, lx, 54, Color("7a98b8"))
+	_fill(img, Rect2i(42, 53, 3, 4), Color("e8f0f8"))  # the cursor
+	for y in range(0, SIZE, 2):
+		for x in SIZE:
+			_shade(img, x, y, 0.84)
+	return _finish("crt_screen", img)
+
+
+## Venetian blinds: pale slats, lit along the top edge and shaded under, a dark gap between them,
+## and a ladder cord down each side. 16 slats a tile (0.4 m a tile: 2.5 cm slats).
+static func blinds() -> Texture2D:
+	if _cache.has("blinds"):
+		return _cache["blinds"]
+	var img := _start("blinds", Color("b8b6aa"), 0.02)
+	for y in SIZE:
+		for x in SIZE:
+			match y % 4:
+				0:
+					_shade(img, x, y, 1.15)
+				2:
+					_shade(img, x, y, 0.86)
+				3:
+					_put(img, x, y, Color("3e3e38"))
+	for y in SIZE:
+		for cx in [9, 54]:
+			_put(img, cx, y, Color("dcd8cc"))
+	return _finish("blinds", img)
+
+
+## A VORHALT poster (the story: a faceless company, seen only in its signs): a pale chevron
+## emblem, the name big under it, and its line, ANY SECRET ANY BUYER, on dark navy in a thin
+## gold frame.
+static func vorhalt_poster() -> Texture2D:
+	if _cache.has("vorhalt_poster"):
+		return _cache["vorhalt_poster"]
+	var img := _start("vorhalt_poster", Color("141c2e"), 0.03)
+	var gold := Color("d8b860")
+	for i in 14:  # the emblem: a V of two thick strokes
+		for t in 4:
+			_put(img, 18 + i + t, 6 + i * 2, gold)
+			_put(img, 18 + i + t, 7 + i * 2, gold)
+			_put(img, 45 - i - t, 6 + i * 2, gold)
+			_put(img, 45 - i - t, 7 + i * 2, gold)
+	_stencil(img, "VORHALT", 5, 38, Color("e8e4d8"), 1.0, 2, 0.0)
+	_stencil(img, "ANY SECRET", 12, 50, gold, 1.0, 1, 0.0)
+	_stencil(img, "ANY BUYER", 14, 56, gold, 1.0, 1, 0.0)
+	_frame(img, 2, gold.darkened(0.3))
+	return _finish("vorhalt_poster", img)
+
+
+## The night city out of the start room's back windows: the MAIN FLOOR EXIT's city backdrop (the
+## bottom half), under as much night sky again (the top half: its gradient carried on up, darker,
+## with a few more stars), so a window looking out level sees the skyline with sky over it. 128 x 128.
+static func city_view() -> Texture2D:
+	if _cache.has("city_view"):
+		return _cache["city_view"]
+	var city := city_backdrop().get_image()
+	var w := city.get_width()
+	var h := city.get_height()
+	var img := Image.create(w, h * 2, false, Image.FORMAT_RGB8)
+	var rng := _rng("city_view_stars")
+	for y in h:
+		var c := Color("04060e").lerp(Color("0a1024"), pow(float(y) / h, 1.6))
+		for x in w:
+			img.set_pixel(x, y, c)
+	for k in 30:
+		img.set_pixel(rng.randi_range(0, w - 1), rng.randi_range(0, h - 1), Color("c8d0e0").darkened(rng.randf_range(0.2, 0.6)))
+	img.blit_rect(city, Rect2i(0, 0, w, h), Vector2i(0, h))
+	var tex := ImageTexture.create_from_image(img)
+	_cache["city_view"] = tex
+	return tex

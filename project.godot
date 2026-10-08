@@ -173,3 +173,15 @@ lamp_col_13={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
 }
+cutout_cam={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+cutout_fwd={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+cutout_misc={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}

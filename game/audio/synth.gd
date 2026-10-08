@@ -6,8 +6,30 @@ extends RefCounted
 ##
 ## Everything is baked into the sound (the web build can't run live audio effects), so echo here
 ## stands in for the PS1's reverb.
+##
+## Every op works through its samples CHUNK at a time and, between chunks, looks at `pace`: when the
+## frame's time for building sounds is up (SoundBank.work), it waits there for the next frame's turn
+## and carries on where it stopped. So a sound of any length is built a fraction of a millisecond at
+## a time, with exactly the samples it would have had built all at once. Each op is a coroutine, and
+## must be awaited. When nothing is pacing the work (pace.until_usec is 0), an op never waits.
 
 enum Wave { SINE, SQUARE, SAW, TRIANGLE, PULSE }
+
+## Samples worked through between looks at the clock: a tenth to a quarter of a millisecond on a
+## desktop, depending on the op.
+const CHUNK := 1024
+
+## When the building has to stop for this frame (Time.get_ticks_usec(), 0 = never), and the signal
+## to carry on (the next frame's turn).
+class Pace:
+	signal go
+	var until_usec := 0
+
+	func due() -> bool:
+		return until_usec > 0 and Time.get_ticks_usec() >= until_usec
+
+
+static var pace := Pace.new()
 
 var s := PackedFloat32Array()
 var rate := 22050
@@ -47,29 +69,35 @@ func tone(start: float, dur: float, f0: float, f1: float, amp: float, wave: Wave
 	var tail := int(rate * 0.01) if decay <= 0.0 else 0
 	var phase := 0.0
 	var w := int(wave)
-	for k in range(k0, k1):
-		phase += inc
-		if phase >= 1.0:
-			phase -= 1.0
-		inc *= f_step
-		var v: float
-		if w == 0:
-			v = sin(phase * TAU)
-		elif w == 1:
-			v = 1.0 if phase < 0.5 else -1.0
-		elif w == 2:
-			v = phase * 2.0 - 1.0
-		elif w == 3:
-			v = 1.0 - 4.0 * absf(phase - 0.5)
-		else:
-			v = 1.0 if phase < 0.25 else -1.0
-		var e := env
-		if k < att:
-			e *= float(k) / att
-		if tail > 0 and n - k < tail:
-			e *= float(n - k) / tail
-		a[i0 + k] += v * e
-		env *= env_step
+	var from := k0
+	while from < k1:
+		var to := mini(from + CHUNK, k1)
+		for k in range(from, to):
+			phase += inc
+			if phase >= 1.0:
+				phase -= 1.0
+			inc *= f_step
+			var v: float
+			if w == 0:
+				v = sin(phase * TAU)
+			elif w == 1:
+				v = 1.0 if phase < 0.5 else -1.0
+			elif w == 2:
+				v = phase * 2.0 - 1.0
+			elif w == 3:
+				v = 1.0 - 4.0 * absf(phase - 0.5)
+			else:
+				v = 1.0 if phase < 0.25 else -1.0
+			var e := env
+			if k < att:
+				e *= float(k) / att
+			if tail > 0 and n - k < tail:
+				e *= float(n - k) / tail
+			a[i0 + k] += v * e
+			env *= env_step
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -94,21 +122,27 @@ func noise(start: float, dur: float, amp: float, lp: float = 0.0, hp: float = 0.
 	var env := amp * pow(env_step, k0)
 	var att := maxi(1, int(attack * rate))
 	var tail := int(rate * 0.01) if decay <= 0.0 else 0
-	for k in range(k0, k1):
-		var v := _rng.randf() * 2.0 - 1.0
-		if use_lp:
-			low += kl * (v - low)
-			v = low * 1.6
-		if use_hp:
-			high_state += kh * (v - high_state)
-			v -= high_state
-		var e := env
-		if k < att:
-			e *= float(k) / att
-		if tail > 0 and n - k < tail:
-			e *= float(n - k) / tail
-		a[i0 + k] += v * e
-		env *= env_step
+	var from := k0
+	while from < k1:
+		var to := mini(from + CHUNK, k1)
+		for k in range(from, to):
+			var v := _rng.randf() * 2.0 - 1.0
+			if use_lp:
+				low += kl * (v - low)
+				v = low * 1.6
+			if use_hp:
+				high_state += kh * (v - high_state)
+				v -= high_state
+			var e := env
+			if k < att:
+				e *= float(k) / att
+			if tail > 0 and n - k < tail:
+				e *= float(n - k) / tail
+			a[i0 + k] += v * e
+			env *= env_step
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -117,9 +151,15 @@ func lowpass(hz: float) -> void:
 	var a := s
 	var k := _coef(hz)
 	var y := 0.0
-	for i in a.size():
-		y += k * (a[i] - y)
-		a[i] = y
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			y += k * (a[i] - y)
+			a[i] = y
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -127,9 +167,15 @@ func highpass(hz: float) -> void:
 	var a := s
 	var k := _coef(hz)
 	var y := 0.0
-	for i in a.size():
-		y += k * (a[i] - y)
-		a[i] -= y
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			y += k * (a[i] - y)
+			a[i] -= y
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -147,14 +193,20 @@ func resonate(hz: float, q: float, mix: float = 1.0) -> void:
 	var x2 := 0.0
 	var y1 := 0.0
 	var y2 := 0.0
-	for i in a.size():
-		var x := a[i]
-		var y := (b0 * x - b0 * x2 - a1 * y1 - a2 * y2) / a0
-		x2 = x1
-		x1 = x
-		y2 = y1
-		y1 = y
-		a[i] = lerpf(x, y * 4.0, mix)
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			var x := a[i]
+			var y := (b0 * x - b0 * x2 - a1 * y1 - a2 * y2) / a0
+			x2 = x1
+			x1 = x
+			y2 = y1
+			y1 = y
+			a[i] = lerpf(x, y * 4.0, mix)
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -166,11 +218,23 @@ func echo(delay: float, feedback: float, mix: float) -> void:
 		return
 	var wet := PackedFloat32Array()
 	wet.resize(a.size())
-	for i in a.size():
-		var back := wet[i - d] if i >= d else 0.0
-		wet[i] = a[i] + back * feedback
-	for i in a.size():
-		a[i] += (wet[i] - a[i]) * mix
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			var back := wet[i - d] if i >= d else 0.0
+			wet[i] = a[i] + back * feedback
+		from = to
+		if pace.due():
+			await pace.go
+	from = 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			a[i] += (wet[i] - a[i]) * mix
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -179,10 +243,16 @@ func crush(bits: int, hold: int = 1) -> void:
 	var a := s
 	var steps := pow(2.0, bits - 1)
 	var held := 0.0
-	for i in a.size():
-		if i % maxi(1, hold) == 0:
-			held = roundf(clampf(a[i], -1.0, 1.0) * steps) / steps
-		a[i] = held
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			if i % maxi(1, hold) == 0:
+				held = roundf(clampf(a[i], -1.0, 1.0) * steps) / steps
+			a[i] = held
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -190,15 +260,27 @@ func crush(bits: int, hold: int = 1) -> void:
 func drive(amount: float) -> void:
 	var a := s
 	var norm := tanh(amount)
-	for i in a.size():
-		a[i] = tanh(a[i] * amount) / norm
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			a[i] = tanh(a[i] * amount) / norm
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
 func gain(g: float) -> void:
 	var a := s
-	for i in a.size():
-		a[i] *= g
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			a[i] *= g
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -206,11 +288,23 @@ func gain(g: float) -> void:
 func normalize(peak: float = 0.9) -> void:
 	var a := s
 	var m := 0.0001
-	for v in a:
-		m = maxf(m, absf(v))
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			m = maxf(m, absf(a[i]))
+		from = to
+		if pace.due():
+			await pace.go
 	var g := peak / m
-	for i in a.size():
-		a[i] *= g
+	from = 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			a[i] *= g
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -221,19 +315,37 @@ func loopify(seconds: float) -> void:
 	var total := a.size() - n
 	var out := PackedFloat32Array()
 	out.resize(total)
-	for i in total:
-		out[i] = a[i]
-	for k in n:
-		var t := float(k) / n
-		out[k] = a[k] * t + a[total + k] * (1.0 - t)
+	var from := 0
+	while from < total:
+		var to := mini(from + CHUNK, total)
+		for i in range(from, to):
+			out[i] = a[i]
+		from = to
+		if pace.due():
+			await pace.go
+	from = 0
+	while from < n:
+		var to := mini(from + CHUNK, n)
+		for k in range(from, to):
+			var t := float(k) / n
+			out[k] = a[k] * t + a[total + k] * (1.0 - t)
+		from = to
+		if pace.due():
+			await pace.go
 	s = out
 
 
 ## Slow swell for a loop (wind gusts): multiply by 1 + depth * sin(cycles round the loop).
 func swell(cycles: float, depth: float) -> void:
 	var a := s
-	for i in a.size():
-		a[i] *= 1.0 + depth * sin(TAU * cycles * float(i) / a.size())
+	var from := 0
+	while from < a.size():
+		var to := mini(from + CHUNK, a.size())
+		for i in range(from, to):
+			a[i] *= 1.0 + depth * sin(TAU * cycles * float(i) / a.size())
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
@@ -242,18 +354,30 @@ func mix_in(other: Synth, start: float, amp: float = 1.0) -> void:
 	var a := s
 	var i0 := int(start * rate)
 	var b := other.s
-	for k in b.size():
-		var i := i0 + k
-		if i >= 0 and i < a.size():
-			a[i] += b[k] * amp
+	var from := 0
+	while from < b.size():
+		var to := mini(from + CHUNK, b.size())
+		for k in range(from, to):
+			var i := i0 + k
+			if i >= 0 and i < a.size():
+				a[i] += b[k] * amp
+		from = to
+		if pace.due():
+			await pace.go
 	s = a
 
 
 func to_stream(loop: bool = false) -> AudioStreamWAV:
 	var bytes := PackedByteArray()
 	bytes.resize(s.size() * 2)
-	for i in s.size():
-		bytes.encode_s16(i * 2, int(clampf(s[i], -1.0, 1.0) * 32767.0))
+	var from := 0
+	while from < s.size():
+		var to := mini(from + CHUNK, s.size())
+		for i in range(from, to):
+			bytes.encode_s16(i * 2, int(clampf(s[i], -1.0, 1.0) * 32767.0))
+		from = to
+		if pace.due():
+			await pace.go
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
 	wav.mix_rate = rate

@@ -15,7 +15,8 @@ extends Node
 ##                  check), the mission briefing (it taps through every line, some typed out, some
 ##                  tapped part way), the opening pan, then the run. It watches CROSS's ready stance
 ##                  hand over to the run: RESULT ends intro=ok (no joint jumping, the pistol never
-##                  at the camera, no camera cut, never standing, control at the pan's end) and
+##                  at the camera, no camera cut, never standing, control at the pan's end, every
+##                  texture made ahead of time made before it, none in the run) and
 ##                  brief=ok (every line shown; a tap finished a line or showed the next, one tap
 ##                  counting once; nothing of the run started under it)
 ##   intro_skip   - as menu_start, but presses SKIP in the briefing's second line, then taps 0.3 s
@@ -69,6 +70,12 @@ extends Node
 ## gone), the chopper's clock not moved, us not moved, the boss in view on a tall phone through it,
 ## his death really shown (every shot ended by its part of his death, not its timeout), and no
 ## early tap skipping it.
+## The zone doors the alarm runner goes through are watched in every scenario (user: "the big doors
+## should open and close for him, so he doesn't just faze through them"): each must be open
+## (its leaves out of his way, or its shutter up) by the time he's at it, and shut again by the time
+## we get there, then burst open by us as ever (its leaves where a shut door's go, no further; the
+## shutter right up). RESULT ends gates=opened for him/shut again when we got there/ok, only when
+## he opened one.
 ## Every bot that gets to the helipad fights the boss: while his minigun spins up it steps to the
 ## nearest of his 2 free lanes, and holds FIRE (he's the target). RESULT ends boss=down/hits/attacks.
 ## His pattern is fixed for each scenario (a seed from its name), so a run repeats.
@@ -134,6 +141,12 @@ var _held_once := false
 ## (19.5:9: 270x585, the narrowest view the game gets) when they did.
 var _locks_seen := {}
 var _unseen := 0
+## The zone doors seen open for the alarm runner: {gate (the level's), burst (the frame we burst
+## through it, or -1)}; how many were shut again when we got there; and what went wrong, if anything.
+var _gates: Array[Dictionary] = []
+var _gates_shut := 0
+var _gates_bad := ""
+var _frame := 0
 
 
 func _ready() -> void:
@@ -190,6 +203,7 @@ func _physics_process(_delta: float) -> void:
 	if _watch_ko():
 		return  # (the KO replay: we just watch)
 	_shoot()
+	_watch_gates()
 	if d < 0.3 or _level.in_stairwell():
 		return  # in the start room or a stairwell: no swipes until we're through the door
 	if _level._boss_fight != null and is_instance_valid(_level._boss_fight) and _level._boss_fight.state == Boss.State.SPINDOWN:
@@ -696,13 +710,69 @@ func _dodge_lane(obstacles: Array, d: float) -> int:
 	return best
 
 
+## Every frame of the run: the zone doors the alarm runner goes through (see the top).
+func _watch_gates() -> void:
+	_frame += 1
+	for g: Dictionary in _level._gates:
+		if g["state"] != _level.Gate.SHUT and _watched(g) < 0:
+			_gates.append({"gate": g, "burst": -1})
+	for w in _gates:
+		var g: Dictionary = w["gate"]
+		var sec = g["by"]
+		# He's at it (his front at the door): it must be out of his way by now.
+		if g["state"] == _level.Gate.OPEN and is_instance_valid(sec) and sec.is_running() \
+				and absf(float(g["at"]) - 0.35 - sec.at) < 0.2 and is_instance_valid(g["node"]):
+			var open: float = _level._gate_open_part(g)
+			if open < 0.9:
+				_gate_wrong("late %.2f open at %.1f" % [open, g["at"]])
+		if g["state"] == _level.Gate.BURST and int(w["burst"]) < 0:
+			w["burst"] = _frame
+			if g["was"] == _level.Gate.SHUT:
+				_gates_shut += 1
+			elif not is_instance_valid(sec) or sec.is_alive():
+				_gate_wrong("not shut at %.1f (%d)" % [g["at"], g["was"]])  # (only held open for him lying in it)
+		if int(w["burst"]) >= 0 and _frame == int(w["burst"]) + 50:
+			# Burst open by us as ever: its leaves where a shut door's go (no further), the shutter up.
+			var sh = g["shutter"]
+			if sh != null:
+				if is_instance_valid(sh["node"]) and absf(sh["node"].position.y - (float(sh["shut_y"]) + _level.GATE_H - 0.05)) > 0.01:
+					_gate_wrong("shutter at %.2f" % sh["node"].position.y)
+			else:
+				for leaf: Dictionary in g["leaves"]:
+					var shut: Vector3 = leaf["shut"]
+					if not is_instance_valid(leaf["node"]):
+						continue
+					var r: Vector3 = leaf["node"].rotation
+					if absf(angle_difference(shut.y + 1.9 * float(leaf["swing"]), r.y)) > 0.01 or absf(angle_difference(shut.z + 0.1 * float(leaf["swing"]), r.z)) > 0.01:
+						_gate_wrong("leaf at %.2f/%.2f" % [angle_difference(shut.y, r.y), angle_difference(shut.z, r.z)])
+
+
+## The gate's place in _gates (by identity: they're dictionaries), or -1.
+func _watched(g: Dictionary) -> int:
+	for i in _gates.size():
+		if is_same(_gates[i]["gate"], g):
+			return i
+	return -1
+
+
+func _gate_wrong(what: String) -> void:
+	if _gates_bad == "":
+		_gates_bad = what
+
+
+func _gates_report() -> String:
+	if _gates.is_empty():
+		return ""
+	return " gates=%d/%d/%s" % [_gates.size(), _gates_shut, "ok" if _gates_bad == "" else "bad(%s)" % _gates_bad]
+
+
 func _report(reason: String) -> void:
 	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d lights=%d time=%.1f snipers=%d/%d/%d" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report)
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report())
 	get_tree().quit()
 
 
@@ -729,6 +799,8 @@ func _watch_intro() -> void:
 		_level._on_tap(Vector2(135, 240))
 	if GameState.run_active and not d.has("run"):
 		d["run"] = f
+		# The level's textures made ahead of time: all made by now, and it's stopped making them.
+		d["warm"] = _level._to_warm.size() - _level._warm_next + (1 if _level.is_processing() else 0)
 	var now: Array = [rig.hips.position]
 	for j in rig._all_joints():
 		now.append(j.quaternion)
@@ -748,9 +820,10 @@ func _watch_intro() -> void:
 	d["done"] = true
 	var want := int(round(_player.tuning.intro_pan_time * 60.0)) if scenario == "menu_start" else 18
 	var took := int(d["run"]) - int(d.get("pan", -100000))
-	var ok: bool = float(d["step"]) < 0.25 and float(d["gun"]) > 35.0 and float(d["cam"]) < 0.25 and not d.has("stood") and absi(took - want) <= 1
-	_intro_report = " intro=ok" if ok else " intro=bad(step %.2f, gun %.0f, cam %.2f m, stood %d, control after %d frames)" % [
-			d["step"], d["gun"], d["cam"], d.get("stood", 0), took]
+	var ok: bool = float(d["step"]) < 0.25 and float(d["gun"]) > 35.0 and float(d["cam"]) < 0.25 and not d.has("stood") and absi(took - want) <= 1 \
+			and int(d["warm"]) == 0 and _level._to_warm.is_empty()
+	_intro_report = " intro=ok" if ok else " intro=bad(step %.2f, gun %.0f, cam %.2f m, stood %d, control after %d frames, textures left %d)" % [
+			d["step"], d["gun"], d["cam"], d.get("stood", 0), took, d["warm"]]
 	var b: Dictionary = d.get("brief", {})
 	var lines: int = b.get("count", -1)
 	var brief_ok: bool = String(b.get("bad", "?")) == "" and d.has("pan") and b.get("closed", 0) == 1

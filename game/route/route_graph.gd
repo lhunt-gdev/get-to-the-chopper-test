@@ -26,9 +26,29 @@ const WALL_TROOPER_CLEARANCE := 15.0
 ## no jump/slide obstacle may be within this many metres in them. You can't swipe and jump at once.
 const CROSSING_WINDOW := 4.0
 ## How deep each object is along the route (metres), and the clear gap needed between two
-## objects in the same lane (user rule: nothing overlaps).
-const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.1, "box": 0.9, "wall": 1.0, "booth": 3.5, "trooper": 0.5}
+## objects in the same lane (user rule: nothing overlaps). Barriers, pipes and tripwires are as deep
+## as the level builds them (prototype_slice.gd KINDS; a test keeps them the same): the
+## fair-reaction rule times you through them.
+const DEPTHS := {"barrier": 0.3, "pipe": 0.3, "tripwire": 0.05, "box": 0.9, "wall": 1.0, "booth": 3.5, "trooper": 0.5}
 const MIN_GAP := 1.0
+## The fair-reaction rule (user, 2026-10-08): "But it only works as long as there is still time for
+## the player to land and swipe." Between two obstacles you have to act on in the same lane, there is
+## always time to land if you must, then a swipe's reaction time, then for that swipe to work before
+## the second one can trip you (reaction_gap). Obstacles to jump that one jump clears together
+## (one_jump_reach) are one obstacle to it: there's no landing between them. What each one asks of you:
+const ACTIONS := {"barrier": "jump", "tripwire": "jump", "pipe": "slide"}
+## The swipe's reaction time (s), by setting. HARD is the floor ("for the harder level is ok for this
+## to be challenging"): about a quarter of a second to see the cue (you're down, you're past it) and
+## start the swipe, the swipe itself (the finger has to travel 8% of the screen's width before it
+## counts: SwipeInput), and Safari's touch and display delay: about 0.35 s, rounded up. "On easy
+## levels the gaps between objects will be larger": MEDIUM and EASY are for when the settings are
+## built (nothing uses them yet).
+const REACTION_HARD := 0.4
+const REACTION_MEDIUM := 0.5
+const REACTION_EASY := 0.6
+## How far past its front and back faces an obstacle can still trip you (m): the level's hit test
+## (prototype_slice.gd _check_obstacles) reaches this far.
+const HIT_REACH := 0.2
 ## Optional per-obstacle "look" (overrides the area's default look; gameplay is unchanged).
 const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe", "bunting", "girder", "banner", "exit_sign"], "box": ["crate", "desk", "cabinet", "roof_vent", "reception"],
 		"barrier": ["cabinet", "blockade", "vent"]}
@@ -36,9 +56,21 @@ const LOOKS := {"wall": ["booth"], "pipe": ["pipe", "wires", "double_pipe", "bun
 const WIRE_THEMES := ["office", "security", "canteen"]
 ## Live wires span only this many neighbouring lanes (user rule: never all 5).
 const WIRE_LANES := [3, 4]
-## Nothing (obstacle or trooper) this close to the start of an area reached by stairs: the flight
-## is 12 m, then you burst out of the exit door (user rule: not too close to the exit).
+## Nothing (an obstacle of any kind, a trooper, a dog, the alarm runner, a searchlight or a sniper)
+## within this many metres after a stairwell's exit door, up or down: the same room a zone door
+## gets (MARKER_CLEAR_AFTER). User, 2026-10-07: "Rule that after the player exits the stairs up or
+## down objects can not be placed right outside, it's unfair as player can not react quick enough
+## to avoid." (It used to count from the start of the area, where the flight begins, so only the
+## 8 m after the door were kept clear: under a second at run speed.)
 const STAIR_EXIT_CLEAR := 20.0
+## How long a flight of stairs is (m): one tier (Tuning.tier_height, 4 m) up or down, at
+## Tuning.stairs_run (3) metres on per metre of height. It's the first stretch of the area it takes
+## you to, and its exit door is at its end. The level builds every flight from those two
+## (prototype_slice.gd _segment_shape, ramp_len) and checks they still come to this when it loads.
+const STAIRS_FLIGHT := 12.0
+## So in an area reached by stairs, nothing before this far in (m): the flight, then the clear
+## stretch after its exit door.
+const STAIR_CLEAR_TO := STAIRS_FLIGHT + STAIR_EXIT_CLEAR
 ## Nothing (obstacle or trooper) this close before a halfway marker's double door, or this far
 ## after it: you burst through blind, so you need time to see what's ahead (like a stairwell's exit).
 ## Enemy kinds a level can place.
@@ -157,6 +189,18 @@ func all_next(id: StringName) -> Array[Dictionary]:
 	return out
 
 
+## The doors to the stairs up or down at the end of this node, and whether each is open at this
+## alert: [{edge, side, open}]. The level's door cues: arrows in while open, a padlock while
+## locked (user). Ladders aren't doors, so they're left out.
+func stair_doors(id: StringName, alert_level: int) -> Array[Dictionary]:
+	var open := available_next(id, alert_level)
+	var out: Array[Dictionary] = []
+	for edge in all_next(id):
+		if via_of(edge) == "stairs":
+			out.append({"edge": edge, "side": side_of(edge), "open": open.has(edge)})
+	return out
+
+
 static func side_of(edge: Dictionary) -> String:
 	return String(edge.get("side", "straight"))
 
@@ -241,6 +285,249 @@ static func _overlaps(id: StringName, obstacles: Array, enemies: Array) -> Packe
 	return problems
 
 
+## The fair-reaction rule's least distance (m, centre to centre down the road) from a `first` to a
+## `second` obstacle in the same lane (kinds in ACTIONS), worked out from Tuning's run and jump, so
+## that however you got past `first`, there is time to land if you must, then `reaction` seconds to
+## swipe, then for the swipe to work before `second` can trip you. A sidestep doesn't count as a way
+## out: it is a swipe too, and it only moves you into another lane's obstacles.
+static func reaction_gap(first: String, second: String, t: Tuning, reaction: float = REACTION_HARD) -> float:
+	# The stretch of road each one can trip you on.
+	var zone_a: float = DEPTHS[first] + 2.0 * HIT_REACH
+	var zone_b: float = DEPTHS[second] + 2.0 * HIT_REACH
+	return zone_a / 2.0 + _clear_road(ACTIONS[first], zone_a, ACTIONS[second], t, reaction) + zone_b / 2.0
+
+
+## The fair-reaction rule's clear road (m) from the end of a stretch you act on, `zone_a` m long (one
+## obstacle's, or the stretch of a few that one jump clears together), to the start of the next one's,
+## by what each asks of you ("jump" or "slide"): time to land if you must, then `reaction` seconds to
+## swipe, then for the swipe to work.
+static func _clear_road(first: String, zone_a: float, second: String, t: Tuning, reaction: float) -> float:
+	var lift := t.jump_velocity
+	var g := t.gravity
+	var air := 2.0 * lift / g  # a whole jump, up and down
+	var clear := _above_clear_height(t)
+	var up := clear.x
+	var down := clear.y
+	# Seconds from leaving the first one's stretch to reaching the second's: the reaction, and a
+	# frame, since the game reads the swipe and checks for a hit once a frame (the swipe has to be in
+	# by the frame before the second one's stretch).
+	var need := reaction + 1.0 / Engine.physics_ticks_per_second
+	if first == "jump":
+		# The latest jump that clears it (his feet at clear height just as its stretch starts) has
+		# him this far into the jump as he leaves it: the longest in the air after it.
+		var off := up + zone_a / t.run_speed
+		if second == "jump":
+			need += air - off  # he has to land first: an up swipe in the air does nothing
+		else:
+			# A down swipe in the air drops him at jump_velocity straight into the slide, which counts
+			# once he's down (Player.handle_swipe). The longest drop is from the highest he can be
+			# when he swipes.
+			var at := clampf(lift / g, off + reaction, down + need)
+			var h := maxf(lift * at - g * at * at / 2.0, 0.0) if at < air else 0.0
+			need += (sqrt(lift * lift + 2.0 * g * h) - lift) / g
+	if second == "jump":
+		need += up  # an up swipe's lift to clear height
+	return need * t.run_speed
+
+
+## In a jump, his feet are above jump_clear_height from x until y seconds after he takes off.
+static func _above_clear_height(t: Tuning) -> Vector2:
+	var root := sqrt(maxf(t.jump_velocity * t.jump_velocity - 2.0 * t.gravity * t.jump_clear_height, 0.0))
+	return Vector2(t.jump_velocity - root, t.jump_velocity + root) / t.gravity
+
+
+## The longest stretch of road (m) one jump carries his feet over above jump_clear_height, less a
+## frame's run: the game reads the swipe once a frame, so he can only take off on a frame, and there
+## must be one whose jump clears the whole stretch. Jump obstacles in a lane closer together than
+## this, from the front of the first one's stretch to the back of the last one's, are one jump to the
+## fair-reaction rule (user: "there is still time for the player to land and swipe": with one jump
+## over them all, there's no landing between them to need time for).
+static func one_jump_reach(t: Tuning) -> float:
+	var clear := _above_clear_height(t)
+	return (clear.y - clear.x - 1.0 / Engine.physics_ticks_per_second) * t.run_speed
+
+
+## The furthest apart (m, centre to centre) a `first` and a `second` obstacle to jump can be in a lane
+## for one jump to clear both. Further apart, the second needs reaction_gap.
+static func one_jump_gap(first: String, second: String, t: Tuning) -> float:
+	return one_jump_reach(t) - (DEPTHS[first] + DEPTHS[second]) / 2.0 - 2.0 * HIT_REACH
+
+
+## A stretch of road's obstacles for the fair-reaction rule: the ones to act on and the cover (which
+## stops you), as {kind, at, lanes, name, area}. `offset` is added to each "at"; `lanes` maps an
+## authored lane to the lane it's checked in (missing: left out).
+func _road_of(id: StringName, offset: float = 0.0, lanes: Dictionary = {}) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for ob in node_data(id).get("obstacles", []):
+		var kind := String(ob.get("kind", ""))
+		if not (ACTIONS.has(kind) or kind in ["box", "wall"]):
+			continue
+		var in_lanes: Array[int] = []
+		for l in ob.get("lanes", []):
+			if lanes.is_empty():
+				in_lanes.append(int(l))
+			elif lanes.has(int(l)):
+				in_lanes.append(int(lanes[int(l)]))
+		if in_lanes.is_empty():
+			continue
+		var name := "%s at %s m" % [kind, ob.get("at")] + (" into '%s'" % id if offset > 0.0 else "")
+		out.append({"kind": kind, "at": float(ob.get("at", 0)) + offset, "lanes": in_lanes, "name": name, "area": id})
+	return out
+
+
+## The fair-reaction rule along a stretch of road (_road_of): in each lane, each obstacle to act on
+## and the next one there (unless cover between them stops you first) must be reaction_gap apart.
+## Obstacles to jump that one jump clears together (one_jump_reach) count as one, as deep as the
+## stretch they cover. `across` (the road of two areas joined): only the pairs from one area into
+## the next, the first one starting in the area before (a one-jump pair over the join included, so
+## what follows it is timed from the pair) and the second in the next. `inside`: only the pairs
+## that start in that area (on a road joined to the area before it: _too_soon_in).
+static func _too_soon(where: String, road: Array, t: Tuning, reaction: float, across := false, inside: StringName = &"") -> PackedStringArray:
+	var order := road.duplicate()
+	order.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["at"] < b["at"])
+	var reach := one_jump_reach(t)
+	var pairs := {}  # "first's obstacles | second's" (indices in `order`) -> {a, b, lanes}
+	var lanes := {}
+	for o in order:
+		for l: int in o["lanes"]:
+			lanes[l] = true
+	for lane: int in lanes:
+		# What you act on in this lane, in order: {members (indices in `order`), start, end, action}
+		# for each obstacle, or for each run of them that one jump clears; {} for cover (you stop at it).
+		var acts: Array[Dictionary] = []
+		for i in order.size():
+			var o: Dictionary = order[i]
+			if not lane in o["lanes"]:
+				continue
+			if not ACTIONS.has(o["kind"]):
+				acts.append({})
+				continue
+			var half: float = DEPTHS[o["kind"]] / 2.0 + HIT_REACH
+			var last: Dictionary = acts.back() if not acts.is_empty() else {}
+			if not last.is_empty() and last["action"] == "jump" and ACTIONS[o["kind"]] == "jump" \
+					and maxf(last["end"], o["at"] + half) - minf(last["start"], o["at"] - half) <= reach + 0.001:
+				last["members"].append(i)
+				last["start"] = minf(last["start"], o["at"] - half)
+				last["end"] = maxf(last["end"], o["at"] + half)
+			else:
+				acts.append({"members": [i], "start": o["at"] - half, "end": o["at"] + half, "action": ACTIONS[o["kind"]]})
+		for k in range(1, acts.size()):
+			var a := acts[k - 1]
+			var b := acts[k]
+			if a.is_empty() or b.is_empty():
+				continue
+			if across and order[a["members"][0]]["area"] == order[b["members"][0]]["area"]:
+				continue
+			if inside != &"" and order[a["members"][0]]["area"] != inside:
+				continue
+			var key := "%s|%s" % [a["members"], b["members"]]
+			if not pairs.has(key):
+				pairs[key] = {"a": a, "b": b, "lanes": []}
+			pairs[key]["lanes"].append(lane)
+	var found := pairs.values()
+	found.sort_custom(func(p: Dictionary, q: Dictionary) -> bool:
+		return Vector2i(p["a"]["members"].back(), p["b"]["members"][0]) < Vector2i(q["a"]["members"].back(), q["b"]["members"][0]))
+	var problems := PackedStringArray()
+	for pair: Dictionary in found:
+		var a: Dictionary = pair["a"]
+		var b: Dictionary = pair["b"]
+		var road_needed := _clear_road(a["action"], a["end"] - a["start"], b["action"], t, reaction)
+		var clear: float = b["start"] - a["end"]
+		if clear < road_needed - 0.001:
+			# Told centre to centre, from the last one you're past to the first one ahead.
+			var apart: float = order[b["members"][0]]["at"] - order[a["members"].back()]["at"]
+			var in_lanes: Array = pair["lanes"]
+			in_lanes.sort()
+			problems.append("%s: %s is too soon after the %s in lane%s %s (%.2f m apart, %.2f m needed: time to land if you must, then a %.2f s swipe)"
+					% [where, _act_name(order, b), _act_name(order, a), "s" if in_lanes.size() > 1 else "", ", ".join(PackedStringArray(in_lanes.map(func(l: int) -> String: return str(l)))),
+					apart, apart + road_needed - clear, reaction])
+	return problems
+
+
+## What the fair-reaction rule calls one thing you act on (_too_soon): an obstacle, or a run of them
+## one jump clears.
+static func _act_name(order: Array, act: Dictionary) -> String:
+	var names := PackedStringArray()
+	for i: int in act["members"]:
+		names.append(order[i]["name"])
+	if names.size() == 1:
+		return names[0]
+	return "%s (one jump clears %s)" % [" and the ".join(names), "both" if names.size() == 2 else "them all"]
+
+
+## The fair-reaction rule across the join from this area into each next one (the pairs from one into
+## the other: _too_soon's `across`). Up a ladder you climb rather than run.
+func _too_soon_on(id: StringName, t: Tuning, reaction: float) -> PackedStringArray:
+	var problems := PackedStringArray()
+	var here := _road_of(id)
+	for edge in all_next(id):
+		var to := StringName(edge.get("to", ""))
+		if not _nodes.has(to) or via_of(edge) == "ladder":
+			continue
+		problems.append_array(_too_soon("node '%s' into '%s'" % [id, to], here + _road_of(to, length_of(id), _join_lanes(edge)), t, reaction, true))
+	return problems
+
+
+## Which of the next area's lanes you run on into along `edge`, and from which lane of this one:
+## {its lane: this lane}. Straight on, every lane goes on; at a side exit, only its outer lane does,
+## as the branch's lane nearest the main road (the level's _handover_lanes).
+func _join_lanes(edge: Dictionary) -> Dictionary:
+	var last_lane := int(_mission.get("authored_for_lanes", 5)) - 1
+	var lanes := {}
+	match side_of(edge):
+		"left":
+			lanes[last_lane] = 0
+		"right":
+			lanes[0] = last_lane
+		_:
+			for l in last_lane + 1:
+				lanes[l] = l
+	return lanes
+
+
+## The fair-reaction rule inside one area, its pairs timed as you meet them coming in: on its own
+## road where you can come in without running on into it (it's the start, nothing leads in, or a
+## ladder does), and on its road joined to the area before for each way you run on into it. So a
+## one-jump pair over the join counts as one, as it would inside one area (what follows it is timed
+## from the pair: _too_soon_on tells that one), and a way in that runs nothing on into it times the
+## area's first obstacles as they stand. A pair found more than one way is told once.
+func _too_soon_in(id: StringName, ways_in: Array, t: Tuning, reaction: float) -> PackedStringArray:
+	var where := "node '%s'" % id
+	var own := _road_of(id)
+	var problems := PackedStringArray()
+	var alone := ways_in.is_empty() or id == start_id
+	for way: Dictionary in ways_in:
+		if via_of(way["edge"]) == "ladder":
+			alone = true
+	if alone:
+		problems.append_array(_too_soon(where, own, t, reaction))
+	for way: Dictionary in ways_in:
+		if via_of(way["edge"]) == "ladder":
+			continue
+		var from: StringName = way["from"]
+		var back := {}  # the area before's lanes -> this one's
+		var lanes := _join_lanes(way["edge"])
+		for l: int in lanes:
+			back[lanes[l]] = l
+		for problem in _too_soon(where, _road_of(from, -length_of(from), back) + own, t, reaction, false, id):
+			if not problem in problems:
+				problems.append(problem)
+	return problems
+
+
+## Every way into each area: {area: [{from, edge}]}, whatever the alert.
+func _ways_in() -> Dictionary:
+	var ways := {}
+	for id: StringName in _nodes:
+		for edge in all_next(id):
+			var to := StringName(edge.get("to", ""))
+			if _nodes.has(to):
+				if not ways.has(to):
+					ways[to] = []
+				ways[to].append({"from": id, "edge": edge})
+	return ways
+
+
 ## True if some route from this node reaches the end of the mission (whatever the alert).
 func reaches_end(from: StringName) -> bool:
 	var seen := {}
@@ -257,8 +544,10 @@ func reaches_end(from: StringName) -> bool:
 	return false
 
 
-## Returns a list of problems. Empty means the graph is valid.
-func validate() -> PackedStringArray:
+## Returns a list of problems. Empty means the graph is valid. The fair-reaction rule is worked out
+## from `tuning` (Tuning's defaults if none), with `reaction` for the swipe (the setting's).
+func validate(tuning: Tuning = null, reaction: float = REACTION_HARD) -> PackedStringArray:
+	var t := tuning if tuning != null else Tuning.new()
 	var problems := PackedStringArray()
 	if not _nodes.has(start_id):
 		problems.append("start node '%s' does not exist" % start_id)
@@ -267,6 +556,7 @@ func validate() -> PackedStringArray:
 		var t0 := float(ch.get("lands_at", 0)); var t1 := float(ch.get("lifts_at", 0)); var t2 := float(ch.get("gone_at", 0))
 		if not (t0 > 0.0 and t0 < t1 and t1 < t2):
 			problems.append("mission chopper times must be lands_at < lifts_at < gone_at")
+	var ways_in := _ways_in()
 	# Every route, up, down or main, must still get you to the chopper.
 	for id: StringName in _nodes:
 		if not reaches_end(id):
@@ -339,6 +629,8 @@ func validate() -> PackedStringArray:
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
 		problems.append_array(_corner_walls(id, n.get("obstacles", []), corners_of(id)))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
+		problems.append_array(_too_soon_in(id, ways_in.get(id, []), t, reaction))
+		problems.append_array(_too_soon_on(id, t, reaction))
 		for e in n.get("enemies", []):
 			if not String(e.get("kind", "")) in ENEMY_KINDS:
 				problems.append("node '%s': unknown enemy kind '%s'" % [id, e.get("kind")])
@@ -389,8 +681,8 @@ func validate() -> PackedStringArray:
 				problems.append("node '%s': a searchlight needs \"side\": \"left\" or \"right\"" % id)
 			if s_at <= 0.0 or s_at >= length:
 				problems.append("node '%s': searchlight at %s m is outside the area" % [id, s.get("at")])
-			if entered_by_stairs and s_at < STAIR_EXIT_CLEAR:
-				problems.append("node '%s': searchlight at %s m is too close to the stairs' exit door" % [id, s.get("at")])
+			if entered_by_stairs and s_at < STAIR_CLEAR_TO:
+				problems.append("node '%s': searchlight at %s m is too close to the stairs' exit door (the door is %d m in: nothing before %d m)" % [id, s.get("at"), STAIRS_FLIGHT, STAIR_CLEAR_TO])
 			if has_side_exit and s_at > length - SEARCHLIGHT_SPLIT_CLEAR:
 				problems.append("node '%s': searchlight at %s m is too near the split (you'd have to choose between your exit and dodging it)" % [id, s.get("at")])
 			for j in range(i + 1, lights.size()):
@@ -411,8 +703,8 @@ func validate() -> PackedStringArray:
 				problems.append("node '%s': snipers only at CAUTION and ALERT (min_alert 2 or 3)" % id)
 			if s_at < 0.0 or s_end > length - SNIPER_END_CLEAR:
 				problems.append("node '%s': sniper at %s m doesn't finish before the area's last %s m" % [id, s.get("at"), SNIPER_END_CLEAR])
-			if entered_by_stairs and s_at < STAIR_EXIT_CLEAR:
-				problems.append("node '%s': sniper at %s m is too close to the stairs' exit door" % [id, s.get("at")])
+			if entered_by_stairs and s_at < STAIR_CLEAR_TO:
+				problems.append("node '%s': sniper at %s m is too close to the stairs' exit door (the door is %d m in: nothing before %d m)" % [id, s.get("at"), STAIRS_FLIGHT, STAIR_CLEAR_TO])
 			for ob in n.get("obstacles", []):
 				var ob_at := float(ob.get("at", 0))
 				if ob_at >= s_at and ob_at <= s_end:
@@ -458,8 +750,8 @@ func validate() -> PackedStringArray:
 			if via == "stairs":
 				var dest := node_data(to)
 				for thing in dest.get("obstacles", []) + dest.get("enemies", []):
-					if float(thing.get("at", 0)) < STAIR_EXIT_CLEAR:
-						problems.append("%s -> %s: %s at %s m is too close to the stairs' exit door" % [id, to, thing.get("kind"), thing.get("at")])
+					if float(thing.get("at", 0)) < STAIR_CLEAR_TO:
+						problems.append("%s -> %s: %s at %s m is too close to the stairs' exit door (the door is %d m in: nothing before %d m)" % [id, to, thing.get("kind"), thing.get("at"), STAIRS_FLIGHT, STAIR_CLEAR_TO])
 			if via == "ladder" and String(node_data(to).get("end", "")) == "":
 				problems.append("%s -> %s: ladders only lead to the end of the level" % [id, to])
 			if side == "straight" and (edge.has("min_alert") or edge.has("max_alert")):

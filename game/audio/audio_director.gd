@@ -5,18 +5,28 @@ extends Node
 ## the music, which follows the alert level (none at 1, tension at 2, alert music at 3).
 ##
 ## SoundBank builds sounds in code. Here the building is spread over frames (a few milliseconds
-## each) from the moment the level loads, so the opening pan hides it and nothing stutters.
+## each: SoundBank.work) from the moment the level loads, under the main menu, so nothing stutters.
 
 ## Ambience per area theme.
 const AREA_AMBIENCE := {"office": "amb_office", "security": "amb_office", "canteen": "amb_office", "warehouse": "amb_office", "dock": "amb_office", "lobby": "amb_office", "exit": "amb_office", "tunnel": "amb_tunnel", "service": "amb_tunnel", "boiler": "amb_tunnel", "sewer": "amb_tunnel", "pump": "amb_tunnel", "drain": "amb_tunnel", "rooftops": "amb_roof", "towers": "amb_roof", "gantry": "amb_roof", "skylights": "amb_roof", "antennas": "amb_roof", "edge": "amb_roof",
 		"helipad": "amb_roof", "compound": "amb_roof", "gate": "amb_roof"}
 ## Milliseconds of sound-building per frame.
 const BUILD_BUDGET_MS := 4.0
+## The same under the mission briefing and the opening pan, once the level's textures are made
+## there: twice as fast, so less is left for the run, and a desktop still draws the pan at 60 fps.
+const HURRY_BUDGET_MS := 8.0
+## The same while the main menu itself is up and waits for its music (the first long sound built,
+## right after the gun check's and the button's): so it starts within a second on a desktop, its
+## frames still well inside 60 fps there. Only on the menu: from START on (the briefing, the opening
+## pan) the music still to build goes on at build_ms and starts a little later, as those frames
+## make the level's textures too.
+const MENU_MUSIC_BUDGET_MS := 10.0
 
 @export var tuning: Tuning
 
-var _queue: Array[Callable] = []
-var _queued_names: Array[String] = []
+## Milliseconds of sound-building this frame: BUILD_BUDGET_MS, or HURRY_BUDGET_MS (the level sets
+## it under the briefing and the pan).
+var build_ms := BUILD_BUDGET_MS
 var _pool: Array[AudioStreamPlayer] = []
 var _amb: Array[AudioStreamPlayer] = []
 var _amb_name := ""
@@ -29,6 +39,9 @@ var _world: Node3D
 var _loops: Array[AudioStreamPlayer3D] = []
 var _menu_music: AudioStreamPlayer
 var _menu_wanted := false
+## Whether the main menu itself is up (from play_menu_music until leave_menu, at START): only then
+## is the menu music built at MENU_MUSIC_BUDGET_MS.
+var _menu_up := false
 ## dB the menu music is lowered by (under the mission briefing).
 var _menu_duck := 0.0
 ## dB the area's ambience is lowered by (under the end-of-mission conversation).
@@ -61,6 +74,10 @@ func _ready() -> void:
 		prewarm(name)
 
 
+func _exit_tree() -> void:
+	SoundBank.finish_half_built()  # (the level's going: the next one carries on with the rest)
+
+
 ## Where world sounds are parented (so they stay put while they play).
 func set_world(world: Node3D) -> void:
 	_world = world
@@ -89,9 +106,17 @@ func _apply_settings() -> void:
 			p.volume_db = p.get_meta("base_db", 0.0) + _mix("Sfx")
 
 
-## The menu / opening-pan theme: plays (fading in) as soon as it's built.
+## The menu / opening-pan theme: plays (fading in) as soon as it's built. The main menu is up: until
+## leave_menu, the music is built faster (MENU_MUSIC_BUDGET_MS).
 func play_menu_music() -> void:
 	_menu_wanted = true
+	_menu_up = true
+
+
+## START: the main menu has gone (the briefing and the opening pan come next). The menu music plays
+## on under them (or starts once it's built), but is built at the normal pace from here.
+func leave_menu() -> void:
+	_menu_up = false
 
 
 ## The menu music quieter under the mission briefing (Tuning.briefing_music_duck_db), or back up
@@ -108,27 +133,34 @@ func duck_ambience(on: bool) -> void:
 
 func stop_menu_music(seconds: float = 1.5) -> void:
 	_menu_wanted = false
+	_menu_up = false
 	if _menu_music.playing:
 		var t := _menu_music.create_tween()
 		t.tween_property(_menu_music, "volume_db", -60.0, seconds)
 		t.tween_callback(_menu_music.stop)
 
 
+## Whether sounds are still being built (spread over frames: see _process).
+func building() -> bool:
+	return SoundBank.building()
+
+
 ## Queue a sound to be built in the background (if it isn't already).
 func prewarm(name: String) -> void:
-	if SoundBank.has(name) or name in _queued_names:
-		return
-	_queued_names.append(name)
-	_queue.append_array(SoundBank.steps(name))
+	SoundBank.queue(name)
+
+
+## Milliseconds of sound-building this frame: build_ms, or MENU_MUSIC_BUDGET_MS (if more) while the
+## main menu itself is up and its music isn't built yet.
+func frame_budget_ms() -> float:
+	if _menu_up and not SoundBank.has("music_menu"):
+		return maxf(build_ms, MENU_MUSIC_BUDGET_MS)
+	return build_ms
 
 
 func _process(delta: float) -> void:
-	var start := Time.get_ticks_usec()
-	while not _queue.is_empty() and (Time.get_ticks_usec() - start) < BUILD_BUDGET_MS * 1000.0:
-		var step: Callable = _queue.pop_front()
-		step.call()
-	if _queue.is_empty():
-		_queued_names.clear()
+	if SoundBank.building():
+		SoundBank.work(frame_budget_ms())
 	_fade_music(delta)
 	_fade_ambience(delta)
 	if _menu_wanted:

@@ -55,6 +55,9 @@ var _down := -1.0
 var _down_from: Array = []
 var _last := {}
 var _held_left := 0.0
+## His meshes (the model's), and whether he's kept from the cutout now (keep_solid).
+var _meshes: Array[MeshInstance3D] = []
+var _solid := false
 
 
 func _init() -> void:
@@ -67,13 +70,25 @@ func _ready() -> void:
 	set_process((_down >= 0.0 and _down < 1.0) or _held_left > 0.0)
 
 
-## He's shot: he drops onto his side, on his own (nothing else need pose him), and stays there.
+## He's shot: he drops onto his side, on his own (nothing else need pose him), and stays there; from
+## now on his body is never dissolved (keep_solid), so it doesn't melt away as you run past it.
 func fall() -> void:
 	if _down >= 0.0:
 		return
+	keep_solid()
 	_down_from = _snap()
 	_down = 0.0
 	set_process(true)
+
+
+## Never dissolved by the cutout from now on (Cutout; he's down): his own copies of his materials
+## (PsxMaterials.solid), so the live dogs keep theirs.
+func keep_solid() -> void:
+	if _solid:
+		return
+	_solid = true
+	for mi in _meshes:
+		mi.material_override = PsxMaterials.solid(mi.material_override)
 
 
 ## The bite: a leap at you, front legs up, as he gets to you (carrying on with what he was doing).
@@ -105,10 +120,12 @@ func _build() -> void:
 	add_child(model)
 	_skeleton = model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	_sk_xf = _in_rig(_skeleton)
-	# His texture through the game's PS1 shader, like everything else.
+	# His texture through the game's PS1 shader, like everything else; between the camera and CROSS,
+	# dissolved by the cutout paws and all (PsxMaterials.figure).
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		var src := mi.get_active_material(0) as BaseMaterial3D
-		mi.material_override = PsxMaterials.textured(src.albedo_texture if src else null)
+		mi.material_override = PsxMaterials.figure(PsxMaterials.textured(src.albedo_texture if src else null))
+		_meshes.append(mi)
 	for bone: String in TREE:
 		var b := _skeleton.find_bone(bone)
 		_order.append(b)

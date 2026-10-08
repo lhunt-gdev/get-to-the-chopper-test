@@ -40,6 +40,20 @@ global uniform vec4 lamp_pos_12; global uniform vec4 lamp_col_12;
 // ...and another (the boss's muzzle flash), for the same reason.
 global uniform vec4 lamp_pos_13; global uniform vec4 lamp_col_13;
 
+// The 4x4 ordered dither (the lighting's steps below) and the cutout, which dissolves whatever stands
+// between the camera and CROSS: shared with the glass (psx_glass), so both cut the same hole on the
+// same dither.
+#include "res://assets/shaders/psx/psx_cutout.gdshaderinc"
+// false: never dissolves (CROSS himself: PsxMaterials.solid).
+uniform bool cutout = true;
+// false: dissolves all the way down, the cutout's floor rule (nothing lower than just above his feet)
+// not for it: the guards and the dogs (PsxMaterials.figure), so no boots are left in the hole.
+uniform bool cutout_floor = true;
+// Over 0: dithers away as the camera comes nearer than this (m), gone at half of it: thin things
+// hanging where the camera passes (a duck-under's cables, chains and rods: PsxMaterials.lens_faded),
+// so the lens never flies through one.
+uniform float lens_fade = 0.0;
+
 void vertex() {
 	vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	vec3 ndc = clip.xyz / clip.w;
@@ -61,13 +75,6 @@ vec3 lamp(vec4 pos, vec4 col, vec3 p, vec3 n) {
 	// Wrapped, so faces turned half away still catch some light (like PS1 vertex lighting).
 	float facing = clamp(dot(n, d / max(dist, 0.001)) * 0.6 + 0.4, 0.0, 1.0);
 	return col.rgb * fall * fall * facing;
-}
-
-float bayer4(vec2 frag) {
-	ivec2 q = ivec2(mod(frag, 4.0));
-	int i = q.x + q.y * 4;
-	int m[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-	return (float(m[i]) + 0.5) / 16.0;
 }
 
 void fragment() {
@@ -98,5 +105,12 @@ void fragment() {
 		float steps = 12.0;
 		light = floor(light * steps + bayer4(FRAGCOORD.xy)) / steps;
 		ALBEDO = base * min(light, vec3(1.8));
+	}
+	// The cutout, last (after the texture read, so a dropped pixel never upsets its neighbours' mip).
+	if (cutout && cutout_drops(world_pos, CAMERA_POSITION_WORLD, FRAGCOORD.xy, cutout_floor)) {
+		discard;
+	}
+	if (lens_fade > 0.0 && clamp(2.0 - 2.0 * distance(world_pos, CAMERA_POSITION_WORLD) / lens_fade, 0.0, 1.0) > bayer4(FRAGCOORD.xy)) {
+		discard;
 	}
 }

@@ -125,6 +125,8 @@ var _model: PackedScene
 var _lens_file := ""
 var _meshes: Array[MeshInstance3D] = []
 var _materials: Array[Material] = []
+## Never dissolved by the cutout (keep_solid).
+var _solid := false
 var _skeleton: Skeleton3D
 ## Skeleton space to this rig's space.
 var _sk_xf := Transform3D.IDENTITY
@@ -155,14 +157,15 @@ func _joint(parent: Node3D, pos: Vector3, joint_name: String) -> Node3D:
 	return j
 
 
-## A box part on `joint` (the pistol), `size`, centred at `pos` in the joint's space.
+## A box part on `joint` (the pistol), `size`, centred at `pos` in the joint's space. Like the rest
+## of him, it has no floor rule in the cutout (PsxMaterials.figure).
 func _part(joint: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var b := BoxMesh.new()
 	b.size = size
 	m.mesh = b
 	m.position = pos
-	m.material_override = PsxMaterials.flat(color)
+	m.material_override = PsxMaterials.figure(PsxMaterials.flat(color))
 	joint.add_child(m)
 	_meshes.append(m)
 	_materials.append(m.material_override)
@@ -175,10 +178,11 @@ func _build() -> void:
 	_skeleton = model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	_sk_xf = _in_rig(_skeleton)
 	# His texture, through the game's PS1 shader (stepped lighting from the lamps you can see, the
-	# vertex wobble, affine texturing) like everything else.
+	# vertex wobble, affine texturing) like everything else. A guard standing between the camera and
+	# CROSS dissolves boots and all: no floor rule in the cutout for him (PsxMaterials.figure).
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		var src := mi.get_active_material(0) as BaseMaterial3D
-		var mat := PsxMaterials.textured(src.albedo_texture if src else null)
+		var mat := PsxMaterials.figure(PsxMaterials.textured(src.albedo_texture if src else null))
 		mi.material_override = mat
 		_meshes.append(mi)
 		_materials.append(mat)
@@ -574,7 +578,7 @@ func animate(delta: float, s: Dictionary) -> void:
 		"wall", "stand":
 			_pose_stand()
 		"slide":
-			_pose_slide()
+			_pose_slide(float(s.get("lean", 0.0)))
 		"rise", "fall":
 			_pose_jump(pose.begins_with("rise"))
 		_:
@@ -1652,15 +1656,32 @@ func _pose_jump(rising: bool) -> void:
 		elbows[side].rotation.x = 1.0
 
 
-func _pose_slide() -> void:
-	# Down low, feet first: leaning back, the lead leg out straight, the other folded under.
-	hips.position.y = _kneel_y - 0.12  # down low
+## The slide's legs (rad: the hip, the knee, the ankle): the lead leg (his left) out straight ahead;
+## the other folded right under him, his heel up by his seat, its knee and the toe of its boot just
+## clear of the floor (6 cm: folded less, the boot would be in the floor). His death from a slide
+## starts from them too (_death_back_limbs); with the foot only a little pointed, his ragdoll takes
+## the leg on smoothly (pointed in line with its shin, it would turn the foot over in one frame as
+## he lands).
+const SLIDE_LEAD := Vector3(1.45, -0.1, 0.0)
+const SLIDE_FOLD := Vector3(0.85, -2.72, -0.25)
+## Leaning to his right into a lane change in a slide (the whole of him tips about his feet), the
+## folded leg's boot, out on that side, would dip into the floor: he's lifted this much (rig units)
+## at a full lean, less for less, so it stays clear.
+const SLIDE_LEAN_LIFT := 0.048
+
+
+## The slide (`lean`: his lean into a lane change, as animate's). Only the look: what he slides
+## under is the player's (Player.is_sliding), never the model.
+func _pose_slide(lean: float = 0.0) -> void:
+	# Down low, feet first: leaning back, the lead leg out straight, the other folded under him.
+	hips.position.y = _kneel_y - 0.12 + SLIDE_LEAN_LIFT * maxf(0.0, lean)  # down low
 	spine.rotation.x = 0.8
 	head.rotation.x = -0.55
-	leg_hips[-1].rotation.x = 1.45
-	knees[-1].rotation.x = -0.1
-	leg_hips[1].rotation.x = 0.7
-	knees[1].rotation.x = -1.9
+	for side in [-1, 1]:
+		var leg := SLIDE_LEAD if side < 0 else SLIDE_FOLD
+		leg_hips[side].rotation.x = leg.x
+		knees[side].rotation.x = leg.y
+		ankles[side].rotation.x = leg.z
 	for side in [-1, 1]:
 		shoulders[side].rotation.x = -0.4
 		shoulders[side].rotation.z = side * 0.7
@@ -1715,10 +1736,29 @@ static func _frame(a: Vector3, b: Vector3) -> Basis:
 	return Basis(x, y, x.cross(y))
 
 
+## Never dissolved by the cutout (Cutout) from now on: CROSS (the player sets it: his body, his pistol
+## and his hit flash), and a guard once he's down (GuardRig.fall, GuardRig.death_start), so his body
+## never melts away as you run past it. Their own copies of their materials, so the others keep
+## theirs. Whatever else in the PS1 shader hangs on him (a guard's radio) goes solid too, and so does
+## a hit flash showing now.
+func keep_solid() -> void:
+	if _solid:
+		return
+	_solid = true
+	for i in _meshes.size():
+		_materials[i] = PsxMaterials.solid(_materials[i])
+		_meshes[i].material_override = PsxMaterials.solid(_meshes[i].material_override)
+	for mi: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
+		if not _meshes.has(mi):
+			mi.material_override = PsxMaterials.solid(mi.material_override)
+
+
 ## Hit: the whole model flashes red for a moment.
 func flash() -> void:
 	_flash_left = 0.15
-	var red := PsxMaterials.flat(Color("d83a2a"))
+	var red := PsxMaterials.figure(PsxMaterials.flat(Color("d83a2a")))
+	if _solid:
+		red = PsxMaterials.solid(red)
 	for m in _meshes:
 		m.material_override = red
 
@@ -2278,13 +2318,16 @@ func _death_back_limbs(jolt: float, air: float, slap: float, slid: float) -> voi
 		elbows[side].rotation.x = lerpf(0.4 + 0.3 * air, 0.35 if side < 0 else 0.7, slap)
 		var leg_air := Vector3(0.45 * air, 0.0, side * 0.1)
 		var knee_air := -0.2 - 0.6 * air
-		if slide:
-			leg_air = Vector3(lerpf(1.45 if side < 0 else 0.7, 0.05, slid), 0.0, side * 0.1)
-			knee_air = lerpf(-0.1 if side < 0 else -1.9, -0.3, slid)
+		var ankle_air := 0.1 * air
+		if slide:  # (from the slide's legs: SLIDE_LEAD, SLIDE_FOLD)
+			var leg := SLIDE_LEAD if side < 0 else SLIDE_FOLD
+			leg_air = Vector3(lerpf(leg.x, 0.05, slid), 0.0, side * 0.1)
+			knee_air = lerpf(leg.y, -0.3, slid)
+			ankle_air = lerpf(leg.z, ankle_air, slid)
 		var leg_down := Vector3(0.05 if side < 0 else 0.45, 0.0, side * (0.12 if side < 0 else 0.08))
 		leg_hips[side].rotation = leg_air.lerp(leg_down, slap)
 		knees[side].rotation.x = lerpf(knee_air, -0.1 if side < 0 else -0.8, slap)
-		ankles[side].rotation.x = lerpf(0.1 * air, -0.2, slap)
+		ankles[side].rotation.x = lerpf(ankle_air, -0.2, slap)
 	spine.rotation.x = jolt - 0.1 * air
 	head.rotation.x = 0.6 * jolt - 0.3 * air  # (his chin tucked as he goes over)
 	if slide:

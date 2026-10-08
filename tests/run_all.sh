@@ -42,8 +42,9 @@ expect sniper_hit  "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=
 expect miss_ladder "reason=captured alert=2 route=$R |" "talk=captured/tapped/ok"
 expect warehouse_drop "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0" "boss=1/0/" "ko=3/0/ok"
 expect late_switch "reason=extracted alert=1 route=$G" "boss=1/0/" "ko=3/0/ok"
-# cover holds fire until it is in cover, so the alarm runner gets away: Alert 2.
-expect cover       "reason=extracted alert=2 route=$G | covers=1 hits=0 missed=1" "boss=1/0/" "ko=3/0/ok"
+# cover holds fire until it is in cover, so the alarm runner gets away: Alert 2. (Through the MAIN
+# FLOOR's doors, which open for him and are shut again when the bot gets there.)
+expect cover       "reason=extracted alert=2 route=$G | covers=1 hits=0 missed=1" "boss=1/0/" "ko=3/0/ok" "gates=1/1/ok"
 # camper never leaves cover, so the alarm runner gets away too.
 expect camper      "reason=chopper_left alert=2 route=MAIN FLOOR LOBBY | covers=1" "talk=chopper_left/tapped/ok"
 expect ground_loud "reason=extracted alert=3 route=$G | covers=0" "boss=1/0/" "ko=3/0/ok"
@@ -52,8 +53,9 @@ expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed
 expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1" "boss=1/0/" "ko=3/0/ok"
 expect dog_bite    "reason=extracted alert=2 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1 doors=15 dogs=1/0/" "boss=1/0/" "ko=3/0/ok"
 expect dog_dodge   "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/1/" "boss=1/0/" "ko=3/0/ok"
-# (The bot never shoots the runner: he gets to his panel, on the wall, out of its lane.)
-expect runner_escapes "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/4 runner=0/1" "boss=1/0/" "ko=3/0/ok"
+# (The bot never shoots the runner: he gets to his panel, on the wall, out of its lane. On the way the
+# MAIN FLOOR's doors open for him, and are shut again when the bot gets there: gates=1/1/ok.)
+expect runner_escapes "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15 dogs=0/0/4 runner=0/1" "boss=1/0/" "ko=3/0/ok" "gates=1/1/ok"
 expect roof_spotted "reason=extracted alert=3 route=$R > HELIPAD" "boss=1/0/" "ko=3/0/ok"
 expect squad_caught "reason=captured alert=3 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR |" "talk=captured/skipped/ok"
 # The boss at the chopper: stepping into a swept lane costs a hit; never shooting him, he blocks the
