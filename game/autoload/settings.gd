@@ -25,7 +25,7 @@ var _values: Dictionary = DEFAULTS.duplicate()
 
 func _ready() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(PATH) == OK:
+	if SaveFile.exists(PATH) and cfg.parse(SaveFile.read_text(PATH)) == OK:
 		for k in DEFAULTS:
 			_values[k] = cfg.get_value("settings", k, DEFAULTS[k])
 
@@ -48,11 +48,13 @@ func reset() -> void:
 	changed.emit()
 
 
+## Saved the moment one changes (in the pause menu mid-run too), not only at a run's end; safely
+## (SaveFile: a temp file, then a rename; a failed write is a warning).
 func _save() -> void:
 	var cfg := ConfigFile.new()
 	for k in _values:
 		cfg.set_value("settings", k, _values[k])
-	cfg.save(PATH)
+	SaveFile.write_text(PATH, cfg.encode_to_text())
 
 
 ## A 0-100 volume as dB (0 is silent).

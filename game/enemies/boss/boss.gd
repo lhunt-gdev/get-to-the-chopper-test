@@ -67,6 +67,8 @@ const GONE := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vecto
 
 var at: float = 0.0
 var health: int = 30
+## The hits he takes in all (the HUD's BOSS bar is health against this): Tuning's, or the setting's.
+var max_health: int = 30
 var state: State = State.WAITING
 ## This attack's two free lanes (lane indices, 0 = leftmost), and which way the sweep goes (+1 left
 ## to right, -1 right to left).
@@ -126,6 +128,7 @@ var _pool: MeshInstance3D
 
 func _init(tuning: Tuning) -> void:
 	health = tuning.boss_health
+	max_health = health
 	_lane_count = tuning.lane_count
 	_lane_width = tuning.lane_width
 	_spinup = [tuning.boss_spinup_alert1, tuning.boss_spinup_alert2, tuning.boss_spinup_alert3]
@@ -169,6 +172,18 @@ func _init(tuning: Tuning) -> void:
 	flash_lamp.top_level = true
 	flash_lamp.visible = false
 	add_child(flash_lamp)
+
+
+## The mission's setting's boss (route.json "settings", user: "about 20, 30 and 40 hits"): how many
+## hits he takes, and his spin-up at SNEAKING, CAUTION and ALERT (EASY's slower). Anything it
+## doesn't say stays Tuning's. Before the fight.
+func configure(setting_boss: Dictionary) -> void:
+	if int(setting_boss.get("health", 0)) > 0:
+		health = int(setting_boss["health"])
+		max_health = health
+	var spin = setting_boss.get("spinup")
+	if spin is Array and spin.size() == 3:
+		_spinup = [float(spin[0]), float(spin[1]), float(spin[2])]
 
 
 func set_seed(s: int) -> void:

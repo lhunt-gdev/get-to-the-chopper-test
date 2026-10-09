@@ -3,6 +3,11 @@ extends SceneTree
 ##   godot --headless --path . -s res://tests/run_tests.gd
 ## Exits with code 1 if any check fails (CI blocks the deploy).
 
+## Mission 1, COLD CALL (the level the game plays), and the TEST RANGE (the full 19-area level from
+## before mission 1, kept for the bots and the tests of what mission 1 leaves out).
+const MISSION_1 := "res://game/levels/prototype_slice/route.json"
+const TEST_RANGE := "res://tests/fixtures/test_range.json"
+
 var _failures := 0
 var _checks := 0
 
@@ -35,6 +40,15 @@ func _run() -> void:
 	_test_menu_music_pace()
 	_test_texture_makers()
 	_test_route_map()
+	_test_mission_1()
+	_test_cover_exit_rule()
+	_test_settings()
+	_test_unlock_rule()
+	_test_progress_save()
+	_test_best_times()
+	_test_auto_save()
+	_test_save_file()
+	await _test_mission_select()
 	_test_tally()
 	_test_snipers()
 	_test_boss()
@@ -68,7 +82,7 @@ func _check(cond: bool, msg: String) -> void:
 ## way into it; this run's line follows the levels and ends where it ended; areas seen only
 ## partway aren't drawn whole; and only ways into areas never reached get a lock.
 func _test_route_map() -> void:
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var g := RouteGraph.from_json_file(TEST_RANGE)  # (the 19-area layout: every kind of way)
 	var lay := RouteMap.layout(g)
 	var placed := true
 	var after_all_ways_in := true
@@ -956,7 +970,7 @@ func _test_end_talk() -> void:
 	_check(Briefing.problems(old).is_empty() and Briefing.conversation(old, "killed").is_empty(),
 			"end talk: a script with only the briefing still works (no conversations after the run)")
 	# dead_end can't happen in this mission: wherever you are, at any alert, there's a way on.
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var g := RouteGraph.from_json_file(MISSION_1)
 	var stuck: Array[String] = []
 	for id: StringName in g._nodes:
 		for alert in [1, 2, 3]:
@@ -2269,7 +2283,7 @@ func _test_snipers() -> void:
 	ok["snipers"] = [{"at": 10, "side": "left"}]
 	var fine := RouteGraph.from_dict({"start": "r", "nodes": [ok, {"id": "e", "tier": "ground", "length": 30, "end": "extract"}]})
 	_check(not " | ".join(fine.validate()).contains("sniper"), "sniper: a good spot passes")
-	var real := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var real := RouteGraph.from_json_file(TEST_RANGE)  # (snipers: not in mission 1)
 	var count := 0
 	for id in [&"water_towers", &"gantry", &"skylights", &"antenna_farm"]:
 		count += real.node_data(id).get("snipers", []).size()
@@ -2369,7 +2383,7 @@ func _test_tally() -> void:
 	_check(Tally.steps_of(rows[7]) == 0, "tally: a word lands at once")
 	_check(Tally.value_text(["TIME", "time", 119.97, UiKit.PAPER], 10, 10) == "2:00.0", "tally: 1:59.97 reads 2:00.0, not 1:60.0")
 	# The longest route through the levels fits beside its label (squeezed if it must be).
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var g := RouteGraph.from_json_file(TEST_RANGE)  # (its longest way: not in mission 1)
 	var longest: Array[StringName] = [&"main_floor_lobby", &"rooftops", &"security_wing", &"staff_canteen", &"warehouse", &"pump_station", &"storm_drain", &"helipad"]
 	var route := Tally.fit_value("ROUTE", RouteMap.levels_text(g, longest), 222.0)
 	var f := UiKit.font()
@@ -2557,47 +2571,82 @@ func _test_texture_makers() -> void:
 
 
 func _test_route_json_is_valid() -> void:
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	_check(g != null, "route.json loads")
-	if g == null:
-		return
-	var problems := g.validate(load("res://game/config/default_tuning.tres") as Tuning)  # (the game's run and jump)
-	_check(problems.is_empty(), "route.json valid: %s" % ", ".join(problems))
-	_check(g.end_type(&"helipad") == "extract", "helipad is an extraction end")
+	for path in [MISSION_1, TEST_RANGE]:
+		var g := RouteGraph.from_json_file(path)
+		_check(g != null, "%s loads" % path)
+		if g == null:
+			continue
+		# (the game's run and jump; mission 1 on every setting, each at its own reaction floor)
+		var problems := RouteGraph.validate_settings(JSON.parse_string(FileAccess.get_file_as_string(path)), load("res://game/config/default_tuning.tres") as Tuning)
+		_check(problems.is_empty(), "%s valid: %s" % [path, ", ".join(problems)])
+		_check(g.end_type(&"helipad") == "extract", "helipad is an extraction end (%s)" % path)
+	# The test range is today's 19-area level, frozen for the bots: the cover-exit rule came after it
+	# and is left off there (its 41 known spots, mostly the old underground rows, stay as they were).
+	var range_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_RANGE))
+	_check(range_data.get("cover_exit_rule", true) == false and range_data.get("mission", "") == "test_range", "the test range keeps its old layout (cover-exit rule off there only)")
+	var with_rule := range_data.duplicate(true)
+	with_rule["cover_exit_rule"] = true
+	var spots := " | ".join(RouteGraph.from_dict(with_rule).validate(load("res://game/config/default_tuning.tres") as Tuning))
+	_check(spots.contains("out of the box at 96.0 m in lane 0 into lane 1, the barrier at 100.0 m comes too soon"),
+			"cover-exit rule: the old SECURITY WING's crate at 96 m, beside the barrier at 100 m, is caught")
 
 
+## Which ways are open at each alert (LOCKED: alert can change which routes are open). Mission 1:
+## the SECURITY WING's basement stairs open only at SNEAKING, its fire escape only from CAUTION up,
+## straight on always. The test range: the MAIN FLOOR's tunnel stairs, sealed above SNEAKING.
 func _test_alert_gating() -> void:
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	_check(g.available_next(&"building_main_floor", 1).size() == 2, "tunnel open at alert 1")
-	_check(g.available_next(&"building_main_floor", 2).size() == 1, "tunnel sealed at alert 2")
+	var g := RouteGraph.from_json_file(MISSION_1)
+	var sides := func(alert: int) -> Array:
+		var out := []
+		for e in g.available_next(&"security_wing", alert):
+			out.append(RouteGraph.side_of(e))
+		out.sort()
+		return out
+	_check(sides.call(1) == ["left", "straight"], "mission 1: at SNEAKING the wing's basement stairs and straight on are open (%s)" % [sides.call(1)])
+	_check(sides.call(2) == ["right", "straight"] and sides.call(3) == ["right", "straight"],
+			"mission 1: at CAUTION and ALERT the fire escape and straight on are open (%s, %s)" % [sides.call(2), sides.call(3)])
+	var t := RouteGraph.from_json_file(TEST_RANGE)
+	_check(t.available_next(&"building_main_floor", 1).size() == 2, "test range: tunnel open at alert 1")
+	_check(t.available_next(&"building_main_floor", 2).size() == 1, "test range: tunnel sealed at alert 2")
+	# An exit with min_alert opens as the alert rises; one with max_alert shuts (pick_edge then
+	# carries an outer lane straight on).
+	var right := RouteGraph.pick_edge(4, 5, g.available_next(&"security_wing", 1))
+	_check(RouteGraph.side_of(right) == "straight", "mission 1: the far-right lane carries straight on while the fire escape is shut")
+	var left := RouteGraph.pick_edge(0, 5, g.available_next(&"security_wing", 2))
+	_check(RouteGraph.side_of(left) == "straight", "mission 1: the far-left lane carries straight on once the basement stairs lock")
 
 
 ## The stairs doors' cues (user, 2026-10-07: "3 arrows just before that are a bit transparent and
 ## light up one after another, but if a door is locked there is a floating red lock in front of
 ## the door"): which doors there are, on which side, and whether each is open at each alert.
-## Ladders aren't doors, so they get none.
+## Ladders aren't doors, so they get none. Mission 1's two doors are off one area, the SECURITY
+## WING; its fire escape is the first door locked while it's quiet.
 func _test_door_cues() -> void:
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	# [area, side, open at alert 1, 2, 3]
-	var doors := [
-		[&"main_floor_lobby", "right", [true, true, true]],
-		[&"rooftops", "left", [true, true, true]],
-		[&"building_main_floor", "left", [true, false, false]],
-		[&"warehouse", "left", [true, false, false]],
+	# [file, area, [[side, open at alert 1, 2, 3]...], areas with no stairs door]
+	var cases := [
+		[MISSION_1, &"security_wing", [["left", [true, false, false]], ["right", [false, true, true]]],
+				[&"main_floor_lobby", &"building_main_floor", &"rooftops", &"roof_edge", &"boiler_room", &"service_tunnel", &"staff_canteen", &"main_floor_exit"]],
+		[TEST_RANGE, &"main_floor_lobby", [["right", [true, true, true]]], [&"security_wing", &"roof_edge", &"storm_drain", &"service_tunnel"]],
+		[TEST_RANGE, &"rooftops", [["left", [true, true, true]]], []],
+		[TEST_RANGE, &"building_main_floor", [["left", [true, false, false]]], []],
+		[TEST_RANGE, &"warehouse", [["left", [true, false, false]]], []],
 	]
-	for d in doors:
+	for c in cases:
+		var g := RouteGraph.from_json_file(c[0])
+		var want_doors: Array = c[2]
 		for alert in [1, 2, 3]:
-			var got := g.stair_doors(d[0], alert)
-			_check(got.size() == 1, "%s has one stairs door (alert %d)" % [d[0], alert])
-			if got.size() != 1:
+			var got := g.stair_doors(c[1], alert)
+			_check(got.size() == want_doors.size(), "%s has %d stairs door(s) (alert %d)" % [c[1], want_doors.size(), alert])
+			if got.size() != want_doors.size():
 				continue
-			_check(got[0]["side"] == d[1], "%s's stairs door is on the %s" % [d[0], d[1]])
-			_check(RouteGraph.via_of(got[0]["edge"]) == "stairs", "%s's door leads to stairs" % d[0])
-			var want: bool = d[2][alert - 1]
-			_check(got[0]["open"] == want, "%s's stairs door %s at alert %d" % [d[0], "open" if want else "locked", alert])
-	for id in [&"security_wing", &"roof_edge", &"storm_drain", &"service_tunnel"]:
-		for alert in [1, 2, 3]:
-			_check(g.stair_doors(id, alert).is_empty(), "%s has no stairs door (alert %d)" % [id, alert])
+			for k in got.size():
+				_check(got[k]["side"] == want_doors[k][0], "%s's stairs door %d is on the %s" % [c[1], k, want_doors[k][0]])
+				_check(RouteGraph.via_of(got[k]["edge"]) == "stairs", "%s's door leads to stairs" % c[1])
+				var want: bool = want_doors[k][1][alert - 1]
+				_check(got[k]["open"] == want, "%s's %s stairs door %s at alert %d" % [c[1], want_doors[k][0], "open" if want else "locked", alert])
+		for id in c[3]:
+			for alert in [1, 2, 3]:
+				_check(g.stair_doors(id, alert).is_empty(), "%s has no stairs door (alert %d)" % [id, alert])
 	# (A locked door, built and run past in the real level: _test_locked_doors.)
 
 
@@ -2617,31 +2666,73 @@ func _test_locked_doors() -> void:
 	var gs := root.get_node("GameState")
 	var was_alert: int = gs.alert_level
 	var was_active: bool = gs.run_active
-	gs.alert_level = 1
-	var level: Node = (load("res://game/levels/prototype_slice/prototype_slice.tscn") as PackedScene).instantiate()
-	root.add_child(level)
-	_check_warm_ups(level)
-	await process_frame
-	await process_frame
-	level.set_physics_process(false)  # (stepped by hand below)
-	level._player.set_physics_process(false)
+	var level_script: GDScript = load("res://game/levels/prototype_slice/prototype_slice.gd")
+	# The test range: the MAIN FLOOR's TUNNEL door and the WAREHOUSE's PUMPS door, locked above
+	# SNEAKING.
+	level_script.route_path = TEST_RANGE
+	var level := await _locked_doors_level(gs, true)
 	for zone in [[&"building_main_floor"], [&"security_wing", &"staff_canteen", &"warehouse"]]:
-		gs.set_alert(1)
-		for want: StringName in zone:
-			var cur: Dictionary = level._current
-			for e: Dictionary in level._graph.all_next(cur["id"]):
-				if StringName(e["to"]) == want and RouteGraph.side_of(e) == "straight":
-					level._player.distance = float(cur["end"]) - 1.0
-					level._on_segment_needed(want, cur["end"], e)
-					level._on_node_entered(want)
-					level._runner.current = want
-					level._runner.segment_start = cur["end"]
-			await process_frame
+		await _locked_doors_walk(level, gs, zone)
 		await _locked_door_checks(level, gs)
+	_check(await _squad_at_alert_3(level, gs) == 5, "squad switch: on the test range, ALERT sends the squad after him (5)")
+	level.queue_free()
+	await process_frame
+	# Mission 1: the SECURITY WING's two doors, one each side of the one split. The basement stairs
+	# (left) lock at CAUTION; the fire escape (right) is locked while it's quiet and opens at CAUTION:
+	# the same door shut, its padlock in front of it, as the basement door's.
+	level_script.route_path = MISSION_1
+	level = await _locked_doors_level(gs, false)
+	await _locked_doors_walk(level, gs, [&"building_main_floor", &"security_wing"])
+	await _locked_door_checks(level, gs, "left", 1, 2)
+	await _locked_door_checks(level, gs, "right", 2, 1)
+	# Mission 1 has the basics only ("squad": false): ALERT sends nobody after him.
+	var squad := await _squad_at_alert_3(level, gs)
+	_check(squad == 0 and not level._squad_on, "squad switch: in mission 1, ALERT sends no squad (%d)" % squad)
 	level.queue_free()
 	await process_frame
 	gs.alert_level = was_alert
 	gs.run_active = was_active
+
+
+## How many of the pursuit squad come after him as the alert reaches 3 mid-run (then back to 1).
+func _squad_at_alert_3(level: Node, gs: Node) -> int:
+	gs.run_active = true
+	gs.set_alert(3)
+	await process_frame
+	var n: int = level._squad.size()
+	gs.set_alert(1)
+	await process_frame
+	gs.run_active = false
+	return n
+
+
+## The real level, stepped by hand (_test_locked_doors).
+func _locked_doors_level(gs: Node, warm_ups: bool) -> Node:
+	gs.alert_level = 1
+	var level: Node = (load("res://game/levels/prototype_slice/prototype_slice.tscn") as PackedScene).instantiate()
+	root.add_child(level)
+	if warm_ups:
+		_check_warm_ups(level)
+	await process_frame
+	await process_frame
+	level.set_physics_process(false)  # (stepped by hand below)
+	level._player.set_physics_process(false)
+	return level
+
+## On straight from area to area, at SNEAKING, to the last area in `zone`.
+## On straight from area to area, at SNEAKING, to the last of .
+func _locked_doors_walk(level: Node, gs: Node, zone: Array) -> void:
+	gs.set_alert(1)
+	for want: StringName in zone:
+		var cur: Dictionary = level._current
+		for e: Dictionary in level._graph.all_next(cur["id"]):
+			if StringName(e["to"]) == want and RouteGraph.side_of(e) == "straight":
+				level._player.distance = float(cur["end"]) - 1.0
+				level._on_segment_needed(want, cur["end"], e)
+				level._on_node_entered(want)
+				level._runner.current = want
+				level._runner.segment_start = cur["end"]
+		await process_frame
 
 
 ## Under the menu, as the level starts, each look the run would otherwise first draw in the middle of
@@ -2711,15 +2802,17 @@ static func _box_inside(xf: Transform3D, size: Vector3, in_xf: Transform3D, in_s
 	return true
 
 
-func _locked_door_checks(level: Node, gs: Node) -> void:
+func _locked_door_checks(level: Node, gs: Node, side: String = "left", open_alert: int = 1, locked_alert: int = 2) -> void:
+	gs.set_alert(open_alert)
+	await process_frame
 	var k: Dictionary = (level.get_script() as GDScript).get_script_constant_map()
 	var seg: Dictionary = level._current
 	var id: StringName = seg["id"]
-	var area := String(id).to_upper()
+	var area := "%s (%s door)" % [String(id).to_upper(), side]
 	var t: Tuning = level.tuning
 	var edge := {}
 	for e: Dictionary in level._graph.all_next(id):
-		if RouteGraph.via_of(e) == "stairs":
+		if RouteGraph.via_of(e) == "stairs" and RouteGraph.side_of(e) == side:
 			edge = e
 	var key: String = level._key(edge)
 	var split: float = seg["end"]
@@ -2735,7 +2828,7 @@ func _locked_door_checks(level: Node, gs: Node) -> void:
 	var open_meshes := _mesh_snap(seg["branches"][key]["node"].get_node("Stairwell"))
 	var open_sights := _sight_snap(seg["branches"][key]["node"].get_node("Stairwell"))
 	var open_labels: Array = cue_labels.call()
-	gs.set_alert(2)
+	gs.set_alert(locked_alert)
 	await process_frame
 	var stub: Node3D = seg["locked"].get(key)
 	_check(stub != null and stub.has_node("Stairwell"), "%s: locked, its stairs door is the stairwell's way in" % area)
@@ -2825,7 +2918,7 @@ func _locked_door_checks(level: Node, gs: Node) -> void:
 	var plug: Node3D = level._hole_plug(road_on, edge)
 	_check(plug != null and plug.visible, "%s: locked, the hole its stairwell passes out through is walled up" % area)
 
-	# CROSS run up to it in its lane (lane 0: the door's on the left), at 60 Hz.
+	# CROSS run up to it in its lane (the outer lane on its side), at 60 Hz.
 	var p: Node3D = level._player
 	var lane: int = level._handover_lanes(edge).x
 	var into := lane + (1 if lane == 0 else -1)  # the next lane in
@@ -2911,9 +3004,9 @@ func _locked_door_checks(level: Node, gs: Node) -> void:
 			and level._barred_lane(float(bar["to"]) + 0.1) == -1,
 			"%s: locked, anyone after him keeps out of its lane by the door, and only there" % area)
 	# Unlocked, the bar's gone and the whole stairwell is back.
-	gs.set_alert(1)
+	gs.set_alert(open_alert)
 	await process_frame
-	_check(level._barred_lane(split - 2.0) == -1 and seg["branches"].has(key), "%s: unlocked, its lane is free and its stairwell is back" % area)
+	_check(level._barred_lane(split - 2.0) != lane and seg["branches"].has(key), "%s: unlocked, its lane is free and its stairwell is back" % area)
 
 
 func _test_pick_edge() -> void:
@@ -2966,7 +3059,7 @@ func _test_mission_layout() -> void:
 	_check("box at 65" in problems, "nothing too soon after a zone door (you burst through blind)")
 	_check(not "box at 72" in problems, "things further on after a zone door are fine")
 	_check("no zone doors on open roofs" in problems, "no zone door on the rooftops")
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var g := RouteGraph.from_json_file(MISSION_1)
 	_check(g.display_name(&"roof_edge") == "ROOF EDGE", "an area with no name of its own shows its id as a name")
 	var run_log: Node = root.get_node_or_null("RunLog")  # an autoload; not a global name in -s scripts
 	if run_log == null:
@@ -2981,13 +3074,34 @@ func _test_mission_layout() -> void:
 
 ## Alert tiers (user direction): Alert 1 is sparse (at most 2 rifle guards a section, some with
 ## none), Alert 2 has more, Alert 3 no fewer; dogs only from Alert 2; one alarm runner, Alert 1 only.
+## Mission 1 has the basics only (user, approving its zones: no dogs, alarm runner, snipers,
+## searchlights or pursuit squad); the test range keeps today's one runner and its dogs.
 func _test_trooper_tiers() -> void:
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	_trooper_tiers_in(MISSION_1, 0, false)
+	_trooper_tiers_in(TEST_RANGE, 1, true)
+	# How far he's got: 0 where he set off, 1 at the alarm.
+	_check(SecurityTrooper.run_progress(100.0, 330.0, 100.0) == 0.0, "the runner starts at 0")
+	_check(is_equal_approx(SecurityTrooper.run_progress(100.0, 330.0, 215.0), 0.5), "halfway to his alarm is 0.5")
+	_check(SecurityTrooper.run_progress(100.0, 330.0, 400.0) == 1.0, "at the alarm is 1")
+	var tt := Tuning.new()
+	_check(tt.security_speed < tt.run_speed and tt.security_speed > tt.run_speed * 0.85, "the runner is a little slower than you: you slowly close in")
+	_check(tt.security_trigger_distance > tt.target_range, "he spots you from further off than you can shoot")
+	_check(tt.security_alarm_distance >= 200.0, "he runs for a couple of sections, not just across the corridor")
+	var sec := SecurityTrooper.new(tt)
+	_check(sec.get_threat_priority() == 0, "a runner standing still isn't urgent")
+	sec.state = SecurityTrooper.State.RUN
+	_check(sec.get_threat_priority() > 60, "a running runner is shot before a charging dog or an aiming trooper")
+	sec.free()
+
+
+func _trooper_tiers_in(path: String, want_runners: int, has_dogs: bool) -> void:
+	var g := RouteGraph.from_json_file(path)
 	var empty_at_1 := 0
 	var runners := 0
+	var dogs := 0
 	# Per height: obstacles per metre and rifle guards at Alert 2, summed over its areas.
 	var density := {"ground": [0, 0.0, 0], "roof": [0, 0.0, 0], "underground": [0, 0.0, 0]}
-	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://game/levels/prototype_slice/route.json"))
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 	for node in data["nodes"]:
 		var id := StringName(node["id"])
 		if g.end_type(id) != "":
@@ -3003,6 +3117,7 @@ func _test_trooper_tiers() -> void:
 						if alert >= int(e.get("min_alert", 1)) and alert <= int(e.get("max_alert", 3)):
 							counts[alert - 1] += 1
 				"rusher_dog":
+					dogs += 1
 					_check(int(e.get("min_alert", 1)) >= 2, "%s: dogs only from Alert 2" % id)
 				"security_trooper":
 					runners += 1
@@ -3032,20 +3147,9 @@ func _test_trooper_tiers() -> void:
 	_check(per_m.call("underground") > per_m.call("ground"), "more obstacles underground than on the ground (%.3f vs %.3f a metre)" % [per_m.call("underground"), per_m.call("ground")])
 	_check(per_m.call("roof") < per_m.call("ground") * 0.5, "far fewer obstacles on the roofs (%.3f vs %.3f a metre)" % [per_m.call("roof"), per_m.call("ground")])
 	_check(guards_per_m.call("roof") > guards_per_m.call("ground"), "more guards on the roofs than the ground (%.3f vs %.3f a metre at Alert 2)" % [guards_per_m.call("roof"), guards_per_m.call("ground")])
-	_check(runners == 1, "one alarm runner per run (%d)" % runners)
-	# How far he's got: 0 where he set off, 1 at the alarm.
-	_check(SecurityTrooper.run_progress(100.0, 330.0, 100.0) == 0.0, "the runner starts at 0")
-	_check(is_equal_approx(SecurityTrooper.run_progress(100.0, 330.0, 215.0), 0.5), "halfway to his alarm is 0.5")
-	_check(SecurityTrooper.run_progress(100.0, 330.0, 400.0) == 1.0, "at the alarm is 1")
-	var tt := Tuning.new()
-	_check(tt.security_speed < tt.run_speed and tt.security_speed > tt.run_speed * 0.85, "the runner is a little slower than you: you slowly close in")
-	_check(tt.security_trigger_distance > tt.target_range, "he spots you from further off than you can shoot")
-	_check(tt.security_alarm_distance >= 200.0, "he runs for a couple of sections, not just across the corridor")
-	var sec := SecurityTrooper.new(tt)
-	_check(sec.get_threat_priority() == 0, "a runner standing still isn't urgent")
-	sec.state = SecurityTrooper.State.RUN
-	_check(sec.get_threat_priority() > 60, "a running runner is shot before a charging dog or an aiming trooper")
-	sec.free()
+	_check(runners == want_runners, "%s: %d alarm runner(s) per run (%d)" % [path, want_runners, runners])
+	_check((dogs > 0) == has_dogs, "%s: %s (%d)" % [path, "dogs from Alert 2" if has_dogs else "no dogs", dogs])
+
 
 
 ## The alarm runner's zone doors (user: "when the alert guard is running, the big doors should open
@@ -3161,7 +3265,7 @@ func _test_searchlights() -> void:
 		{"id": "a", "tier": "ground", "length": 100, "searchlights": [{"at": 50, "side": "left"}], "next": [{"to": "b"}]},
 		{"id": "b", "tier": "ground", "end": "extract"}]})
 	_check("searchlights only on the roofs" in " ".join(g.validate()), "no searchlights indoors")
-	var real := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
+	var real := RouteGraph.from_json_file(TEST_RANGE)  # (searchlights: not in mission 1)
 	var lit := 0
 	for id in [&"rooftops", &"water_towers", &"gantry", &"skylights", &"antenna_farm", &"roof_edge"]:
 		if not real.node_data(id).get("searchlights", []).is_empty():
@@ -3200,8 +3304,14 @@ func _test_chopper_stages() -> void:
 	_check(ExtractionClock.stage_at(f + 0.1, l, f, gone) == ExtractionClock.Stage.LIFTING_OFF, "chopper lifting off")
 	_check(ExtractionClock.stage_at(gone, l, f, gone) == ExtractionClock.Stage.GONE, "chopper gone at the end")
 	_check(l < f and f < gone, "default chopper stages in order")
-	var g := RouteGraph.from_json_file("res://game/levels/prototype_slice/route.json")
-	_check(float(g.mission().get("chopper", {}).get("gone_at", 0)) == 114.0, "this mission sets its own chopper time (scaled for the ~90 s level)")
+	# Each mission sets its own timeline: mission 1 on MEDIUM, the shipping setting (lands 28 s,
+	# lifts off 96 s, gone 106 s: a clean ground run of about 81 s arrives 15 s before lift-off), the
+	# test range as it was (114 s, for its ~90 s routes).
+	var ch: Dictionary = RouteGraph.from_json_file(MISSION_1).mission().get("chopper", {})
+	_check(float(ch.get("lands_at", 0)) == 28.0 and float(ch.get("lifts_at", 0)) == 96.0 and float(ch.get("gone_at", 0)) == 106.0,
+			"mission 1 sets its own chopper times: 28 / 96 / 106 s (%s)" % ch)
+	var g := RouteGraph.from_json_file(TEST_RANGE)
+	_check(float(g.mission().get("chopper", {}).get("gone_at", 0)) == 114.0, "the test range keeps its own chopper time (scaled for the ~90 s level)")
 	var bad := RouteGraph.from_dict({"start": "a", "chopper": {"lands_at": 30, "lifts_at": 20, "gone_at": 40},
 			"nodes": [{"id": "a", "end": "extract"}]})
 	_check("chopper times must be" in " ".join(bad.validate()), "a mission's chopper times must be in order")
@@ -3707,7 +3817,8 @@ func _test_route_rules() -> void:
 	_check("trooper at 28 m is hidden right behind the wall" in problems, "no trooper right behind a wall")
 	_check(not "trooper at 24 m" in problems, "a trooper in another lane is fine")
 	_check(not "trooper at 50 m" in problems, "a trooper well behind a wall is fine")
-	var squeeze := RouteGraph.from_dict({"start": "a", "nodes": [
+	# (Each of these tests one rule, so the cover-exit rule, which these spots would also break, is off.)
+	var squeeze := RouteGraph.from_dict({"start": "a", "cover_exit_rule": false, "nodes": [
 		{"id": "a", "length": 100, "end": "extract", "obstacles": [
 			{"kind": "wall", "lanes": [0, 1], "at": 20}, {"kind": "box", "lanes": [2], "at": 21},
 			{"kind": "pipe", "lanes": [3, 4], "at": 22},
@@ -3727,7 +3838,7 @@ func _test_route_rules() -> void:
 		{"id": "sewer", "tier": "underground", "end": "extract"},
 	]})
 	_check("only move one level" in " ".join(stacked.validate()), "no stairs from the roof straight into a tunnel")
-	var crowded := RouteGraph.from_dict({"start": "a", "nodes": [
+	var crowded := RouteGraph.from_dict({"start": "a", "cover_exit_rule": false, "nodes": [
 		{"id": "a", "length": 60, "end": "extract",
 			"obstacles": [{"kind": "box", "lanes": [2], "at": 20}, {"kind": "barrier", "lanes": [1, 2], "at": 20.8},
 				{"kind": "pipe", "lanes": [3], "at": 20.5}],
@@ -3796,3 +3907,664 @@ func _test_targeting_priority() -> void:
 	_check(not Targeting.in_cone(behind.global_position, Vector3.ZERO, fwd, tuning), "enemy behind is out of cone")
 	for n in [near, alarm, behind]:
 		n.queue_free()
+
+
+## Mission 1, COLD CALL (user, approving its zones: "You have the go ahead now."): 10 areas, one
+## junction at the end of the SECURITY WING (straight on, the basement stairs, the fire escape), the
+## basics only, the squad off; the ways in order of length; its route map; and its finds kept apart
+## from every other mission's.
+func _test_mission_1() -> void:
+	var g := RouteGraph.from_json_file(MISSION_1)
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(MISSION_1))
+	_check(g._nodes.size() == 10 and data.get("mission", "") == "cold_call" and data.get("squad", true) == false,
+			"mission 1: 10 areas, its own id, and no pursuit squad (%d areas, %s, squad %s)" % [g._nodes.size(), data.get("mission"), data.get("squad")])
+	var extras := PackedStringArray()
+	var side_exits := PackedStringArray()
+	for n: Dictionary in data["nodes"]:
+		for e in n.get("enemies", []):
+			if String(e.get("kind", "")) != "rifle_trooper":
+				extras.append("%s: %s" % [n["id"], e["kind"]])
+		for what in ["snipers", "searchlights"]:
+			if not n.get(what, []).is_empty():
+				extras.append("%s: %s" % [n["id"], what])
+		for e in n.get("next", []):
+			if RouteGraph.side_of(e) != "straight":
+				side_exits.append("%s %s %s" % [n["id"], RouteGraph.side_of(e), RouteGraph.via_of(e)])
+	_check(extras.is_empty(), "mission 1: rifle troopers only, no snipers or searchlights (%s)" % ", ".join(extras))
+	side_exits.sort()
+	_check(side_exits == PackedStringArray(["boiler_room left ladder", "boiler_room right ladder", "roof_edge left ladder", "roof_edge right ladder",
+			"security_wing left stairs", "security_wing right stairs"]),
+			"mission 1: its only side exits are the WING's two stairs and the two ladder ends (%s)" % ", ".join(side_exits))
+	# The ways to the pad: the roof shortest (the loud way is the quick one), then the basement, then
+	# straight on.
+	var way := func(ids: Array) -> float:
+		var m := 0.0
+		for id in ids:
+			m += g.length_of(id)
+		return m
+	var ground: float = way.call([&"main_floor_lobby", &"building_main_floor", &"security_wing", &"staff_canteen", &"main_floor_exit"])
+	var below: float = way.call([&"main_floor_lobby", &"building_main_floor", &"security_wing", &"service_tunnel", &"boiler_room"])
+	var roof: float = way.call([&"main_floor_lobby", &"building_main_floor", &"security_wing", &"rooftops", &"roof_edge"])
+	_check(roof < below and below <= ground and is_equal_approx(ground, 790.0) and is_equal_approx(below, 780.0) and is_equal_approx(roof, 710.0),
+			"mission 1: the ways to the pad, roof < basement <= ground (%d, %d, %d m)" % [roof, below, ground])
+	# The WING's box comes before its wire: holding FIRE shoots a box in range, and one after the wire
+	# would quietly undo it and shut the fire escape again.
+	var wing := g.node_data(&"security_wing")
+	var wire_at := INF
+	for ob in wing.get("obstacles", []):
+		if String(ob.get("kind", "")) == "tripwire":
+			wire_at = minf(wire_at, float(ob["at"]))
+	var boxes_after := 0
+	for a in wing.get("alarms", []):
+		if float(a.get("at", 0)) > wire_at:
+			boxes_after += 1
+	_check(wire_at < INF and wing.get("alarms", []).size() == 1 and boxes_after == 0, "mission 1: the WING's alarm box comes before its wire")
+	# The far lanes free for the last 20 m before the junction, so both stairs can be reached.
+	var in_way := PackedStringArray()
+	for ob in wing.get("obstacles", []):
+		if float(ob.get("at", 0)) > g.length_of(&"security_wing") - 20.0 and (0 in ob.get("lanes", []) or 4 in ob.get("lanes", [])):
+			in_way.append("%s at %s" % [ob["kind"], ob["at"]])
+	_check(in_way.is_empty(), "mission 1: the WING's outer lanes are clear for its last 20 m (%s)" % ", ".join(in_way))
+	# The map: 10 areas; after a ground run, the only locks are the two ways off the WING.
+	var lay := RouteMap.layout(g)
+	_check(lay.size() == 10, "mission 1's map: 10 areas (%d)" % lay.size())
+	var found := {}
+	for id in [&"main_floor_lobby", &"building_main_floor", &"security_wing", &"staff_canteen", &"main_floor_exit", &"helipad"]:
+		found[id] = 1.0e6
+	var locks := RouteMap.locked_ways(g, RouteMap.seen_full(g, lay, found), found).map(func(w: Array) -> String: return "%s>%s" % w)
+	locks.sort()
+	_check(locks == ["security_wing>rooftops", "security_wing>service_tunnel"], "mission 1's map: after a ground run, a lock up and a lock down off the WING, nothing else (%s)" % [locks])
+	var run: Array[StringName] = [&"main_floor_lobby", &"building_main_floor", &"security_wing", &"rooftops", &"roof_edge", &"helipad"]
+	_check(RouteMap.levels_text(g, run) == "MAIN > ROOF > MAIN", "mission 1's map: the fire escape's route reads MAIN > ROOF > MAIN (%s)" % RouteMap.levels_text(g, run))
+	# Finds are kept per mission: mission 1's map starts empty, and a save from before missions (the
+	# old level's map) is filed under the test range.
+	var log: Node = load("res://game/autoload/run_log.gd").new()
+	log.load_saved({"main_floor_lobby": 1.0e6, "warehouse": 1.0e6, "gantry": 40.0})
+	log.set_mission(&"cold_call")
+	_check(log.discovered.is_empty(), "map per mission: mission 1 starts with nothing found, whatever the old save had")
+	log.set_mission(&"test_range")
+	_check(log.discovered.size() == 3 and is_equal_approx(float(log.discovered[&"gantry"]), 40.0), "map per mission: the old save's finds are the test range's (%s)" % log.discovered)
+	log.set_mission(&"cold_call")
+	log.begin()
+	log.enter_node(&"main_floor_lobby")
+	log.enter_node(&"building_main_floor")
+	var saved: Dictionary = log.save_data()
+	_check(saved["missions"]["cold_call"].size() == 2 and saved["missions"]["test_range"].size() == 3, "map per mission: each mission's finds saved under its own name (%s)" % saved)
+	var back: Node = load("res://game/autoload/run_log.gd").new()
+	back.load_saved(JSON.parse_string(JSON.stringify(saved)))
+	back.set_mission(&"test_range")
+	var range_found: int = back.discovered.size()
+	back.set_mission(&"cold_call")
+	_check(back.discovered.size() == 2 and range_found == 3 and back.discovered.has(&"building_main_floor"), "map per mission: and loaded back the same")
+	log.free()
+	back.free()
+
+
+## The cover-exit rule (route validation; the fair-reaction rule's floor, out of cover): stepping
+## sideways out of a crate's cover puts you back at full speed in the next lane, so a barrier or pipe
+## first in that lane must leave a swipe's reaction (and a jump's lift) before it can trip you. A
+## crate beside it, where you'd stop again, is fine; so is the far side of a wall's lanes.
+func _test_cover_exit_rule() -> void:
+	var t := Tuning.new()
+	var need_jump := RouteGraph.cover_exit_gap("barrier", t)
+	var need_slide := RouteGraph.cover_exit_gap("pipe", t)
+	_check(need_jump > need_slide and absf(need_slide - (RouteGraph.REACTION_HARD + 1.0 / 60.0) * t.run_speed) < 0.01,
+			"cover exit: a slide needs the swipe's reaction, a jump that and its lift (%.2f, %.2f m)" % [need_slide, need_jump])
+	# Where you stop in cover in front of a crate at 40 m, and where a barrier's stretch starts.
+	var stop := 40.0 - RouteGraph.DEPTHS["box"] / 2.0 - t.cover_stop_gap
+	var just_fair := stop + need_jump + RouteGraph.DEPTHS["barrier"] / 2.0 + RouteGraph.HIT_REACH + 0.01
+	var area := func(obs: Array) -> String:
+		var g := RouteGraph.from_dict({"start": "a", "nodes": [{"id": "a", "length": 100, "end": "extract", "obstacles": obs}]})
+		return " | ".join(g.validate(t))
+	var beside: String = area.call([{"kind": "box", "lanes": [2], "at": 40}, {"kind": "barrier", "lanes": [1], "at": 40}])
+	_check(beside.contains("out of the box at 40 m in lane 2 into lane 1, the barrier at 40 m comes too soon"), "cover exit: a barrier right beside a crate is rejected (%s)" % beside)
+	_check(area.call([{"kind": "box", "lanes": [2], "at": 40}, {"kind": "barrier", "lanes": [1, 3], "at": just_fair}]) == "", "cover exit: one far enough on is fine")
+	_check(area.call([{"kind": "box", "lanes": [2], "at": 40}, {"kind": "barrier", "lanes": [1], "at": just_fair - 0.1}]).contains("comes too soon"), "cover exit: ...and a little less is not")
+	_check(area.call([{"kind": "box", "lanes": [2], "at": 40}, {"kind": "box", "lanes": [1], "at": 40.5}, {"kind": "barrier", "lanes": [1], "at": 44}]).contains("into lane 3") == false,
+			"cover exit: a crate beside it (you stop again) is fine, and the lane the other way is checked on its own")
+	_check(area.call([{"kind": "box", "lanes": [2], "at": 40}, {"kind": "pipe", "lanes": [3], "at": 30}]) == "", "cover exit: something behind you doesn't count")
+	_check(area.call([{"kind": "wall", "lanes": [3, 4], "at": 40}, {"kind": "barrier", "lanes": [4], "at": 44}]) == "",
+			"cover exit: a wall's own lanes are no way out (you'd stop again), so nothing there counts")
+	var off := RouteGraph.from_dict({"start": "a", "cover_exit_rule": false, "nodes": [{"id": "a", "length": 100, "end": "extract",
+			"obstacles": [{"kind": "box", "lanes": [2], "at": 40}, {"kind": "barrier", "lanes": [1], "at": 40}]}]})
+	_check(not " | ".join(off.validate(t)).contains("comes too soon"), "cover exit: a route can switch it off (the frozen test range)")
+
+
+## Mission 1's settings (route.json "settings"; user: "an easy medium and hard for each level"): the
+## same layout, less time and more pressure going up; each setting passes every route rule at its own
+## reaction floor ("on easy levels the gaps between objects will be larger"); objects by setting; and
+## the settings' own rules.
+func _test_settings() -> void:
+	var t := load("res://game/config/default_tuning.tres") as Tuning
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(MISSION_1))
+	var all := RouteGraph.validate_settings(data, t)
+	_check(all.is_empty(), "settings: mission 1 passes every route rule on every setting, each at its own floor (%s)" % " | ".join(all))
+	_check(RouteGraph.reaction_for("hard") == RouteGraph.REACTION_HARD and RouteGraph.reaction_for("medium") == RouteGraph.REACTION_MEDIUM
+			and RouteGraph.reaction_for("easy") == RouteGraph.REACTION_EASY and RouteGraph.reaction_for("") == RouteGraph.REACTION_HARD,
+			"settings: each is held to its own reaction floor (a route without settings to HARD's)")
+	# The numbers (user): EASY lifts about 108 (about 27 s to spare on a clean ground run), MEDIUM's
+	# are today's, HARD's about 86; the boss about 20, 30 and 40 hits.
+	var want := {"easy": [28, 108, 118, 20], "medium": [28, 96, 106, 30], "hard": [28, 86, 96, 40]}
+	var g := {}
+	for s in RouteGraph.SETTINGS:
+		g[s] = RouteGraph.from_dict(data, s)
+		var ch: Dictionary = g[s].mission()["chopper"]
+		var boss: Dictionary = g[s].mission()["boss"]
+		_check(g[s].setting == s and [int(ch["lands_at"]), int(ch["lifts_at"]), int(ch["gone_at"]), int(boss["health"])] == want[s],
+				"settings: %s's chopper and boss (%s, %s)" % [s, ch, boss])
+	var spin := func(s: String) -> Array: return g[s].mission()["boss"]["spinup"]
+	var slower := true
+	for i in 3:
+		slower = slower and float(spin.call("easy")[i]) > float(spin.call("medium")[i]) and float(spin.call("hard")[i]) <= float(spin.call("medium")[i])
+	_check(slower, "settings: EASY's boss spins up slower than MEDIUM's, HARD's no slower")
+	_check(RouteGraph.from_dict(data).setting == RouteGraph.DEFAULT_SETTING and RouteGraph.from_json_file(TEST_RANGE).setting == "",
+			"settings: a route with settings is read as MEDIUM unless one is asked; the test range has none")
+	# EASY is today's layout (user: "So this would be mission 1 easy") and MEDIUM the same; HARD adds a
+	# wire before the junction and guards at CAUTION and ALERT on the way straight on.
+	var count := func(gr: RouteGraph, what: String, kind: String, min_alert: int) -> int:
+		var n := 0
+		for id in gr._nodes:
+			for x in gr.node_data(id).get(what, []):
+				if String(x.get("kind", "")) == kind and int(x.get("min_alert", 1)) >= min_alert:
+					n += 1
+		return n
+	var same := true
+	for id in g["easy"]._nodes:
+		same = same and JSON.stringify(g["easy"].node_data(id)) == JSON.stringify(g["medium"].node_data(id))
+	_check(same, "settings: EASY and MEDIUM have the same layout, guards and wires")
+	var wires := [count.call(g["medium"], "obstacles", "tripwire", 1), count.call(g["hard"], "obstacles", "tripwire", 1)]
+	var guards := [count.call(g["medium"], "enemies", "rifle_trooper", 1), count.call(g["hard"], "enemies", "rifle_trooper", 1)]
+	var loud := [count.call(g["medium"], "enemies", "rifle_trooper", 2), count.call(g["hard"], "enemies", "rifle_trooper", 2)]
+	_check(wires[1] == wires[0] + 1 and guards[1] - guards[0] == 4 and loud[1] - loud[0] == 4,
+			"settings: HARD has one more wire and four more guards, all at CAUTION or ALERT (wires %s, guards %s, at CAUTION+ %s)" % [wires, guards, loud])
+	var extra_where := {}
+	for id in g["hard"]._nodes:
+		if JSON.stringify(g["hard"].node_data(id)) != JSON.stringify(g["medium"].node_data(id)):
+			extra_where[String(id)] = true
+	_check(extra_where.size() == 3 and extra_where.has("building_main_floor") and extra_where.has("staff_canteen") and extra_where.has("main_floor_exit"),
+			"settings: HARD's extras are on the MAIN FLOOR (its wire) and on the way straight on (%s), not the roof or the first area" % [extra_where.keys()])
+	_check(JSON.stringify(g["easy"].node_data(g["easy"].start_id)) == JSON.stringify(g["hard"].node_data(g["hard"].start_id)),
+			"settings: the first area is the same on every setting (it's built under the menu)")
+	# Every setting starts at SNEAKING (the level starts every run at its START_ALERT).
+	_check(load("res://game/levels/prototype_slice/prototype_slice.gd").START_ALERT == 1, "settings: every setting starts at SNEAKING")
+	# Which settings a thing is in.
+	_check(RouteGraph.in_setting({}, "easy") and RouteGraph.in_setting({}, "hard")
+			and not RouteGraph.in_setting({"min_setting": "hard"}, "medium") and RouteGraph.in_setting({"min_setting": "medium"}, "hard")
+			and not RouteGraph.in_setting({"max_setting": "easy"}, "medium") and RouteGraph.in_setting({"max_setting": "medium"}, "easy")
+			and RouteGraph.in_setting({"settings": ["easy", "hard"]}, "hard") and not RouteGraph.in_setting({"settings": ["easy", "hard"]}, "medium"),
+			"settings: min_setting, max_setting and settings pick what's there on each")
+	# The settings' own rules.
+	var broken := func(edit: Callable) -> String:
+		var d: Dictionary = data.duplicate(true)
+		edit.call(d)
+		return " | ".join(RouteGraph.validate_settings(d, t))
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"].erase("hard")).contains("the hard setting is missing"), "settings: all three must be there")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["extreme"] = d["settings"]["hard"]).contains("unknown setting 'extreme'"), "settings: only easy, medium and hard")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["hard"]["chopper"]["lifts_at"] = 100).contains("hard: the chopper waits longer than on medium"),
+			"settings: a harder setting never gives more time")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["medium"]["boss"]["health"] = 10).contains("medium: the boss takes fewer hits than on easy"),
+			"settings: a harder setting's boss never takes fewer hits")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["hard"]["boss"]["spinup"] = [2.0, 0.8, 0.7]).contains("hard: the boss spins up slower than on medium"),
+			"settings: a harder setting's boss never spins up slower")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["easy"]["chopper"]["gone_at"] = 50).contains("easy: its chopper times must be"),
+			"settings: each one's chopper times in order")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["easy"]["boss"].erase("spinup")).contains("easy: the boss needs"), "settings: each has its boss")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["hard"]["start_alert"] = 2).contains("every setting starts at SNEAKING"), "settings: none starts above SNEAKING")
+	_check(broken.call(func(d: Dictionary) -> void: d["nodes"][1]["enemies"][0]["min_setting"] = "nightmare").contains("unknown setting 'nightmare'"),
+			"settings: an object's setting must be a real one")
+	_check(broken.call(func(d: Dictionary) -> void: d["nodes"][0]["obstacles"][0]["min_setting"] = "hard").contains("the first area is built under the main menu"),
+			"settings: nothing in the first area by setting")
+	# Each setting at its own floor: a gap HARD allows and EASY doesn't.
+	var tight: Dictionary = data.duplicate(true)
+	for n in tight["nodes"]:
+		if n["id"] == "building_main_floor":
+			for ob in n["obstacles"]:
+				if String(ob["kind"]) == "tripwire" and not ob.has("min_setting"):
+					ob["at"] = 53  # (where it was: 7 m after the pipe)
+	var floors := " | ".join(RouteGraph.validate_settings(tight, t))
+	_check(floors.contains("[EASY]") and floors.contains("[MEDIUM]") and not floors.contains("[HARD]"),
+			"settings: each setting is held to its own floor (a 7 m pipe-to-wire gap is fine on HARD, not on EASY or MEDIUM)")
+	# The boss takes the setting's hits and spin-ups.
+	var boss := Boss.new(t)
+	boss.configure(g["easy"].mission()["boss"])
+	_check(boss.health == 20 and boss.max_health == 20 and is_equal_approx(float(boss._spinup[0]), 1.4), "settings: the boss takes the setting's hits and spin-ups")
+	boss.configure({})
+	_check(boss.health == 20, "settings: a setting without a boss leaves him as he is")
+	boss.free()
+
+
+## The unlock rule (user): getting out of mission N on a setting opens mission N+1 on that setting and
+## every easier one, and mission N's next setting up. Every mission, every setting.
+func _test_unlock_rule() -> void:
+	var P: GDScript = load("res://game/autoload/progress.gd")
+	var s: Array = RouteGraph.SETTINGS
+	var every := true
+	var told := PackedStringArray()
+	for n in range(1, 10):
+		for r in 3:
+			var want := []
+			if r < 2:
+				want.append([n, s[r + 1]])
+			if n < 9:
+				for e in r + 1:
+					want.append([n + 1, s[e]])
+			var got: Array = P.unlocks_after(n, s[r])
+			if got != want:
+				every = false
+				told.append("%d %s: %s" % [n, s[r], got])
+	_check(every, "unlocks: every mission and setting opens what the rule says (%s)" % ", ".join(told))
+	# The user's own cases.
+	_check(P.unlocks_after(1, "easy") == [[1, "medium"], [2, "easy"]], "unlocks: mission 1 EASY opens its MEDIUM and mission 2 EASY only")
+	_check(P.unlocks_after(1, "medium") == [[1, "hard"], [2, "easy"], [2, "medium"]], "unlocks: MEDIUM opens mission 2 EASY and MEDIUM (and its own HARD)")
+	_check(P.unlocks_after(1, "hard") == [[2, "easy"], [2, "medium"], [2, "hard"]], "unlocks: HARD opens all of mission 2")
+	_check(P.unlocks_after(9, "hard") == [] and P.unlocks_after(9, "easy") == [[9, "medium"]], "unlocks: the last mission only opens its own next setting")
+	_check(P.unlocks_after(0, "easy") == [] and P.unlocks_after(10, "easy") == [] and P.unlocks_after(1, "extreme") == [], "unlocks: nothing for what isn't a mission or setting")
+	var p: Node = P.new()
+	p.load_from("")
+	var fresh := 0
+	for n in range(1, 10):
+		for x in s:
+			if p.is_unlocked(n, x):
+				fresh += 1
+	_check(fresh == 1 and p.is_unlocked(1, "easy") and p.is_playable(1, "easy") and not p.is_playable(1, "medium"),
+			"unlocks: at the very start only mission 1 EASY is open")
+	_check(p.record_extraction(1, "easy") == [[1, "medium"], [2, "easy"]] and p.is_unlocked(1, "medium") and p.is_cleared(1, "easy") and not p.is_cleared(1, "medium"),
+			"unlocks: getting out of mission 1 EASY opens what it should, and it's cleared")
+	_check(p.record_extraction(1, "easy") == [], "unlocks: getting out again opens nothing new")
+	_check(p.record_extraction(1, "hard") == [[2, "medium"], [2, "hard"]], "unlocks: only what's newly open is told")
+	_check(p.is_unlocked(2, "easy") and not p.is_playable(2, "easy") and not P.is_built(2) and P.is_built(1),
+			"unlocks: mission 2 is open but not playable until it's built (COMING SOON)")
+	_check(p.record_extraction(0, "easy") == [] and p.record_extraction(1, "nope") == [], "unlocks: the test range (no mission) opens nothing")
+	_check(P.mission_number(&"cold_call") == 1 and P.mission_number(&"test_range") == 0 and P.MISSIONS.size() == 9
+			and P.MISSIONS.map(func(m: Dictionary) -> String: return m["name"]) == ["COLD CALL", "SHORT LEASH", "DEAD AIR", "NOTHING TO DECLARE", "SEA LEGS",
+			"FIRE SALE", "GLASS HOUSE", "LIGHTS OUT", "HOT EXFIL"], "unlocks: the nine missions, by the story's names")
+	p.free()
+
+
+## The progress save (user://, beside the settings): kept and read back; a missing or broken file, or
+## one with nonsense in it, gives a fresh start (mission 1 EASY), never a crash.
+func _test_progress_save() -> void:
+	var P: GDScript = load("res://game/autoload/progress.gd")
+	var path := "user://test_progress_%d.json" % randi()
+	var a: Node = P.new()
+	a.load_from(path)  # (missing: fresh)
+	_check(a.is_unlocked(1, "easy") and not a.is_unlocked(1, "medium") and not FileAccess.file_exists(path), "progress: no file is a fresh start")
+	a.record_extraction(1, "medium")
+	a.remember_pick(1, "hard")
+	var b: Node = P.new()
+	b.load_from(path)
+	_check(FileAccess.file_exists(path) and b.to_data() == a.to_data() and b.is_unlocked(2, "medium") and b.is_cleared(1, "medium") and b.last == "1:hard",
+			"progress: saved at once and read back the same (%s)" % b.to_data())
+	for junk in ["{not json", "[1, 2, 3]", "", "{\"unlocked\": \"1:hard\"}"]:
+		var f := FileAccess.open(path, FileAccess.WRITE)
+		f.store_string(junk)
+		f.close()
+		var c: Node = P.new()
+		c.load_from(path)
+		_check(c.is_unlocked(1, "easy") and not c.is_unlocked(1, "hard") and c.last == "1:easy", "progress: a broken save (%s) is a fresh start" % junk)
+		c.free()
+	var d: Node = P.new()
+	d.from_data({"unlocked": ["1:easy", "1:medium", "10:easy", "2:extreme", 5, "x", "3:hard"], "cleared": ["4:easy"], "last": "5:easy"})
+	_check(d.is_unlocked(1, "medium") and d.is_unlocked(3, "hard") and not d.is_unlocked(10, "easy") and d.is_unlocked(4, "easy") and d.is_cleared(4, "easy")
+			and d.to_data()["unlocked"].size() == 4 and d.last == "1:easy",
+			"progress: only real missions and settings are kept, a cleared one is open, and the last pick only if it's open (%s)" % d.to_data())
+	var e: Node = P.new()
+	e.from_data({"unlocked": []})
+	_check(e.is_unlocked(1, "easy"), "progress: mission 1 EASY is always open")
+	var mem: Node = P.new()
+	mem.load_from("")
+	mem.record_extraction(1, "easy")
+	_check(mem.save_path == "", "progress: kept in memory only when it's told to (the bots)")
+	for n in [a, b, d, e, mem]:
+		n.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## Best times (user: each setting shows "the players best time if it's been set"): the run time of
+## his fastest extraction, per mission and setting. Only an extraction counts (killed, captured and
+## the chopper leaving never set one), only a faster time replaces it, and each setting keeps its
+## own. And a save from before best times (version 1) still loads, with none.
+func _test_best_times() -> void:
+	var P: GDScript = load("res://game/autoload/progress.gd")
+	var p: Node = P.new()
+	p.load_from("")
+	_check(p.best_time(1, "easy") < 0.0 and p.best_time(1, "hard") < 0.0, "best times: a fresh save has none")
+	for why in [&"killed", &"captured", &"chopper_left", &"dead_end"]:
+		var r: Dictionary = p.record_run(1, "easy", why, 50.0)
+		_check(not r["new_best"] and p.best_time(1, "easy") < 0.0 and not p.is_cleared(1, "easy") and r["unlocked"].is_empty(),
+				"best times: %s sets no best time and clears nothing (%s)" % [why, r])
+	var first: Dictionary = p.record_run(1, "easy", &"extracted", 90.0)
+	_check(first["new_best"] and is_equal_approx(first["best"], 90.0) and first["was"] < 0.0 and is_equal_approx(p.best_time(1, "easy"), 90.0)
+			and first["unlocked"] == [[1, "medium"], [2, "easy"]] and p.is_cleared(1, "easy"),
+			"best times: the first extraction is the best, and it unlocks as before (%s)" % first)
+	var slower: Dictionary = p.record_run(1, "easy", &"extracted", 95.5)
+	_check(not slower["new_best"] and is_equal_approx(p.best_time(1, "easy"), 90.0) and is_equal_approx(slower["was"], 90.0),
+			"best times: a slower extraction doesn't replace it")
+	var same: Dictionary = p.record_run(1, "easy", &"extracted", 90.0)
+	_check(not same["new_best"], "best times: the same time isn't a new best")
+	var faster: Dictionary = p.record_run(1, "easy", &"extracted", 81.4)
+	_check(faster["new_best"] and is_equal_approx(faster["was"], 90.0) and is_equal_approx(p.best_time(1, "easy"), 81.4),
+			"best times: a faster extraction replaces it (%s)" % faster)
+	p.record_run(1, "easy", &"killed", 10.0)
+	_check(is_equal_approx(p.best_time(1, "easy"), 81.4), "best times: a quick death after doesn't touch it")
+	var med: Dictionary = p.record_run(1, "medium", &"extracted", 99.0)
+	_check(med["new_best"] and is_equal_approx(p.best_time(1, "medium"), 99.0) and is_equal_approx(p.best_time(1, "easy"), 81.4) and p.best_time(1, "hard") < 0.0,
+			"best times: each setting keeps its own")
+	_check(not p.record_run(1, "easy", &"extracted", 0.0)["new_best"] and not p.record_run(1, "easy", &"extracted", -3.0)["new_best"]
+			and not p.record_run(1, "easy", &"extracted", INF)["new_best"] and is_equal_approx(p.best_time(1, "easy"), 81.4),
+			"best times: a time that isn't one is never a best")
+	_check(not p.record_run(0, "easy", &"extracted", 30.0)["new_best"] and not p.record_run(1, "extreme", &"extracted", 30.0)["new_best"],
+			"best times: the test range (no mission) and a setting that isn't one keep none")
+	# Kept in the save, and read back the same.
+	var data: Dictionary = p.to_data()
+	_check(data["version"] == 2 and data["best"] is Dictionary and is_equal_approx(float(data["best"]["1:easy"]), 81.4) and data["best"].size() == 2,
+			"best times: in the save, by mission and setting (%s)" % [data["best"]])
+	var q: Node = P.new()
+	q.from_data(JSON.parse_string(JSON.stringify(data)))
+	_check(is_equal_approx(q.best_time(1, "easy"), 81.4) and is_equal_approx(q.best_time(1, "medium"), 99.0) and q.to_data() == p.to_data(),
+			"best times: read back from the save the same")
+	# A save from before best times (version 1: no "best"): its unlocks and cleared marks as they were, no best times.
+	var old: Node = P.new()
+	old.from_data(JSON.parse_string('{"version": 1, "unlocked": ["1:easy", "1:medium", "2:easy"], "cleared": ["1:easy"], "last": "1:medium"}'))
+	_check(old.is_unlocked(1, "medium") and old.is_unlocked(2, "easy") and old.is_cleared(1, "easy") and old.last == "1:medium"
+			and old.best_time(1, "easy") < 0.0 and old.to_data()["best"].is_empty(),
+			"best times: an old save (version 1) loads as it was, with no best times")
+	var first_old: Dictionary = old.record_run(1, "easy", &"extracted", 88.0)
+	_check(first_old["new_best"] and first_old["was"] < 0.0, "best times: ...and its next extraction is its first best")
+	# Nonsense in the best times is left out; a best time means it was got out of (cleared, open).
+	var junk: Node = P.new()
+	junk.from_data({"unlocked": [], "best": {"1:hard": 70.5, "1:easy": "fast", "2:medium": -1, "10:easy": 50, "x": 3, "1:medium": 0}})
+	_check(junk.to_data()["best"].keys() == ["1:hard"] and junk.is_cleared(1, "hard") and junk.is_unlocked(1, "hard"),
+			"best times: only real times for real missions and settings are kept (%s)" % [junk.to_data()["best"]])
+	junk.from_data({"best": [1, 2]})
+	_check(junk.to_data()["best"].is_empty() and junk.is_unlocked(1, "easy"), "best times: a best list that isn't one is none")
+	for n in [p, q, old, junk]:
+		n.free()
+
+
+## The auto-save (user: "I'd like the game to auto save itself after the player finishes a run"):
+## record_run (called as every run ends) writes the save to the device whatever the ending:
+## extracted, killed, captured, the chopper gone (and the test range's, no mission, too). What's
+## written is what's kept. Kept in memory only (the bots), nothing is written.
+func _test_auto_save() -> void:
+	var P: GDScript = load("res://game/autoload/progress.gd")
+	var path := "user://test_autosave_%d.json" % randi()
+	var p: Node = P.new()
+	p.load_from(path)
+	for case in [[1, &"killed"], [1, &"captured"], [1, &"chopper_left"], [1, &"extracted"], [0, &"extracted"], [1, &"dead_end"]]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		var r: Dictionary = p.record_run(case[0], "easy", case[1], 77.7)
+		var back: Node = P.new()
+		back.load_from(path)
+		_check(r["saved"] and FileAccess.file_exists(path) and not FileAccess.file_exists(path + SaveFile.TMP) and back.to_data() == p.to_data(),
+				"auto-save: written as the run ends (mission %d, %s), and read back the same" % case)
+		back.free()
+	var back2: Node = P.new()
+	back2.load_from(path)
+	_check(is_equal_approx(back2.best_time(1, "easy"), 77.7) and back2.is_cleared(1, "easy") and back2.is_unlocked(2, "easy"),
+			"auto-save: the best time, the cleared mark and the unlocks are on the device")
+	back2.free()
+	var mem: Node = P.new()
+	mem.load_from("")
+	_check(not mem.record_run(1, "easy", &"extracted", 60.0)["saved"], "auto-save: kept in memory only (the bots), nothing written")
+	# A write that fails (somewhere it can't write) is a warning, the game goes on.
+	var bad: Node = P.new()
+	bad.load_from("user://no_such_folder_%d/progress.json" % randi())
+	var r2: Dictionary = bad.record_run(1, "easy", &"extracted", 60.0)
+	_check(not r2["saved"] and r2["new_best"] and bad.is_cleared(1, "easy"), "auto-save: a failed write doesn't break anything (it's still recorded for the session)")
+	# The route map's finds are written as the run ends too (RunLog.finish), safely.
+	var RL: GDScript = load("res://game/autoload/run_log.gd")
+	var rl1: Node = RL.new()
+	var dpath := "user://test_discovery_%d.json" % randi()
+	rl1.load_from(dpath)
+	rl1.set_mission(&"cold_call")
+	rl1.begin()
+	rl1.enter_node(&"main_floor_lobby")
+	rl1.finish(&"killed", &"main_floor_lobby", 12.0)
+	var log2: Node = RL.new()
+	log2.load_from(dpath)
+	log2.set_mission(&"cold_call")
+	_check(FileAccess.file_exists(dpath) and is_equal_approx(float(log2.discovered.get(&"main_floor_lobby", -1.0)), 12.0),
+			"auto-save: the route map's finds are written as the run ends, and read back (%s)" % [log2.discovered])
+	var log3: Node = RL.new()
+	log3.load_from("")
+	log3.set_mission(&"cold_call")
+	log3.begin()
+	log3.enter_node(&"main_floor_lobby")
+	log3.finish(&"killed", &"main_floor_lobby", 5.0)
+	_check(log3.save_path == "" and log3.discovered.has(&"main_floor_lobby"), "auto-save: the route map kept in memory only when it's told to (the bots)")
+	for n in [p, mem, bad, rl1, log2, log3]:
+		n.free()
+	for f in [path, dpath]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(f + SaveFile.TMP))
+
+
+## SaveFile, how every save is written: a temp file, then a rename over the save, so it's never left
+## half-written; a save over an old one replaces it; a save whose rename never happened (the game
+## stopped between the two) is still found, in its .tmp; somewhere it can't write is false, not a
+## crash.
+func _test_save_file() -> void:
+	var path := "user://test_savefile_%d.txt" % randi()
+	_check(SaveFile.read_text(path) == "" and not SaveFile.exists(path), "save file: none there reads as nothing")
+	_check(SaveFile.write_text(path, "one") and FileAccess.get_file_as_string(path) == "one" and not FileAccess.file_exists(path + SaveFile.TMP),
+			"save file: written, with no temp file left")
+	_check(SaveFile.write_text(path, "two") and SaveFile.read_text(path) == "two" and not FileAccess.file_exists(path + SaveFile.TMP),
+			"save file: a new save replaces the old one")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var f := FileAccess.open(path + SaveFile.TMP, FileAccess.WRITE)
+	f.store_string("three")
+	f.close()
+	_check(SaveFile.exists(path) and SaveFile.read_text(path) == "three", "save file: stopped before its rename, the new save is read from its .tmp")
+	_check(SaveFile.write_text(path, "four") and SaveFile.read_text(path) == "four" and not FileAccess.file_exists(path + SaveFile.TMP),
+			"save file: ...and the next save tidies it up")
+	_check(not SaveFile.write_text("user://no_such_folder_%d/x.txt" % randi(), "x") and not SaveFile.write_text("", "x"),
+			"save file: somewhere it can't write is false, not a crash")
+	# The settings are written the same way, and read back.
+	var cfg := ConfigFile.new()
+	cfg.set_value("settings", "aim", "tap")
+	SaveFile.write_text(path, cfg.encode_to_text())
+	var back := ConfigFile.new()
+	_check(back.parse(SaveFile.read_text(path)) == OK and back.get_value("settings", "aim", "") == "tap", "save file: the settings' format writes and reads back")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## The mission select, then each mission's screen (user: "The menu is too cramped. There would be
+## another screen after the mission select that shows the 3 difficulty options with the players best
+## time if it's been set. They click the difficulty they want to play and the game starts."). START
+## MISSION opens the select: all nine missions listed (no settings on it now), the ones not built
+## COMING SOON and not pickable, each with a mark per setting (cleared, open or locked). A tap on
+## mission 1 opens its screen: EASY / MEDIUM / HARD, a locked one greyed with its padlock and not
+## pickable (by a tap or otherwise), each with his best time ("--" if none); a tap on an open one
+## starts that mission on that setting; BACK goes back to the select, and its BACK to the main menu.
+## Laid out to fit a 480-high screen and a tall phone's 585, nothing overlapping. And the debrief
+## says what an extraction opened, and NEW BEST.
+func _test_mission_select() -> void:
+	var prog: Node = root.get_node("Progress")  # (the autoload the menu reads)
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	prog.load_from("")  # (a fresh save, in memory: the player's own is left alone)
+	# (Frontend by its file, at run time: it reads the Progress autoload, which this script can't name)
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var fe = FE.new()
+	root.add_child(fe)
+	var picks := []
+	fe.start_requested.connect(func(n: int, s: String) -> void: picks.append([n, s]))
+	fe.show_main()
+	await process_frame
+	var start := _menu_button(fe, "START MISSION")
+	_check(start != null, "mission select: the main menu still has START MISSION")
+	start.pressed.emit()
+	await process_frame
+	_check(fe.in_missions() and picks.is_empty(), "mission select: START MISSION opens it (and starts nothing yet)")
+	var rows: Array = fe.find_children("*", "", true, false).filter(func(n: Node) -> bool: return n.get_script() == FE.MissionRow and not n.is_queued_for_deletion())
+	var names := rows.map(func(r: Node) -> String: return r.title)
+	_check(rows.size() == 9 and names[0] == "COLD CALL" and names[8] == "HOT EXFIL", "mission select: all nine missions listed (%s)" % [names])
+	_check(rows.all(func(r: Node) -> bool: return r.built == (r.number == 1)), "mission select: only mission 1 is built; 2 to 9 are COMING SOON")
+	_check(fe.chip(1, "easy") == null, "mission select: no settings on it now (they're on the mission's screen)")
+	var row1 = fe.mission_row(1)
+	_check(row1.playable() and not row1.disabled and row1.unlocked == [true, false, false] and row1.cleared == [false, false, false],
+			"mission select: mission 1 can be picked; its marks: EASY open, MEDIUM and HARD locked, none cleared")
+	_check(range(2, 10).all(func(n: int) -> bool: return fe.mission_row(n).disabled and fe.mission_row(n).focus_mode == Control.FOCUS_NONE),
+			"mission select: 2 to 9 greyed and not pickable")
+	_check(row1.has_focus(), "mission select: it opens with mission 1 picked out (focus)")
+	# A mission not built can't be opened: not by a tap, not by open_mission().
+	_tap_at(fe.mission_row(2).get_global_rect().get_center())
+	_check(not fe.open_mission(2) and fe.in_missions(), "mission select: a mission not built yet can't be opened")
+	_check(not fe.choose(1, "easy") and picks.is_empty(), "mission select: nothing starts from the select itself")
+	# A tap on mission 1 opens its screen.
+	_tap_at(row1.get_global_rect().get_center())
+	await process_frame
+	_check(fe.in_mission() and fe.mission_shown() == 1 and picks.is_empty(), "mission screen: a tap on mission 1 opens its screen (nothing started yet)")
+	_check(_has_label(fe, "COLD CALL") and RouteGraph.SETTINGS.all(func(s: String) -> bool: return fe.chip(1, s) != null),
+			"mission screen: its name, and EASY / MEDIUM / HARD")
+	var open := []
+	var locked_ok := true
+	for s in RouteGraph.SETTINGS:
+		var c = fe.chip(1, s)
+		if c.playable():
+			open.append(s)
+		elif not c.disabled or c.focus_mode != Control.FOCUS_NONE or c.open:
+			locked_ok = false
+	_check(open == ["easy"] and locked_ok and fe.chip(1, "medium").needs == "EASY" and fe.chip(1, "hard").needs == "MEDIUM",
+			"mission screen: a fresh save has only EASY pickable; MEDIUM and HARD locked (padlocked), saying what opens them (%s)" % [open])
+	_check(RouteGraph.SETTINGS.all(func(s: String) -> bool: return fe.chip(1, s).best < 0.0), "mission screen: no best times on a fresh save")
+	# A locked one can't be picked: not by a tap where it is, not by its press, not by choose().
+	var locked = fe.chip(1, "medium")
+	_tap_at(locked.get_global_rect().get_center())
+	locked.pressed.emit()
+	_check(not fe.choose(1, "medium") and picks.is_empty() and fe.in_mission(), "mission screen: a locked setting can't be picked")
+	var easy = fe.chip(1, "easy")
+	_check(easy.has_focus(), "mission screen: it opens with the open one picked out (focus)")
+	# BACK: the select (mission 1 still picked out), then the main menu.
+	_menu_button(fe, "BACK").pressed.emit()
+	await process_frame
+	_check(fe.in_missions() and fe.mission_row(1) != null and fe.mission_row(1).has_focus(), "mission screen: BACK returns to the mission select")
+	_menu_button(fe, "BACK").pressed.emit()
+	await process_frame
+	_check(_menu_button(fe, "START MISSION") != null and not fe.in_missions(), "mission select: BACK returns to the main menu")
+	# Through again: START MISSION, mission 1, EASY: a tap starts it on EASY.
+	_menu_button(fe, "START MISSION").pressed.emit()
+	await process_frame
+	_tap_at(fe.mission_row(1).get_global_rect().get_center())
+	await process_frame
+	_tap_at(fe.chip(1, "easy").get_global_rect().get_center())
+	_check(picks == [[1, "easy"]], "mission screen: a tap on EASY starts mission 1 on EASY (%s)" % [picks])
+	# With best times: got out of EASY (81.4 s) and MEDIUM was a death. The marks, the best times.
+	prog.load_from("")
+	prog.record_run(1, "easy", &"extracted", 81.4)
+	prog.record_run(1, "medium", &"killed", 40.0)
+	fe.show_main()
+	await process_frame
+	_menu_button(fe, "START MISSION").pressed.emit()
+	await process_frame
+	_check(fe.mission_row(1).cleared == [true, false, false] and fe.mission_row(1).unlocked == [true, true, false],
+			"mission select: after EASY, mission 1's marks show EASY cleared and MEDIUM open")
+	var rb: Array = fe.mission_row(1).best
+	_check(rb.size() == 3 and is_equal_approx(rb[0], 81.4) and rb[1] < 0.0 and rb[2] < 0.0, "mission select: mission 1's row has his best times (EASY 81.4 s, none on MEDIUM or HARD)")
+	_check(FE.MissionRow.best_text(81.4) == "1:21" and FE.MissionRow.best_text(59.97) == "0:59" and FE.MissionRow.best_text(-1.0) == "--",
+			"mission select: a row's best time reads to the second, never better than he did (1:21; -- for none)")
+	# The row's line of times ("E 1:21  M 1:21  H 1:21", all three set: its widest likely) clears the marks.
+	var rf := UiKit.font()
+	var times_end := 40.0 + 3.0 * (12.0 + rf.get_string_size("9:59", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x) + 2.0 * 10.0
+	_check(times_end + 6.0 <= 242.0 - 10.0 - 3.0 * FE.MissionRow.MARK.x - 2.0 * FE.MissionRow.MARK_GAP,
+			"mission select: a row's three best times clear its marks (%d px)" % times_end)
+	_check(fe.open_mission(1) and fe.in_mission(), "mission select: open_mission(1) opens its screen")
+	await process_frame
+	var e = fe.chip(1, "easy")
+	var m = fe.chip(1, "medium")
+	_check(is_equal_approx(e.best, 81.4) and e.cleared and m.best < 0.0 and m.playable() and not m.cleared and not fe.chip(1, "hard").playable(),
+			"mission screen: EASY shows his best (81.4 s), MEDIUM open with none (the death set none), HARD locked")
+	_check(FE.time_text(81.4) == "1:21.4" and FE.time_text(59.97) == "1:00.0" and FE.time_text(5.0) == "0:05.0", "mission screen: a best time reads as the tally's TIME (1:21.4)")
+	picks.clear()
+	_tap_at(m.get_global_rect().get_center())
+	_check(picks == [[1, "medium"]], "mission screen: ...and a tap on MEDIUM starts it")
+	# It fits: the select's nine rows and BACK, and the mission's three buttons, its line and BACK,
+	# on a 480-high screen and a tall phone's 585.
+	for h in [480.0, 585.0]:
+		var step: float = FE.mission_step(h)
+		var back_bottom: float = FE.MISSION_TOP + 9.0 * step + 6.0 + 20.0
+		_check(back_bottom <= h - 8.0 and step >= FE.MISSION_ROW_MIN, "mission select: fits a %d-high screen (BACK's bottom at %d)" % [h, back_bottom])
+		var end: float = FE.setting_top(h) + 3.0 * FE.SETTING_H + 2.0 * FE.SETTING_GAP
+		_check(FE.setting_top(h) >= 84.0 and end + 36.0 + 20.0 <= h - 8.0, "mission screen: fits a %d-high screen (BACK's bottom at %d)" % [h, end + 56.0])
+	# Nothing overlaps (the 8 px font is 6 px a letter, the 16 px 12): on a mission row, the longest
+	# name clears COMING SOON and the marks; on a setting button, the longest status clears the
+	# padlock, and the name and NOT CLEARED YET clear the longest time.
+	var f := UiKit.font()
+	var row_w := 270.0 - 28.0
+	var longest := 0.0
+	for mi in Progress.MISSIONS:
+		longest = maxf(longest, f.get_string_size(String(mi["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x)
+	var marks_x: float = row_w - 10.0 - 3.0 * FE.MissionRow.MARK.x - 2.0 * FE.MissionRow.MARK_GAP
+	var soon_x: float = row_w - 10.0 - f.get_string_size("COMING SOON", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	_check(40.0 + longest + 6.0 <= minf(marks_x, soon_x), "mission select: the longest name (%d px) clears the marks and COMING SOON" % longest)
+	var right: float = row_w - FE.SettingChip.SLANT - 12.0
+	var status_end: float = FE.SettingChip.SLANT + 8.0 + f.get_string_size("CLEAR MEDIUM TO UNLOCK", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	var time_x: float = right - f.get_string_size("99:59.9", HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	var name_end: float = FE.SettingChip.SLANT + 12.0 + f.get_string_size("MEDIUM", HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	var nc_end: float = FE.SettingChip.SLANT + 8.0 + f.get_string_size("NOT CLEARED YET", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	_check(status_end + 6.0 <= right - 15.0 and name_end + 6.0 <= time_x and nc_end + 6.0 <= time_x,
+			"mission screen: the setting's name and status clear its best time and padlock")
+	# The debrief says what opened.
+	_check(FE.unlock_lines([[1, "medium"], [2, "easy"]], 1) == PackedStringArray(["MEDIUM UNLOCKED", "MISSION 2: EASY UNLOCKED"])
+			and FE.unlock_lines([[2, "easy"], [2, "medium"], [2, "hard"]], 1) == PackedStringArray(["MISSION 2: EASY + MEDIUM + HARD UNLOCKED"])
+			and FE.unlock_lines([], 1).is_empty(), "debrief: what an extraction opened, in words")
+	_check(FE.best_line(true, -1.0) == "NEW BEST TIME" and FE.best_line(true, 90.0) == "NEW BEST TIME - WAS 1:30.0" and FE.best_line(false, 90.0) == "",
+			"debrief: a new best time, in words")
+	fe.show_end(&"extracted", {"time": 70.0, "mission": 1, "setting": "easy", "unlocked": [[1, "medium"], [2, "easy"]], "new_best": true, "was_best": 90.0})
+	await process_frame
+	var said := _debrief_lines(fe)
+	var fits := true
+	for l in said:
+		fits = fits and f.get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= 242.0
+	_check(said == PackedStringArray(["NEW BEST TIME - WAS 1:30.0", "MEDIUM UNLOCKED", "MISSION 2: EASY UNLOCKED"]) and fits,
+			"debrief: after a faster extraction it says NEW BEST, then what unlocked (%s)" % said)
+	fe.show_end(&"extracted", {"time": 95.0, "mission": 1, "setting": "easy", "unlocked": [], "new_best": false, "was_best": 90.0})
+	await process_frame
+	_check(_debrief_lines(fe).is_empty(), "debrief: a slower one says nothing of a best (%s)" % _debrief_lines(fe))
+	fe.show_end(&"killed", {"time": 30.0, "mission": 1, "setting": "easy", "unlocked": [], "new_best": false, "was_best": -1.0})
+	await process_frame
+	_check(_debrief_lines(fe).is_empty(), "debrief: killed, nothing of a best or unlocks")
+	fe.free()
+	prog.from_data(saved)
+	prog.save_path = saved_path
+
+
+## The debrief's lines under its buttons (a new best, the unlocks), typed out in full.
+func _debrief_lines(fe: Node) -> PackedStringArray:
+	for ty in fe.find_children("*", "", true, false):
+		if ty is Typer:
+			ty.finish()
+	var said := PackedStringArray()
+	for l in fe.find_children("*", "Label", true, false):
+		var t := (l as Label).text
+		if (t.contains("UNLOCKED") or t.contains("NEW BEST")) and not l.is_queued_for_deletion():
+			said.append(t)
+	return said
+
+
+## Whether a label with exactly this text is up on the menu.
+func _has_label(fe: Node, text: String) -> bool:
+	for l in fe.find_children("*", "Label", true, false):
+		if (l as Label).text == text and not l.is_queued_for_deletion():
+			return true
+	return false
+
+
+## The menu's button with this text, on the screen up now (null if none).
+func _menu_button(fe: Node, text: String) -> Button:
+	for b in fe.find_children("*", "Button", true, false):
+		if (b as Button).text == text and not b.is_queued_for_deletion():
+			return b
+	return null
+
+
+## A tap as a phone gives one, at `p` in the game's own pixels: a press and a release.
+func _tap_at(p: Vector2) -> void:
+	for down in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = down
+		e.position = p
+		e.global_position = p
+		root.push_input(e, true)

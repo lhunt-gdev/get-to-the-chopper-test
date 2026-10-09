@@ -4,6 +4,13 @@ extends RefCounted
 ## directed edges. Routes are authored, never procedural (LOCKED).
 ##
 ## JSON format (see game/levels/prototype_slice/route.json):
+##   mission: its id (each mission keeps its own route map); title; chopper: its timeline
+##   squad: false keeps the Alert 3 pursuit squad out of it (on unless it says so)
+##   cover_exit_rule: false switches the cover-exit rule off (only the frozen TEST RANGE does)
+##   settings: {easy, medium, hard} (SETTINGS), each {chopper: its timeline, boss: {health, spinup:
+##     [s at SNEAKING, CAUTION, ALERT]}}; then an obstacle, enemy, alarm box, searchlight or sniper can
+##     say which settings it's in, like min_alert: "min_setting", "max_setting" or "settings": [...]
+##     (for_setting). A route with settings is read for one of them (DEFAULT_SETTING if none is asked).
 ##   start: node id
 ##   nodes: [{ id, length, tier, bends: [{at, side}], obstacles: [...], next: [edge, ...], end }]
 ##   edge:  { to, label, side, via, min_alert, max_alert }
@@ -41,11 +48,22 @@ const ACTIONS := {"barrier": "jump", "tripwire": "jump", "pipe": "slide"}
 ## to be challenging"): about a quarter of a second to see the cue (you're down, you're past it) and
 ## start the swipe, the swipe itself (the finger has to travel 8% of the screen's width before it
 ## counts: SwipeInput), and Safari's touch and display delay: about 0.35 s, rounded up. "On easy
-## levels the gaps between objects will be larger": MEDIUM and EASY are for when the settings are
-## built (nothing uses them yet).
+## levels the gaps between objects will be larger": MEDIUM and EASY give more (reaction_for), and each
+## setting is held to its own (validate_settings).
 const REACTION_HARD := 0.4
 const REACTION_MEDIUM := 0.5
 const REACTION_EASY := 0.6
+## A mission's settings, easiest first (user: "I think an easy medium and hard for each level is good
+## means more replay value"). The same layout and routes on each; only the pressure changes: the
+## chopper's time, the boss, and guards and tripwires by setting.
+const SETTINGS := ["easy", "medium", "hard"]
+## What a route with settings is read as when nobody says (the bots that don't pick one, the tests):
+## MEDIUM, where the chopper times were first tuned.
+const DEFAULT_SETTING := "medium"
+## The keys an object can carry to say which settings it's in (for_setting).
+const SETTING_KEYS := ["min_setting", "max_setting", "settings"]
+## The lists of things in an area that can be by setting.
+const BY_SETTING := ["obstacles", "enemies", "alarms", "searchlights", "snipers"]
 ## How far past its front and back faces an obstacle can still trip you (m): the level's hit test
 ## (prototype_slice.gd _check_obstacles) reaches this far.
 const HIT_REACH := 0.2
@@ -110,25 +128,136 @@ const TIERS := {"roof": 1, "ground": 0, "underground": -1}
 
 var start_id: StringName = &""
 var _nodes: Dictionary = {}  # StringName -> Dictionary
-## The mission-wide settings from the top of the file (e.g. "chopper": its own timeline).
+## The mission-wide settings from the top of the file (e.g. "chopper": its own timeline). For a
+## route with settings, read for one: that setting's "chopper" and "boss" in place, and "setting".
 var _mission: Dictionary = {}
+## Which setting this is the route for ("" for a route without settings: the TEST RANGE).
+var setting := ""
 
 
-static func from_json_file(path: String) -> RouteGraph:
+static func from_json_file(path: String, for_setting_name: String = "") -> RouteGraph:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		push_error("RouteGraph: cannot open %s (is *.json in the export include filter?)" % path)
 		return null
-	return from_dict(JSON.parse_string(f.get_as_text()))
+	return from_dict(JSON.parse_string(f.get_as_text()), for_setting_name)
 
 
-static func from_dict(data: Dictionary) -> RouteGraph:
+## A route from its data. One with settings is read for `for_setting_name` (DEFAULT_SETTING if empty):
+## only what's in that setting, with its chopper and boss (for_setting).
+static func from_dict(data: Dictionary, for_setting_name: String = "") -> RouteGraph:
+	if data.get("settings") is Dictionary:
+		data = for_setting(data, for_setting_name if for_setting_name != "" else DEFAULT_SETTING)
 	var g := RouteGraph.new()
 	g.start_id = StringName(data.get("start", ""))
 	g._mission = data
+	g.setting = String(data.get("setting", ""))
 	for n: Dictionary in data.get("nodes", []):
 		g._nodes[StringName(n["id"])] = n
 	return g
+
+
+## A route with settings, as it is on one of them (a copy; the data is left as it is): its chopper and
+## boss from that setting's block, and in each area only the things in that setting (in_setting).
+static func for_setting(data: Dictionary, which: String) -> Dictionary:
+	var out := data.duplicate(true)
+	var block: Dictionary = data.get("settings", {}).get(which, {}) if data.get("settings") is Dictionary else {}
+	out["setting"] = which
+	for key in ["chopper", "boss"]:
+		if block.has(key):
+			out[key] = block[key].duplicate(true)
+	for n: Dictionary in out.get("nodes", []):
+		for list in BY_SETTING:
+			if n.get(list) is Array:
+				n[list] = n[list].filter(func(thing: Variant) -> bool: return not thing is Dictionary or in_setting(thing, which))
+	return out
+
+
+## Whether a thing (an obstacle, a guard, an alarm box...) is there on a setting: by its "settings"
+## (the ones it's in), or "min_setting" / "max_setting" (like min_alert: from, and up to); with none,
+## on every setting.
+static func in_setting(thing: Dictionary, which: String) -> bool:
+	var rank := SETTINGS.find(which)
+	if thing.get("settings") is Array:
+		return which in thing["settings"]
+	if rank < SETTINGS.find(String(thing.get("min_setting", SETTINGS[0]))):
+		return false
+	return rank <= SETTINGS.find(String(thing.get("max_setting", SETTINGS[-1])))
+
+
+## The swipe's reaction time a setting is held to (the fair-reaction and cover-exit rules): HARD's
+## floor, MEDIUM and EASY more ("on easy levels the gaps between objects will be larger").
+static func reaction_for(which: String) -> float:
+	return {"easy": REACTION_EASY, "medium": REACTION_MEDIUM}.get(which, REACTION_HARD)
+
+
+## Every route rule on every setting of a route's data, each at its own reaction floor
+## (reaction_for), plus the settings' own rules (_settings_problems); each problem says which setting.
+## A route without settings: validate() as it is.
+static func validate_settings(data: Dictionary, tuning: Tuning = null) -> PackedStringArray:
+	if not data.get("settings") is Dictionary:
+		return from_dict(data).validate(tuning)
+	var problems := _settings_problems(data)
+	for which: String in SETTINGS:
+		if not data["settings"].has(which):
+			continue
+		for p in from_dict(data, which).validate(tuning, reaction_for(which)):
+			problems.append("[%s] %s" % [which.to_upper(), p])
+	return problems
+
+
+## The settings themselves: all three there, each with a chopper timeline in order and a boss; a
+## harder one never kinder (the chopper no later, the boss no weaker, his spin-ups no slower); every
+## object's setting names real; and the first area the same on every one (it's built under the main
+## menu, before a setting is picked: the level swaps the rest when one is).
+static func _settings_problems(data: Dictionary) -> PackedStringArray:
+	var problems := PackedStringArray()
+	var blocks: Dictionary = data["settings"]
+	for which in blocks:
+		if not which in SETTINGS:
+			problems.append("unknown setting '%s' (easy, medium or hard)" % which)
+	var last := {}
+	for which: String in SETTINGS:
+		if not blocks.has(which) or not blocks[which] is Dictionary:
+			problems.append("the %s setting is missing" % which)
+			continue
+		var b: Dictionary = blocks[which]
+		var ch: Dictionary = b.get("chopper", {}) if b.get("chopper") is Dictionary else {}
+		var t0 := float(ch.get("lands_at", 0)); var t1 := float(ch.get("lifts_at", 0)); var t2 := float(ch.get("gone_at", 0))
+		if not (t0 > 0.0 and t0 < t1 and t1 < t2):
+			problems.append("%s: its chopper times must be lands_at < lifts_at < gone_at" % which)
+		var boss: Dictionary = b.get("boss", {}) if b.get("boss") is Dictionary else {}
+		var spin: Array = boss.get("spinup", []) if boss.get("spinup") is Array else []
+		if int(boss.get("health", 0)) <= 0 or spin.size() != 3 or spin.any(func(s: Variant) -> bool: return float(s) <= 0.0):
+			problems.append("%s: the boss needs \"health\" (hits) and \"spinup\" (3 times, s: SNEAKING, CAUTION, ALERT)" % which)
+		if b.has("start_alert") and int(b["start_alert"]) != 1:
+			problems.append("%s: every setting starts at SNEAKING" % which)
+		if not last.is_empty():
+			if t1 > float(last["lifts"]) or t2 > float(last["gone"]):
+				problems.append("%s: the chopper waits longer than on %s" % [which, last["name"]])
+			if int(boss.get("health", 0)) < int(last["health"]):
+				problems.append("%s: the boss takes fewer hits than on %s" % [which, last["name"]])
+			for i in mini(spin.size(), last["spin"].size()):
+				if float(spin[i]) > float(last["spin"][i]):
+					problems.append("%s: the boss spins up slower than on %s" % [which, last["name"]])
+					break
+		last = {"name": which, "lifts": t1, "gone": t2, "health": int(boss.get("health", 0)), "spin": spin}
+	for n: Dictionary in data.get("nodes", []):
+		for list in BY_SETTING:
+			for thing in n.get(list, []):
+				if not thing is Dictionary:
+					continue
+				var names: Array = thing.get("settings", []) if thing.get("settings") is Array else []
+				for key in ["min_setting", "max_setting"]:
+					if thing.has(key):
+						names.append(thing[key])
+				for s in names:
+					if not String(s) in SETTINGS:
+						problems.append("node '%s': %s at %s m: unknown setting '%s'" % [n.get("id"), thing.get("kind", list), thing.get("at"), s])
+				if String(n.get("id", "")) == String(data.get("start", "")) and SETTING_KEYS.any(func(k: String) -> bool: return thing.has(k)):
+					problems.append("node '%s': %s at %s m is by setting, but the first area is built under the main menu: it must be the same on every setting"
+							% [n.get("id"), thing.get("kind", list), thing.get("at")])
+	return problems
 
 
 func mission() -> Dictionary:
@@ -258,6 +387,59 @@ static func _forced_crossings(id: StringName, obstacles: Array) -> PackedStringA
 					problems.append("node '%s': %s at %s m blocks the only way past the cover at %s m (you can't swipe and jump at once)"
 							% [id, o["kind"], o.get("at"), c.get("at")])
 					break
+	return problems
+
+
+## The cover-exit rule (the fair-reaction rule's floor, out of cover): in cover you're stopped just in
+## front of it (cover_stop_gap short of its face), and a swipe sideways puts you straight back to
+## full speed in the next lane. So whatever you meet first there, if it's something to jump or slide
+## (a barrier, a pipe or a tripwire), its stretch must start far enough ahead for the second swipe
+## after the first: `reaction` seconds and a frame (the swipe is read once a frame), and a jump's lift
+## to clear height. That's this many metres of road, from where you stop to where it can trip you.
+## (Cover first in that lane is fine: you stop again, and it's that cover's own way out that counts.)
+static func cover_exit_gap(kind: String, t: Tuning, reaction: float = REACTION_HARD) -> float:
+	var need := reaction + 1.0 / Engine.physics_ticks_per_second
+	if ACTIONS[kind] == "jump":
+		need += _above_clear_height(t).x
+	return need * t.run_speed
+
+
+## Each way out of each cover in an area, sideways into a lane the cover doesn't fill, by the
+## cover-exit rule (cover_exit_gap).
+static func _cover_exits(id: StringName, obstacles: Array, t: Tuning, reaction: float, lane_count: int) -> PackedStringArray:
+	var problems := PackedStringArray()
+	for c in obstacles:
+		var c_kind := String(c.get("kind", ""))
+		if not c_kind in ["box", "wall"]:
+			continue
+		var stop: float = float(c.get("at", 0)) - DEPTHS[c_kind] / 2.0 - t.cover_stop_gap
+		var c_lanes: Array = c.get("lanes", []).map(func(v: Variant) -> int: return int(v))
+		for lane: int in c_lanes:
+			for to: int in [lane - 1, lane + 1]:
+				if to < 0 or to >= lane_count or to in c_lanes:
+					continue
+				# The first thing ahead in that lane: cover you'd stop at, or a stretch that can trip you.
+				var first: Dictionary = {}
+				var first_at := INF
+				for o in obstacles:
+					if not int(to) in o.get("lanes", []).map(func(v: Variant) -> int: return int(v)):
+						continue
+					var kind := String(o.get("kind", ""))
+					var at := float(o.get("at", 0))
+					var begins := INF
+					if kind in ["box", "wall"]:
+						begins = at - float(DEPTHS[kind]) / 2.0 - t.cover_stop_gap if at > stop else INF
+					elif ACTIONS.has(kind) and at + float(DEPTHS[kind]) / 2.0 + HIT_REACH > stop:
+						begins = at - float(DEPTHS[kind]) / 2.0 - HIT_REACH
+					if begins < first_at:
+						first_at = begins
+						first = o
+				if first.is_empty() or not ACTIONS.has(String(first.get("kind", ""))):
+					continue
+				var need := cover_exit_gap(String(first["kind"]), t, reaction)
+				if first_at - stop < need - 0.001:
+					problems.append("node '%s': out of the %s at %s m in lane %d into lane %d, the %s at %s m comes too soon (%.2f m from where you stop in cover to it, %.2f m needed: a %.2f s swipe)"
+							% [id, c_kind, c.get("at"), lane, to, first["kind"], first.get("at"), maxf(first_at - stop, 0.0), need, reaction])
 	return problems
 
 
@@ -627,6 +809,8 @@ func validate(tuning: Tuning = null, reaction: float = REACTION_HARD) -> PackedS
 				if gap > -MARKER_CLEAR_BEFORE and gap < MARKER_CLEAR_AFTER:
 					problems.append("node '%s': %s at %s m is too close to the zone door at %s m" % [id, thing.get("kind"), thing.get("at"), m_at])
 		problems.append_array(_forced_crossings(id, n.get("obstacles", [])))
+		if bool(_mission.get("cover_exit_rule", true)):
+			problems.append_array(_cover_exits(id, n.get("obstacles", []), t, reaction, int(_mission.get("authored_for_lanes", 5))))
 		problems.append_array(_corner_walls(id, n.get("obstacles", []), corners_of(id)))
 		problems.append_array(_overlaps(id, n.get("obstacles", []), n.get("enemies", [])))
 		problems.append_array(_too_soon_in(id, ways_in.get(id, []), t, reaction))

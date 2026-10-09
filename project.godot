@@ -23,6 +23,7 @@ driver/output_latency.web=80
 RunLog="*res://game/autoload/run_log.gd"
 GameState="*res://game/autoload/game_state.gd"
 Settings="*res://game/autoload/settings.gd"
+Progress="*res://game/autoload/progress.gd"
 
 [display]
 

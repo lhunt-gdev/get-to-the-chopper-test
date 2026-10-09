@@ -233,3 +233,21 @@ static func label(text: String, size: int = 8, color: Color = PAPER, align: Hori
 	l.horizontal_alignment = align
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
+
+
+## A small padlock (5 x 7 px, like a letter; `scale` times that, like the 16 px text at 2), top left
+## at `p`: the mission select's and the mission screen's locked settings.
+static func draw_padlock(ci: CanvasItem, p: Vector2, c: Color, scale: int = 1) -> void:
+	for px: Vector2i in PADLOCK:
+		ci.draw_rect(Rect2(p + Vector2(px * scale), Vector2.ONE * scale), c)
+
+
+## The padlock's pixels: its shackle (rows 0-2), then its body with a keyhole.
+const PADLOCK: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0),
+	Vector2i(1, 1), Vector2i(3, 1), Vector2i(1, 2), Vector2i(3, 2),
+	Vector2i(0, 3), Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3), Vector2i(4, 3),
+	Vector2i(0, 4), Vector2i(1, 4), Vector2i(3, 4), Vector2i(4, 4),
+	Vector2i(0, 5), Vector2i(1, 5), Vector2i(3, 5), Vector2i(4, 5),
+	Vector2i(0, 6), Vector2i(1, 6), Vector2i(2, 6), Vector2i(3, 6), Vector2i(4, 6),
+]

@@ -5,7 +5,9 @@ extends CanvasLayer
 ## pause menu, and the end screens (the end-of-mission conversation, then the debrief). It keeps
 ## working while the game is paused. The level listens to its signals.
 
-signal start_requested
+## A mission and setting picked in the mission select (open ones only): the level builds it and opens
+## its briefing.
+signal start_requested(mission: int, setting: String)
 signal resume_requested
 signal retry_requested
 signal menu_requested
@@ -26,7 +28,9 @@ signal briefing_cue(sound: String, volume_db: float)
 signal debrief_opened(reason: StringName)
 
 ## END_TALK: the end-of-mission conversation (a Briefing), between the run and the debrief (END).
-enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK }
+## MISSIONS: the mission select, after START MISSION; MISSION: one mission's screen after it (its
+## EASY / MEDIUM / HARD, each with his best time).
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION }
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
@@ -40,6 +44,8 @@ const END_TITLES := {
 
 var mission_title := "MISSION 1"
 var _screen := Screen.NONE
+## The mission whose screen is (or was last) up.
+var _mission := 1
 ## Where SETTINGS / CONTROLS go back to.
 var _back_to := Screen.MAIN
 var _root: Control
@@ -88,6 +94,59 @@ func in_briefing() -> bool:
 	return _screen == Screen.BRIEFING
 
 
+## The mission select (after START MISSION), up.
+func in_missions() -> bool:
+	return _screen == Screen.MISSIONS
+
+
+## A mission's screen (its EASY / MEDIUM / HARD), up; which mission it is.
+func in_mission() -> bool:
+	return _screen == Screen.MISSION
+
+
+func mission_shown() -> int:
+	return _mission
+
+
+## Opens mission n's screen (a tap on its row in the mission select; user: "There would be another
+## screen after the mission select that shows the 3 difficulty options"): only a mission that's built
+## with a setting open. False, and nothing happens, otherwise.
+func open_mission(n: int) -> bool:
+	if _screen != Screen.MISSIONS or not MissionRow.can_open(n):
+		return false
+	_mission = n
+	_show(Screen.MISSION)
+	return true
+
+
+## Picks mission n on `setting` (a tap on its button on the mission's screen): only one that's open
+## and built (Progress.is_playable; user: "they can only select a mission they have unlocked"). Then
+## the level builds it and opens its briefing (start_requested). False, and nothing happens,
+## otherwise.
+func choose(n: int, setting: String) -> bool:
+	if _screen != Screen.MISSION or n != _mission or not Progress.is_playable(n, setting):
+		return false
+	clicked.emit()
+	start_requested.emit(n, setting)
+	return true
+
+
+## The mission's screen's button for mission n on `setting` (while it's up), else null.
+func chip(n: int, setting: String) -> SettingChip:
+	for c in _root.get_children():
+		if c is SettingChip and not c.is_queued_for_deletion() and c.mission == n and c.setting == setting:
+			return c
+	return null
+
+
+## The mission select's row for mission n (while it's up), else null.
+func mission_row(n: int) -> MissionRow:
+	for c in _root.get_children():
+		if c is MissionRow and not c.is_queued_for_deletion() and c.number == n:
+			return c
+	return null
+
+
 ## The run's over: the end-of-mission conversation in `talk` (Briefing.conversation() for the end's
 ## reason) first, then, when it closes (SKIP, or a tap after its last line), the debrief; with no
 ## lines to play, the debrief at once. stats: the tally's numbers (Tally.rows_for), and for the route
@@ -110,6 +169,37 @@ func in_end_talk() -> bool:
 ## The debrief (the end screen), up.
 func in_debrief() -> bool:
 	return _screen == Screen.END
+
+
+## The debrief's lines for what an extraction opened ([n, setting] pairs: Progress.record_extraction)
+## from mission `from`: this mission's next setting up ("MEDIUM UNLOCKED"), then the next mission's
+## ("MISSION 2: EASY + MEDIUM UNLOCKED").
+static func unlock_lines(news: Array, from: int) -> PackedStringArray:
+	var same := PackedStringArray()
+	var next := {}  # mission -> its settings opened
+	for pair in news:
+		if int(pair[0]) == from:
+			same.append("%s UNLOCKED" % String(pair[1]).to_upper())
+		else:
+			if not next.has(int(pair[0])):
+				next[int(pair[0])] = PackedStringArray()
+			next[int(pair[0])].append(String(pair[1]).to_upper())
+	for m in next:
+		same.append("MISSION %d: %s UNLOCKED" % [m, " + ".join(next[m])])
+	return same
+
+
+## A run time as the tally shows it (minutes, seconds, tenths: "1:21.4").
+static func time_text(seconds: float) -> String:
+	return Tally.value_text(["", "time", seconds], 1, 1)
+
+
+## The debrief's line for a new best time (Progress.record_run): "NEW BEST TIME" for his first time
+## out on it, "NEW BEST TIME - WAS 1:30.2" when it beat his old one; "" if it isn't one.
+static func best_line(new_best: bool, was: float) -> String:
+	if not new_best:
+		return ""
+	return "NEW BEST TIME" if was < 0.0 else "NEW BEST TIME - WAS %s" % time_text(was)
 
 
 func _open_debrief() -> void:
@@ -143,6 +233,10 @@ func _show(s: Screen) -> void:
 			_build_settings()
 		Screen.CONTROLS:
 			_build_controls()
+		Screen.MISSIONS:
+			_build_missions()
+		Screen.MISSION:
+			_build_mission()
 		Screen.PAUSE:
 			_build_pause()
 		Screen.END:
@@ -185,7 +279,7 @@ func _build_main() -> void:
 	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_line())
 	Reticle.rule_bottom = title_rule()
 	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
-	var first := _button("START MISSION", 290, func() -> void: start_requested.emit())
+	var first := _button("START MISSION", 290, func() -> void: _open(Screen.MISSIONS))
 	_button("SETTINGS", 318, func() -> void: _open(Screen.SETTINGS))
 	_button("CONTROLS", 346, func() -> void: _open(Screen.CONTROLS))
 	_place_wide(UiKit.label("PROOF OF CONCEPT BUILD", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
@@ -260,6 +354,105 @@ func _build_controls() -> void:
 	_button("BACK", 430, func() -> void: _open(_back_to)).grab_focus()
 
 
+## Where the mission select's rows start, and the least and most room each takes (px): 9 rows fit a
+## 480-high screen; a taller one spreads them out a little, up to the most.
+const MISSION_TOP := 88.0
+const MISSION_ROW_MIN := 36.0
+const MISSION_ROW_MAX := 44.0
+## The gap between two rows (px).
+const MISSION_GAP := 6.0
+
+
+## How far apart the mission select's rows are (px) on a screen `height` high (BACK under the last).
+static func mission_step(height: float) -> float:
+	return clampf(floorf((height - MISSION_TOP - 62.0) / Progress.MISSIONS.size()), MISSION_ROW_MIN, MISSION_ROW_MAX)
+
+
+## The mission select (user: "a mission select where the player can click to see all missions but
+## they can only select a mission they have unlocked"; then "The menu is too cramped": the settings
+## moved to each mission's own screen): all nine missions as file tabs down the screen, each with its
+## number, its name, under that his best time on each setting ("E 1:21  M --  H --"; user: "it
+## could display the best time for that mission"), and a small mark for each setting (E, M, H:
+## green once he's got out on it, a padlock while it's locked). A tap on one that's built with a setting open opens its screen
+## (open_mission); a locked one is greyed with a padlock and does nothing, and the missions not built
+## yet say COMING SOON. BACK: the main menu.
+func _build_missions() -> void:
+	_header("MISSION SELECT", "CONDOR JOB SHEET")
+	var size := _root.get_viewport_rect().size
+	var count := Progress.MISSIONS.size()
+	var step := mission_step(size.y)
+	var focus: MissionRow = null
+	var last_n := int(Progress.last.get_slice(":", 0))
+	for i in count:
+		var n := i + 1
+		var row := MissionRow.new()
+		row.number = n
+		row.title = String(Progress.MISSIONS[i]["name"])
+		row.built = Progress.is_built(n)
+		for s in RouteGraph.SETTINGS:
+			row.unlocked.append(Progress.is_unlocked(n, s))
+			row.cleared.append(Progress.is_cleared(n, s))
+			row.best.append(Progress.best_time(n, s))
+		row.position = Vector2(14, MISSION_TOP + i * step)
+		row.size = Vector2(size.x - 28, step - MISSION_GAP)
+		row.pressed.connect(func() -> void:
+			clicked.emit()
+			open_mission(n))
+		_root.add_child(row)
+		if row.playable() and (focus == null or n == last_n):
+			focus = row
+	var back := _button("BACK", MISSION_TOP + count * step + 6.0, func() -> void: _open(Screen.MAIN))
+	(focus if focus != null else back).grab_focus()
+
+
+## The mission screen's setting buttons: where the first starts (under the header), their height
+## and the gap between (px). On a screen taller than 480 the block moves down by half the extra (up
+## to MISSION_SHIFT_MAX), so it sits nearer the middle.
+const SETTING_TOP := 104.0
+const SETTING_H := 76.0
+const SETTING_GAP := 12.0
+const MISSION_SHIFT_MAX := 60.0
+
+
+## The mission screen's first setting button's top on a screen `height` high.
+static func setting_top(height: float) -> float:
+	return SETTING_TOP + clampf(floorf((height - 480.0) / 2.0), 0.0, MISSION_SHIFT_MAX)
+
+
+## A mission's screen (user: "another screen after the mission select that shows the 3 difficulty
+## options with the players best time if it's been set. They click the difficulty they want to play
+## and the game starts."): its name, EASY / MEDIUM / HARD as big buttons, each with his best time
+## there (his fastest extraction's run time; "--" if none), a locked one greyed with its padlock (and
+## what clears it). A tap on an open one starts it (choose: the briefing, then the run). BACK: the
+## mission select.
+func _build_mission() -> void:
+	var n := _mission
+	_header(String(Progress.MISSIONS[n - 1]["name"]), "MISSION %02d: PICK YOUR SETTING" % n)
+	var size := _root.get_viewport_rect().size
+	var top := setting_top(size.y)
+	var focus: SettingChip = null
+	for s in RouteGraph.SETTINGS.size():
+		var which: String = RouteGraph.SETTINGS[s]
+		var c := SettingChip.new()
+		c.mission = n
+		c.setting = which
+		c.built = Progress.is_built(n)
+		c.open = Progress.is_unlocked(n, which)
+		c.cleared = Progress.is_cleared(n, which)
+		c.best = Progress.best_time(n, which)
+		c.needs = String(RouteGraph.SETTINGS[s - 1]).to_upper() if s > 0 else ""
+		c.position = Vector2(14, top + s * (SETTING_H + SETTING_GAP))
+		c.size = Vector2(size.x - 28, SETTING_H)
+		c.pressed.connect(func() -> void: choose(n, which))
+		_root.add_child(c)
+		if c.playable() and (focus == null or Progress.key(n, which) == Progress.last):
+			focus = c
+	var end := top + 3.0 * SETTING_H + 2.0 * SETTING_GAP
+	_place_wide(UiKit.label("BEST: YOUR FASTEST EXTRACTION", 8, Color(UiKit.DIM, 0.8), HORIZONTAL_ALIGNMENT_CENTER), end + 12.0)
+	var back := _button("BACK", end + 36.0, func() -> void: _open(Screen.MISSIONS))
+	(focus if focus != null else back).grab_focus()
+
+
 func _build_settings() -> void:
 	_header("SETTINGS", "AGENT PREFERENCES")
 	var y := 90.0
@@ -332,6 +525,23 @@ func _build_end() -> void:
 	typer.add(info[0], 0.05, Typer.label_setter(title))
 	typer.add(info[1], 0.03, Typer.label_setter(sub))
 	typer.add("DEBRIEF", 0.04, func(n: int) -> void: panel.shown = n)
+	# Which mission and setting it was, across from DEBRIEF.
+	var n := int(_end_stats.get("mission", 0))
+	if n >= 1 and n <= Progress.MISSIONS.size() and String(_end_stats.get("setting", "")) != "":
+		panel.tag = "%s / %s" % [Progress.MISSIONS[n - 1]["name"], String(_end_stats["setting"]).to_upper()]
+	# A new best time (user: the best for each setting), then what getting out opened (user: the
+	# unlocks), under the buttons, typed out after DEBRIEF.
+	var y := 436.0
+	var lines := PackedStringArray()
+	var best := best_line(bool(_end_stats.get("new_best", false)), float(_end_stats.get("was_best", -1.0)))
+	if best != "":
+		lines.append(best)
+	lines.append_array(unlock_lines(_end_stats.get("unlocked", []), n))
+	for line in lines:
+		var l := UiKit.label(line, 8, UiKit.AMBER if line == best else UiKit.GREEN, HORIZONTAL_ALIGNMENT_CENTER)
+		_place_wide(l, y)
+		typer.add(line, 0.03, Typer.label_setter(l))
+		y += 12.0
 	area_typer.delay = RouteMap.DRAW_TIME if map != null else 0.0
 	for t in [typer, area_typer]:
 		t.typed.connect(func() -> void: typed.emit())
@@ -594,6 +804,8 @@ class Stamp extends Control:
 ## are their own controls, laid over it: RouteMap and Tally).
 class DebriefPanel extends Control:
 	var rect := Rect2()
+	## The mission and setting played (right of DEBRIEF), once DEBRIEF has typed out.
+	var tag := ""
 	## Letters of its header shown (it types out).
 	var shown := 7:
 		set(n):
@@ -608,6 +820,9 @@ class DebriefPanel extends Control:
 		UiKit.panel(self, rect, UiKit.TEAL, UiKit.PANEL_SOLID, 8.0)
 		var x := rect.position.x + 10.0
 		draw_string(UiKit.font(), Vector2(x, rect.position.y + 16), "DEBRIEF".substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
+		if tag != "" and shown >= 7:
+			var w := UiKit.font().get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+			draw_string(UiKit.font(), Vector2(rect.end.x - 10.0 - w, rect.position.y + 16), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
 		draw_rect(Rect2(x, rect.position.y + 96, rect.size.x - 20.0, 1), Color(UiKit.TEAL_DIM, 0.8))
 
 
@@ -623,3 +838,195 @@ class SkipArea extends Control:
 		if (event is InputEventMouseButton and event.pressed) or (event is InputEventScreenTouch and event.pressed):
 			pressed.emit()
 			accept_event()
+
+
+## A mission's file tab in the mission select, a button: its number on a slanted block, its name,
+## and on the right a small mark for each of its settings (E, M, H: green once he's got out on it,
+## teal while it's open, a padlock while it's locked), or COMING SOON for one not built yet. Pickable
+## (it opens the mission's screen) when it's built and a setting is open; greyed otherwise.
+class MissionRow extends Button:
+	const MARK := Vector2(13.0, 11.0)
+	const MARK_GAP := 3.0
+	var number := 1
+	var title := ""
+	var built := true
+	## Per setting (RouteGraph.SETTINGS' order): open, and got out of.
+	var unlocked := []
+	var cleared := []
+	## His best time on each (s; < 0: none yet).
+	var best := []
+
+	## A best time on a mission row, to the second (never shown better than he did): "1:21"; "--"
+	## for none.
+	static func best_text(t: float) -> String:
+		if t < 0.0:
+			return "--"
+		var s := floori(t)
+		return "%d:%02d" % [s / 60, s % 60]
+
+	## Whether mission n's row can be picked now: built, with a setting open.
+	static func can_open(n: int) -> bool:
+		if not Progress.is_built(n):
+			return false
+		for s in RouteGraph.SETTINGS:
+			if Progress.is_unlocked(n, s):
+				return true
+		return false
+
+	func playable() -> bool:
+		return built and unlocked.has(true)
+
+	func _ready() -> void:
+		flat = true
+		text = ""
+		disabled = not playable()
+		focus_mode = Control.FOCUS_ALL if playable() else Control.FOCUS_NONE
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		var mode := get_draw_mode()
+		var on := playable()
+		var accent := UiKit.TEAL_DIM if on else Color(UiKit.DIM, 0.45)
+		var fill := UiKit.PANEL_SOLID if on else Color(0.02, 0.04, 0.05, 0.9)
+		if on and mode in [DRAW_PRESSED, DRAW_HOVER_PRESSED]:
+			accent = UiKit.RED
+			fill = Color(0.2, 0.05, 0.04, 0.95)
+		elif on and (has_focus() or mode == DRAW_HOVER):
+			accent = UiKit.TEAL
+			fill = Color(0.04, 0.12, 0.12, 0.95)
+		UiKit.panel(self, r, accent, fill, 6.0)
+		var f := UiKit.font()
+		var mid := roundf(size.y / 2.0)
+		var block := Rect2(9.0, mid - 7.0, 23.0, 13.0)
+		draw_colored_polygon(SettingChip.lean(block, 3.0), UiKit.RED if built else Color("3a2a28"))
+		draw_string(f, Vector2(block.position.x + 5.0, mid + 3.0), "%02d" % number, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
+				UiKit.INK if built else Color(UiKit.DIM, 0.8))
+		var ink := UiKit.PAPER if on else UiKit.DIM
+		if on and (has_focus() or mode == DRAW_HOVER):
+			ink = UiKit.TEAL
+		if not built:
+			draw_string(f, Vector2(40.0, mid + 3.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
+			var soon := "COMING SOON"
+			var w := f.get_string_size(soon, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+			draw_string(f, Vector2(size.x - w - 10.0, mid + 3.0), soon, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.AMBER, 0.75))
+			return
+		# Built: its name, and under it his best time on each setting (user: "it could display the
+		# best time for that mission ... E for easy, M for medium, H for hard"): "E 1:21  M --  H --".
+		draw_string(f, Vector2(40.0, mid - 2.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
+		var bx := 40.0
+		for s in RouteGraph.SETTINGS.size():
+			var t: float = best[s] if s < best.size() else -1.0
+			var letter := String(RouteGraph.SETTINGS[s]).substr(0, 1).to_upper()
+			draw_string(f, Vector2(bx, mid + 9.0), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.DIM, 0.9))
+			var v := best_text(t)
+			draw_string(f, Vector2(bx + 12.0, mid + 9.0), v, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
+					UiKit.AMBER if t >= 0.0 else Color(UiKit.DIM, 0.6))
+			bx += 12.0 + f.get_string_size(v, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x + 10.0
+		# The marks, one per setting, right-aligned.
+		var x := size.x - 10.0 - 3.0 * MARK.x - 2.0 * MARK_GAP
+		for s in RouteGraph.SETTINGS.size():
+			var m := Rect2(x + s * (MARK.x + MARK_GAP), mid - floorf(MARK.y / 2.0) - 1.0, MARK.x, MARK.y)
+			var open: bool = s < unlocked.size() and unlocked[s]
+			var done: bool = s < cleared.size() and cleared[s]
+			var shape := SettingChip.lean(m, 2.0)
+			if done:
+				draw_colored_polygon(shape, UiKit.GREEN)
+			else:
+				draw_colored_polygon(shape, Color(0.03, 0.07, 0.08, 0.9))
+				var edge := shape.duplicate()
+				edge.append(shape[0])
+				draw_polyline(edge, UiKit.TEAL_DIM if open else Color("2a3a3a"), 1.0)
+			if open or done:
+				var letter := String(RouteGraph.SETTINGS[s]).substr(0, 1).to_upper()
+				draw_string(f, Vector2(m.position.x + 4.0, m.position.y + 9.0), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
+						UiKit.INK if done else UiKit.PAPER)
+			else:
+				UiKit.draw_padlock(self, Vector2(m.position.x + 4.0, m.position.y + 2.0), Color(UiKit.DIM, 0.6))
+
+
+## One setting of one mission on the mission's screen (EASY, MEDIUM or HARD), a big slanted block
+## like the game's other buttons: the setting's name, whether he's got out on it, and his best time
+## there on the right ("--" until he has one). Teal-edged and pickable when it's open and its mission
+## is built; greyed with a big padlock while it's locked (user: "locked ones greyed with a padlock"),
+## saying what clears it, and not pickable.
+class SettingChip extends Button:
+	const SLANT := 8.0
+	var mission := 1
+	var setting := "easy"
+	var built := true
+	var open := false
+	var cleared := false
+	## His best time on it (s; < 0: none yet).
+	var best := -1.0
+	## The setting to clear to open it ("" for EASY).
+	var needs := ""
+
+	func playable() -> bool:
+		return built and open
+
+	func _ready() -> void:
+		flat = true
+		text = ""
+		disabled = not playable()
+		focus_mode = Control.FOCUS_ALL if playable() else Control.FOCUS_NONE
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		var mode := get_draw_mode()
+		var fill := Color(0.03, 0.08, 0.09, 0.92)
+		var edge := UiKit.TEAL_DIM
+		var ink := UiKit.PAPER
+		if not playable():
+			fill = Color(0.03, 0.05, 0.05, 0.8)
+			edge = Color("223333")
+			ink = Color(UiKit.DIM, 0.6)
+		elif mode in [DRAW_PRESSED, DRAW_HOVER_PRESSED]:
+			fill = Color(0.35, 0.08, 0.05, 0.95)
+			edge = UiKit.RED
+		elif has_focus() or mode == DRAW_HOVER:
+			fill = Color(0.05, 0.16, 0.16, 0.95)
+			edge = UiKit.TEAL
+			ink = UiKit.TEAL
+		var shape := lean(r, SLANT)
+		draw_colored_polygon(shape, fill)
+		var y := 2.0
+		while y < size.y - 1.0:  # (faint scanlines, like the codec panels)
+			draw_line(Vector2(SLANT * (1.0 - y / size.y) + 2.0, y), Vector2(size.x - SLANT * y / size.y - 1.0, y), Color(edge, 0.07), 1.0)
+			y += 2.0
+		var line := shape.duplicate()
+		line.append(shape[0])
+		draw_polyline(line, edge, 1.0)
+		draw_line(shape[3] + Vector2(1, 0), shape[0] + Vector2(1, 0), edge, 3.0)  # the heavier leading edge, like a tab
+		var f := UiKit.font()
+		# Left: the setting's name (16 px), and under it whether he's got out on it (or what opens it).
+		var top := roundf(size.y / 2.0) - 14.0
+		draw_string(f, Vector2(SLANT + 12.0, top + 14.0), setting.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ink)
+		var status := "CLEARED" if cleared else "NOT CLEARED YET"
+		var status_col := UiKit.GREEN if cleared else Color(UiKit.DIM, 0.9)
+		if not open:
+			status = "CLEAR %s TO UNLOCK" % needs if needs != "" else "LOCKED"
+			status_col = Color(UiKit.DIM, 0.7)
+		elif not built:
+			status = "COMING SOON"
+			status_col = Color(UiKit.AMBER, 0.75)
+		draw_string(f, Vector2(SLANT + 8.0, top + 28.0), status, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, status_col)
+		# Right: a big padlock while it's locked; else BEST over his time.
+		var right := size.x - SLANT - 12.0
+		if not open:
+			UiKit.draw_padlock(self, Vector2(right - 15.0, roundf(size.y / 2.0) - 10.0), ink, 3)
+			return
+		var label := "BEST"
+		var t := Frontend.time_text(best) if best >= 0.0 else "--"
+		draw_string(f, Vector2(right - f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x, top + 4.0), label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.DIM, 0.9))
+		draw_string(f, Vector2(right - f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x, top + 26.0), t,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.AMBER if best >= 0.0 else Color(UiKit.DIM, 0.6))
+
+	## A block's shape: the box with its top leaning `slant` right of its bottom.
+	static func lean(r: Rect2, slant: float) -> PackedVector2Array:
+		return PackedVector2Array([r.position + Vector2(slant, 0.0), Vector2(r.end.x, r.position.y),
+				r.end - Vector2(slant, 0.0), Vector2(r.position.x, r.end.y)])

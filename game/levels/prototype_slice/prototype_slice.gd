@@ -13,6 +13,9 @@ extends Node3D
 ## Straight on stays open until the split, so every open branch ahead is built in full and the
 ## one you don't take is thrown away when you commit. Branches closed by alert get a lockdown door.
 
+## Mission 1, COLD CALL: the level the game plays. The bots can play another route file in its place
+## (route_path: the TEST RANGE, tests/fixtures/test_range.json, today's full 19-area level, kept so
+## they keep testing what mission 1 leaves out: the dogs, the alarm runner, the snipers...).
 const ROUTE_PATH := "res://game/levels/prototype_slice/route.json"
 ## The mission briefing after START (Briefing): the conversation's script, and the end-of-mission
 ## conversations (one for each ending, played after the run and before the debrief).
@@ -314,6 +317,15 @@ const MOON_DIR := Vector3(-0.45, 1.0, 0.35)
 
 ## Retry skips the title card so the loop stays fast.
 static var _skip_title := false
+## The route file played (ROUTE_PATH unless a bot picks another: --route=). Static, so Retry keeps it.
+static var route_path := ROUTE_PATH
+## The mission's setting played (RouteGraph.SETTINGS; user: "an easy medium and hard for each
+## level"): picked in the main menu's mission select (or by a bot: --setting=). Static, so Retry keeps
+## it (user: RETRY on the same setting). MEDIUM, where the bots' chopper times were tuned, until one's
+## picked.
+static var setting := RouteGraph.DEFAULT_SETTING
+## Another mission was picked in the mission select: its level loads, and opens on its briefing.
+static var _brief_on_load := false
 
 var _started := false
 var _graph: RouteGraph
@@ -463,9 +475,11 @@ var _warm_next := 0
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
-	_graph = RouteGraph.from_json_file(ROUTE_PATH)
-	for problem in _graph.validate(tuning):  # (the fair-reaction rule times you with this run and jump)
-		push_error("route.json: " + problem)
+	if not setting in RouteGraph.SETTINGS:
+		setting = RouteGraph.DEFAULT_SETTING
+	_load_route()
+	# The route map grows with this mission's own finds (each mission keeps its own map).
+	RunLog.set_mission(StringName(_graph.mission().get("mission", "")))
 	# The route's stairs rule keeps the 20 m after each flight's exit door clear, counting the
 	# flight as RouteGraph.STAIRS_FLIGHT long: the flights built here (_segment_shape) must be that.
 	if not is_equal_approx(tuning.tier_height * tuning.stairs_run, RouteGraph.STAIRS_FLIGHT):
@@ -480,11 +494,11 @@ func _ready() -> void:
 	_frontend = Frontend.new()
 	_frontend.name = "Frontend"
 	add_child(_frontend)
-	_frontend.mission_title = String(RouteGraph.from_json_file(ROUTE_PATH).mission().get("title", "MISSION 1"))
+	_frontend.mission_title = String(_graph.mission().get("title", "MISSION 1"))
 	_briefing = Briefing.load_file(BRIEFING_PATH)
 	for problem in Briefing.problems(_briefing):
 		push_error("briefing.json: " + problem)
-	_frontend.start_requested.connect(_open_briefing)
+	_frontend.start_requested.connect(_on_mission_picked)
 	_frontend.briefing_done.connect(_begin_intro)
 	_frontend.resume_requested.connect(_resume)
 	_frontend.retry_requested.connect(func() -> void:
@@ -574,6 +588,54 @@ func _ready() -> void:
 	_frontend.debrief_opened.connect(_on_debrief_opened)
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
+	if _brief_on_load and not _skip_title:
+		_brief_on_load = false  # (another mission picked in the mission select: its level, then its briefing)
+		_open_briefing()
+
+
+## The route played, for the setting played (only what's in that setting, its chopper and its boss:
+## RouteGraph.for_setting), checked against every route rule at that setting's own reaction floor
+## (the fair-reaction and cover-exit rules: RouteGraph.reaction_for).
+func _load_route() -> void:
+	_graph = RouteGraph.from_json_file(route_path, setting)
+	for problem in _graph.validate(tuning, RouteGraph.reaction_for(_graph.setting)):  # (timed with this run and jump)
+		push_error("route.json (%s): %s" % [_graph.setting, problem])
+
+
+## The mission select's pick (Frontend: an open mission and setting). Mission n's level is built for
+## that setting, then its briefing opens as START MISSION's did. The same level as the one under the
+## menu: the setting is swapped in place (_use_setting); another mission's level (none is built yet
+## but mission 1) is loaded fresh for it, and its briefing opens once it's up.
+func _on_mission_picked(n: int, which: String) -> void:
+	Progress.remember_pick(n, which)
+	var path := String(Progress.MISSIONS[n - 1].get("route", route_path)) if n >= 1 and n <= Progress.MISSIONS.size() else route_path
+	if path != route_path:
+		route_path = path
+		setting = which
+		_brief_on_load = true
+		get_tree().reload_current_scene()
+		return
+	_use_setting(which)
+	_open_briefing()
+
+
+## Plays `which` setting from here: the route read for it, the chopper's timeline from it, and what's
+## built ahead under the menu (the area after the first: the first is the same on every setting, a
+## route rule) built again if it differs on this setting. Before the run (the menu and the briefing).
+func _use_setting(which: String) -> void:
+	if which == _graph.setting or not which in RouteGraph.SETTINGS or _started:
+		return
+	var was := _graph
+	setting = which
+	_load_route()
+	_clock.configure(_graph.mission().get("chopper", {}))
+	var seg := _current
+	for key in seg["branches"].keys():
+		var id: StringName = seg["branches"][key]["id"]
+		if JSON.stringify(was.node_data(id)) != JSON.stringify(_graph.node_data(id)):
+			_discard(seg["branches"][key])
+			seg["branches"].erase(key)
+	_build_branches()  # (the ones just thrown away, built again for this setting)
 
 
 ## START MISSION: the mission briefing first (user: a codec conversation to read before the run),
@@ -1411,6 +1473,7 @@ func _make_segment(id: StringName, start: float, edge: Dictionary, xf: Transform
 func _spawn_boss(node: Node3D, seg: Dictionary, length: float) -> void:
 	var into := length - BOSS_FROM_END
 	var boss := Boss.new(tuning)
+	boss.configure(_graph.mission().get("boss", {}))  # (the setting's: his hits and spin-ups)
 	boss.at = float(seg["start"]) + into
 	boss.set_seed(boss_seed if boss_seed >= 0 else randi())
 	node.add_child(boss)
@@ -1752,8 +1815,10 @@ func _on_alert_changed() -> void:
 			_audio.play("alert_down", -2.0, 0.0, "UI")
 	_last_alert = level
 	_audio.set_alert(level)
-	# Alert 3: the pursuit squad comes after you; below it, they fall back.
-	if GameState.run_active and level >= 3 and not _squad_on:
+	# Alert 3: the pursuit squad comes after you; below it, they fall back. Only in a mission that
+	# has them ("squad" in route.json, on unless it says false): mission 1 has the basics only, and
+	# the squad arrives in its own mission later.
+	if GameState.run_active and level >= 3 and not _squad_on and bool(_graph.mission().get("squad", true)):
 		_spawn_squad()
 	elif level < 3 and _squad_on:
 		_squad_fall_back()
@@ -9688,7 +9753,7 @@ func _update_boss(delta: float) -> void:
 			if not GameState.run_active:
 				return
 		if boss.is_alive():
-			_hud.show_boss(float(boss.health) / float(tuning.boss_health))
+			_hud.show_boss(float(boss.health) / float(boss.max_health))
 
 
 func _start_boss_fight(boss: Boss) -> void:
@@ -10333,6 +10398,18 @@ func _on_run_ended(reason: StringName) -> void:
 			"end_into": _player.distance_run() - _runner.segment_start,
 			"end_ramp": float(_current.get("ramp_len", 0.0)),
 			"levels": RouteMap.levels_text(_graph, RunLog.visited)})
+	# The auto-save (user: "auto save itself after the player finishes a run"), whatever the ending:
+	# Progress writes the save now (the route map's finds were written as the run ended: RunLog.finish;
+	# the settings, as each one changed). Got out: the unlocks (user: mission N+1 on this setting and
+	# every easier one, and this mission's next setting up) and his best time here (the run time of
+	# his fastest extraction). The debrief says what opened, and NEW BEST.
+	var n := Progress.mission_number(StringName(_graph.mission().get("mission", "")))
+	stats["mission"] = n
+	stats["setting"] = _graph.setting
+	var rec: Dictionary = Progress.record_run(n, _graph.setting, reason, _clock.elapsed)
+	stats["unlocked"] = rec["unlocked"]
+	stats["new_best"] = rec["new_best"]
+	stats["was_best"] = rec["was"]
 	if reason == GameState.END_KILLED and _player.dying:
 		# Killed: his death plays out first (user), and he lies still a moment.
 		_player.died.connect(func() -> void:

@@ -4,6 +4,10 @@ extends Node
 ## taken and where the run ended; the map grows through discovery).
 
 const DISCOVERY_PATH := "user://discovery.json"
+## Each mission keeps its own map (the route map's discoveries kept per mission): mission 1's starts
+## empty, and a save from before missions (one map for the old 19-area level, all of whose areas are
+## the TEST RANGE's now) is filed under the test range, since those finds are of that layout.
+const OLD_SAVE_MISSION := &"test_range"
 ## In `discovered`: an area he's seen to its end (gone on from it, or got out there).
 const FULL := 1.0e6
 
@@ -17,12 +21,41 @@ var events: Array[Dictionary] = []
 var end_reason: StringName = &""
 var end_node: StringName = &""
 ## Every area the player has ever reached, and how far into it he's got (m; FULL once he's seen its
-## end), so the route map shows only what he's seen. Persists between sessions.
+## end), so the route map shows only what he's seen, for the mission being played (set_mission).
+## Persists between sessions.
 var discovered: Dictionary = {}
+## Whose map `discovered` is (the route file's "mission"), and every mission's: {mission: {id: m}}.
+var mission: StringName = &""
+var _by_mission: Dictionary = {}
+## Where the maps are saved ("" keeps them in memory only). Written as every run ends (finish).
+var save_path := DISCOVERY_PATH
 
 
 func _ready() -> void:
-	_load_discovery()
+	load_from(save_path)
+
+
+## Every mission's map from the save at `path` (none there, or broken: nothing found yet), saved
+## there from now on ("" keeps them in memory only: the bots, so a bot run never touches the
+## player's).
+func load_from(path: String) -> void:
+	save_path = path
+	var data: Variant = null
+	if SaveFile.exists(path):
+		var json := JSON.new()  # (read quietly: a broken file is an empty map, not an error)
+		if json.parse(SaveFile.read_text(path)) == OK:
+			data = json.data
+	load_saved(data)
+
+
+## The mission being played, so the areas found are its own: the same area id in another mission
+## (a zone moved on to mission 2 keeps its id) is a find of that mission's, not this one's.
+func set_mission(id: StringName) -> void:
+	_by_mission[mission] = discovered
+	mission = id
+	if not _by_mission.has(id):
+		_by_mission[id] = {}
+	discovered = _by_mission[id]
 
 
 func begin() -> void:
@@ -94,26 +127,50 @@ func route_summary() -> String:
 	return " > ".join(parts)
 
 
-func _load_discovery() -> void:
-	if not FileAccess.file_exists(DISCOVERY_PATH):
-		return
-	var f := FileAccess.open(DISCOVERY_PATH, FileAccess.READ)
-	var data: Variant = JSON.parse_string(f.get_as_text())
-	if data is Array:  # the first format: the areas reached, all taken as seen to the end
+## Every mission's map from a save (as save_data() gives it): {"missions": {mission: {id: metres}}};
+## or a save from before missions, one map (the old level's), filed under the test range.
+func load_saved(data: Variant) -> void:
+	_by_mission.clear()
+	if data is Dictionary and data.get("missions") is Dictionary:  # each mission's own map
+		for m_id in data["missions"]:
+			_by_mission[StringName(m_id)] = _areas_from(data["missions"][m_id])
+	elif data is Array or data is Dictionary:  # one map, from before missions: the test range's
+		_by_mission[OLD_SAVE_MISSION] = _areas_from(data)
+	if not _by_mission.has(mission):
+		_by_mission[mission] = {}
+	discovered = _by_mission[mission]
+
+
+## One mission's map as saved: {id: metres}, or (the first format) a list of the areas reached, all
+## taken as seen to their end.
+static func _areas_from(data: Variant) -> Dictionary:
+	var out := {}
+	if data is Array:
 		for id in data:
-			discovered[StringName(id)] = FULL
+			out[StringName(id)] = FULL
 	elif data is Dictionary:
 		for id in data:
 			var m = data[id]
-			discovered[StringName(id)] = float(m) if (m is float or m is int) else FULL
+			out[StringName(id)] = float(m) if (m is float or m is int) else FULL
+	return out
 
 
-func _save_discovery() -> void:
-	var f := FileAccess.open(DISCOVERY_PATH, FileAccess.WRITE)
-	if f == null:
-		push_warning("RunLog: could not save discovery (%s)" % FileAccess.get_open_error())
-		return
-	var out := {}
-	for id in discovered.keys():
-		out[String(id)] = float(discovered[id])
-	f.store_string(JSON.stringify(out))
+## What's saved: every mission's map that has anything on it.
+func save_data() -> Dictionary:
+	_by_mission[mission] = discovered
+	var missions := {}
+	for m_id in _by_mission:
+		var areas := {}
+		for id in _by_mission[m_id]:
+			areas[String(id)] = float(_by_mission[m_id][id])
+		if not areas.is_empty():
+			missions[String(m_id)] = areas
+	return {"missions": missions}
+
+
+## Writes every mission's map now (SaveFile: safely; a failed write is a warning). True if it's on
+## the device.
+func _save_discovery() -> bool:
+	if save_path == "":
+		return false
+	return SaveFile.write_text(save_path, JSON.stringify(save_data()))

@@ -1,9 +1,17 @@
 extends Node
-## A simple bot that plays the prototype slice, so we know the route can be
+## A simple bot that plays the level, so we know the route can be
 ## finished and the rules (alert gating, extraction, death, capture, combat) work end to end.
 ##   godot --headless --path . --fixed-fps 60 res://tests/autoplay/autoplay.tscn -- --scenario=ground
+## It plays mission 1, COLD CALL, unless --route=test_range picks the TEST RANGE
+## (tests/fixtures/test_range.json: the full 19-area level from before mission 1, kept for the bots
+## that test what mission 1 leaves out: the dogs, the alarm runner, the snipers, the searchlights,
+## the pursuit squad). The same scenario can play either; each route has its own lanes and wires
+## for it (_setup_mission_1, _setup_test_range).
+## It plays MEDIUM (where the chopper times were tuned) unless --setting=easy|medium|hard picks
+## another (route.json "settings"); RESULT ends setting=, bosshp= (the boss's hits on it) and opened=
+## (what getting out opened in the mission select; every bot starts on a fresh in-memory save).
 ## Every bot but "naive" holds FIRE while there's a trooper to shoot (alarm boxes only in the
-## alarm scenarios). Scenarios:
+## alarm scenarios). Scenarios (mission 1 unless it says test range):
 ##   naive        - never moves or shoots; should be killed. It watches his death (the play camera
 ##                  kept, normal time, none of him through the ground, the end conversation opening
 ##                  only once he's still), taps through the end conversation (SIGNAL LOST: see
@@ -12,51 +20,63 @@ extends Node
 ##   naive_skip   - as naive, but presses SKIP in the end conversation, and taps the end screen
 ##                  while it's typing: everything at once (end=skipped)
 ##   menu_start   - as ground, but through the real main menu: START pressed 2.3 s in (mid gun
-##                  check), the mission briefing (it taps through every line, some typed out, some
+##                  check), the mission select and mission 1's screen (_select_mission: it clicks
+##                  what's locked, BACK and in again, then EASY: RESULT ends select=ok(easy)), then
+##                  (still mid gun check), the mission briefing (it taps through every line, some typed out, some
 ##                  tapped part way), the opening pan, then the run. It watches CROSS's ready stance
 ##                  hand over to the run: RESULT ends intro=ok (no joint jumping, the pistol never
 ##                  at the camera, no camera cut, never standing, control at the pan's end, every
 ##                  texture made ahead of time made before it, none in the run) and
 ##                  brief=ok (every line shown; a tap finished a line or showed the next, one tap
 ##                  counting once; nothing of the run started under it)
-##   intro_skip   - as menu_start, but presses SKIP in the briefing's second line, then taps 0.3 s
+##   intro_skip   - as menu_start, but picks mission 1 HARD on its screen (it has got out
+##                  of EASY and MEDIUM), presses SKIP in the briefing's second line, then taps 0.3 s
 ##                  into the pan to skip it (control at once)
-##   ground       - keeps to the middle lanes: straight on through the main floor to the EXIT
-##   tunnel_quiet - jumps the wires, takes MAIN FLOOR's left-lane stairs down to the TUNNEL
-##                  (open at alert 1), through the underground to the STORM DRAIN's ladder up
-##   tunnel_loud  - runs through MAIN FLOOR's wire: the TUNNEL locks down (alert 2), so the left
-##                  lane carries straight on to the EXIT
-##   tunnel_alarm - runs through MAIN FLOOR's wire, shoots its alarm box (back to alert 1, the
-##                  door lifts) and takes the TUNNEL after all
-##   roof_down    - right-lane stairs up to the ROOFTOPS, then left-lane stairs back down into
-##                  the SECURITY WING
-##   warehouse_drop - main route to the WAREHOUSE, then its left-lane stairs down into the
-##                  PUMP STATION and the STORM DRAIN's ladder up
-##   roof_loud    - runs through the first wire (alert 2), up to the ROOFTOPS, straight on to the
-##                  ROOF EDGE, right-lane ladder down
-##   miss_ladder  - as roof_loud, but stays in the middle at the ROOF EDGE: captured
-##   late_switch  - heads for the right-lane stairs, then swipes back to the middle a few metres
-##                  before the split: straight on must still be open, so MAIN FLOOR
+##   ground       - keeps to the middle lanes: straight on through the CANTEEN to the EXIT
+##   tunnel_quiet - jumps the wires, takes the SECURITY WING's left-lane stairs down to the TUNNEL
+##                  (open at alert 1), through the BOILER ROOM to its left ladder up
+##   tunnel_loud  - runs through the WING's wire: the basement stairs lock (alert 2), so the left
+##                  lane carries straight on to the CANTEEN
+##   tunnel_alarm - runs through the MAIN FLOOR's wire, shoots the WING's alarm box (back to alert
+##                  1, the door opens) and takes the basement stairs after all
+##   tunnel_miss_ladder - as tunnel_quiet, but stays in the middle at the BOILER ROOM's end: captured
+##   fire_escape  - jumps the MAIN FLOOR's wire, runs through the WING's (alert 2: the fire escape
+##                  opens), up it to the ROOFTOPS, the ROOF EDGE's right ladder down
+##   miss_ladder  - as fire_escape, but stays in the middle at the ROOF EDGE: captured
+##   fire_shut    - quiet, heads for the fire escape: shut (its padlock), eased a lane in, straight on
+##   fire_closes  - runs through the MAIN FLOOR's wire (the fire escape opens), heads for it, shoots
+##                  the WING's box: back to alert 1, the fire door shuts again, straight on
+##   roof_calm    - up the fire escape, shoots the ROOFTOPS' box: back to alert 1 at the pad
+##   roof_down    - (test range) right-lane stairs up to the ROOFTOPS, then left-lane stairs back
+##                  down into the SECURITY WING
+##   warehouse_drop - (test range) main route to the WAREHOUSE, then its left-lane stairs down into
+##                  the PUMP STATION and the STORM DRAIN's ladder up
+##   roof_loud    - (test range) runs through the first wire (alert 2), up to the ROOFTOPS,
+##                  straight on to the ROOF EDGE, right-lane ladder down
+##   late_switch  - heads for the side stairs (mission 1: the WING's basement stairs; test range:
+##                  the LOBBY's stairs up), then swipes back to the middle a few metres before the
+##                  split: straight on must still be open
 ##   cover        - runs into the first cover, holds fire until it's safe to shoot from cover,
 ##                  kills the trooper from there, breaks cover and goes on untouched
 ##   camper       - takes cover and never leaves it: the chopper should leave without us
-##   ground_loud  - main route, runs through both wires and ignores the alarm boxes: Alert 3
-##   ground_alarms - main route, runs through both wires, shoots both alarm boxes: back to Alert 1
+##   ground_loud  - main route, runs through both wires and ignores the alarm boxes: Alert 3 (on
+##                  the test range, the squad comes after us; mission 1 has none)
+##   ground_alarms - main route, runs through both wires, shoots every alarm box: back to Alert 1
 ##   stumble_once - main route, but runs straight into the first barrier: a stumble (1 HP, a
 ##                  little time), not the end of the run
-##   dog_bite     - runs through the lobby wire (Alert 2: the dogs come out), main route, never
-##                  shoots the EXIT's guard dog and holds its lane when
+##   dog_bite     - (test range) runs through the lobby wire (Alert 2: the dogs come out), main
+##                  route, never shoots the EXIT's guard dog and holds its lane when
 ##                  it charges: bitten (a hit and a stumble), and still gets out
-##   dog_dodge    - as dog_bite, but swipes out of the dog's lane when it barks:
+##   dog_dodge    - (test range) as dog_bite, but swipes out of the dog's lane when it barks:
 ##                  it runs past
-##   runner_escapes - main route, never shoots the alarm runner: he gets to his alarm (Alert 2)
-##   roof_spotted - roof route at Alert 1, never dodging the searchlights: spotted, the alert rises
-##   sniper_hit   - as roof_loud (Alert 2: the roof snipers are out), but holds its lane when the
-##                  first sniper locks on: hit once; it dodges the rest
+##   runner_escapes - (test range) main route, never shoots the alarm runner: he gets to his alarm
+##   roof_spotted - (test range) roof route at Alert 1, never dodging the searchlights: spotted
+##   sniper_hit   - (test range) as roof_loud (Alert 2: the roof snipers are out), but holds its
+##                  lane when the first sniper locks on: hit once; it dodges the rest
 ## Every bot dodges a roof sniper once his laser locks (one lane to the free side, then it holds
 ## until he's fired). RESULT ends snipers=hit/dodged/out of view on a tall phone when he locked.
-##   squad_caught - trips both main-route wires (Alert 3, the squad comes after us), then takes
-##                  the next cover and stays in it: the squad catches up, CAPTURED
+##   squad_caught - (test range) trips both main-route wires (Alert 3, the squad comes after us),
+##                  then takes the next cover and stays in it: the squad catches up, CAPTURED
 ##   boss_hit     - main route; at the chopper, steps into one of the boss's swept lanes for his
 ##                  first sweep: hit once; it dodges the rest and takes him down
 ##   boss_hold_fire - main route; at the chopper it dodges every sweep but never shoots the boss:
@@ -99,6 +119,26 @@ const TALK := {"naive": "tapped", "naive_skip": "skipped", "ground": "tapped", "
 		"squad_caught": "skipped", "camper": "tapped", "boss_hold_fire": "skipped"}
 
 var scenario := "ground"
+## The mission's setting it plays (--setting=easy|medium|hard).
+var setting := RouteGraph.DEFAULT_SETTING
+## What was open in its (in-memory) progress as it started, so RESULT can say what getting out opened.
+var _open_before: Array = []
+## The bot's own save files (its progress, its route map) and what was found on the device as the
+## run ended (RESULT's saved=: ok, or bad(...); none if it never ended).
+var _save_files: Array = []
+var _saved := "none"
+## The menu bots' picks, in the mission select and then the mission's screen: [mission, setting].
+## menu_start, on a fresh save, first tries what's locked (mission 2's row, mission 1 MEDIUM and
+## HARD: nothing may happen), then the one open, mission 1 EASY; intro_skip picks mission 1 HARD (open for it: see _ready), which builds
+## the area under the menu again for HARD (its MAIN FLOOR has HARD's extra wire).
+const MENU_PICKS := {"menu_start": [1, "easy"], "intro_skip": [1, "hard"]}
+## Which route the level plays (--route=): mission 1 (the default), or the TEST RANGE.
+var route := "mission_1"
+const ROUTES := {"mission_1": "res://game/levels/prototype_slice/route.json", "test_range": "res://tests/fixtures/test_range.json"}
+## late_switch: the area whose side exit it heads for, before it changes its mind.
+var _late_at: StringName = &""
+## The areas where an alarm scenario shoots the alarm boxes (none elsewhere).
+var _alarm_in: Array = []
 ## boss_hit: how many of the boss's attacks have finished (it takes the hit in the first).
 var _boss_attacks_seen := 0
 ## The boss we're fighting was ever out of sight (the twin on a ladder route's other helipad
@@ -153,34 +193,39 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--scenario="):
 			scenario = a.get_slice("=", 1)
-	match scenario:
-		"tunnel_quiet":
-			_prefer = {&"building_main_floor": -1, &"storm_drain": -1}
-		"tunnel_loud":
-			_prefer = {&"building_main_floor": -1}
-			_trip_in = [&"building_main_floor"]
-		"tunnel_alarm":
-			_prefer = {&"building_main_floor": -1, &"storm_drain": -1}
-			_trip_in = [&"building_main_floor"]
-		"roof_down":
-			_prefer = {&"main_floor_lobby": 1, &"rooftops": -1}
-		"roof_loud", "sniper_hit":
-			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
-			_trip_in = [&"main_floor_lobby"]
-		"miss_ladder":
-			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 0}
-			_trip_in = [&"main_floor_lobby"]
-		"roof_spotted":
-			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
-		"warehouse_drop":
-			_prefer = {&"warehouse": -1, &"storm_drain": -1}
-		"late_switch":
-			_prefer = {&"main_floor_lobby": 1}
-		"dog_bite", "dog_dodge":
-			_trip_in = [&"main_floor_lobby"]
-		"ground_loud", "ground_alarms", "squad_caught":
-			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
+		elif a.begins_with("--route="):
+			route = a.get_slice("=", 1)
+		elif a.begins_with("--setting="):
+			setting = a.get_slice("=", 1)
+	# The bots never touch the player's saved progress: theirs is kept in memory, fresh each run
+	# (only mission 1 EASY open). intro_skip has got out of mission 1 on EASY and MEDIUM, so HARD is
+	# open for it to pick.
+	Progress.load_from("")
+	if scenario == "intro_skip":
+		Progress.record_extraction(1, "easy")
+		Progress.record_extraction(1, "medium")
+	_open_before = Progress.to_data()["unlocked"]
+	# The auto-save (user: "auto save itself after the player finishes a run"), checked as the game
+	# does it: from here its progress and its route map are written to the bot's own files (never the
+	# player's: those are left alone), which must be on the device as the run ends (RESULT's saved=).
+	# Its route map starts empty.
+	var tag := "%s_%s_%d" % [scenario, route, OS.get_process_id()]
+	_save_files = ["user://bot_progress_%s.json" % tag, "user://bot_discovery_%s.json" % tag]
+	_remove_save_files()
+	Progress.save_path = _save_files[0]
+	RunLog.load_from("")
+	RunLog.save_path = _save_files[1]
+	if scenario in ["menu_start", "intro_skip"]:
+		setting = MENU_PICKS[scenario][1]
+	if route == "test_range":
+		_setup_test_range()
+	else:
+		_setup_mission_1()
 	_level = LEVEL.instantiate()
+	_level.route_path = ROUTES.get(route, ROUTES["mission_1"])
+	# The setting it plays (--setting=; MEDIUM, where the chopper times were tuned, by default). The
+	# menu bots start the level on MEDIUM, as the game does, and pick theirs in the mission select.
+	_level.setting = RouteGraph.DEFAULT_SETTING if scenario in ["menu_start", "intro_skip"] else setting
 	# (menu_start and intro_skip run the ground route: the same boss)
 	_level.boss_seed = absi(hash("ground" if scenario in ["menu_start", "intro_skip"] else scenario)) % 100000
 	add_child(_level)
@@ -191,6 +236,69 @@ func _ready() -> void:
 	else:
 		_level.start_run()
 	get_tree().create_timer(200.0).timeout.connect(func() -> void: _report("timeout"))
+
+
+## Mission 1's ways (see the top): its one junction is at the end of the SECURITY WING (left: the
+## basement stairs, open while quiet; right: the fire escape, open once the alarm is up), and its
+## ladders at the end of the ROOF EDGE and the BOILER ROOM. Its wires: the MAIN FLOOR's and the
+## WING's; its alarm boxes: the MAIN FLOOR's, the WING's (before its wire), the ROOFTOPS' and the EXIT's.
+func _setup_mission_1() -> void:
+	_late_at = &"security_wing"
+	match scenario:
+		"tunnel_quiet":
+			_prefer = {&"security_wing": -1, &"boiler_room": -1}
+		"tunnel_loud":
+			_prefer = {&"security_wing": -1}
+			_trip_in = [&"security_wing"]
+		"tunnel_alarm":
+			_prefer = {&"security_wing": -1, &"boiler_room": -1}
+			_trip_in = [&"building_main_floor"]
+			_alarm_in = [&"security_wing"]
+		"tunnel_miss_ladder":
+			_prefer = {&"security_wing": -1, &"boiler_room": 0}
+		"fire_escape":
+			_prefer = {&"security_wing": 1, &"roof_edge": 1}
+			_trip_in = [&"security_wing"]
+		"miss_ladder":
+			_prefer = {&"security_wing": 1, &"roof_edge": 0}
+			_trip_in = [&"security_wing"]
+		"fire_shut":
+			_prefer = {&"security_wing": 1}
+		"fire_closes":
+			_prefer = {&"security_wing": 1}
+			_trip_in = [&"building_main_floor"]
+			_alarm_in = [&"security_wing"]
+		"roof_calm":
+			_prefer = {&"security_wing": 1, &"roof_edge": -1}
+			_trip_in = [&"security_wing"]
+			_alarm_in = [&"rooftops"]
+		"late_switch":
+			_prefer = {&"security_wing": -1}
+		"ground_loud":
+			_trip_in = [&"building_main_floor", &"security_wing"]
+		"ground_alarms":
+			_trip_in = [&"building_main_floor", &"security_wing"]
+			_alarm_in = [&"building_main_floor", &"security_wing", &"main_floor_exit"]
+
+
+## The TEST RANGE (today's full 19-area level, kept for the bots: tests/fixtures/test_range.json),
+## for what mission 1 leaves out: its first junction is at the end of the LOBBY (right: stairs up).
+func _setup_test_range() -> void:
+	_late_at = &"main_floor_lobby"
+	match scenario:
+		"roof_down":
+			_prefer = {&"main_floor_lobby": 1, &"rooftops": -1}
+		"roof_loud", "sniper_hit":
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
+			_trip_in = [&"main_floor_lobby"]
+		"roof_spotted":
+			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
+		"warehouse_drop":
+			_prefer = {&"warehouse": -1, &"storm_drain": -1}
+		"dog_bite", "dog_dodge":
+			_trip_in = [&"main_floor_lobby"]
+		"ground_loud", "squad_caught":
+			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 
 
 func _physics_process(_delta: float) -> void:
@@ -231,11 +339,11 @@ func _physics_process(_delta: float) -> void:
 		_cooldown = 30
 
 	# Last-minute change of mind: back to the middle just before the first split.
-	if scenario == "late_switch" and _level._runner.current == &"main_floor_lobby":
+	if scenario == "late_switch" and _level._runner.current == _late_at:
 		var runner: RouteRunner = _level._runner
 		var left_to_split := runner.graph.length_of(runner.current) - (d - runner.segment_start)
 		if left_to_split < 4.0:
-			_prefer[&"main_floor_lobby"] = 0
+			_prefer[_late_at] = 0
 			_cooldown = mini(_cooldown, 0)
 
 	# A roof sniper's laser has locked on: step one lane to the free side, then hold until he's fired
@@ -433,6 +541,7 @@ func _junction_soon() -> bool:
 
 
 func _on_end(reason: StringName) -> void:
+	_saved = _check_saved(reason)
 	if TALK.has(scenario):
 		# Stay on for the end-of-mission conversation and the debrief (_watch_talk).
 		_talk = {"reason": String(reason), "how": TALK[scenario], "f": 0, "bad": "", "open_f": -1, "dead_f": -1, "closed_f": -1,
@@ -772,7 +881,8 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report())
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved])
+	_remove_save_files()
 	get_tree().quit()
 
 
@@ -791,7 +901,7 @@ func _watch_intro() -> void:
 	var rig: SoldierRig = _player._rig
 	if f == 138:
 		_level._frontend.briefing_done.connect(func() -> void: d["pan"] = int(d["f"]))  # (the pan starts)
-		_level._frontend.start_requested.emit()
+		_select_mission(d)  # (START MISSION, the mission select, the pick: the briefing opens)
 		d["start"] = f
 	if d.has("start") and not d.has("pan"):
 		_watch_briefing(d, f)
@@ -835,6 +945,110 @@ func _watch_intro() -> void:
 		brief_ok = brief_ok and b.get("lines", 0) == 2 and b.get("advanced", 0) == 1 and b.get("skipped", 0) == 1
 	_intro_report += " brief=ok" if brief_ok else " brief=bad(lines %d/%d finished %d advanced %d skipped %d closed %d%s)" % [
 			b.get("lines", 0), lines, b.get("finished", 0), b.get("advanced", 0), b.get("skipped", 0), b.get("closed", 0), b.get("bad", "?")]
+	_intro_report += " select=%s" % d.get("select", "bad(never)")
+
+
+## menu_start / intro_skip: START MISSION pressed on the main menu must open the mission select,
+## listing all nine missions (2 to 9 COMING SOON, greyed and not pickable; no settings on it now: user,
+## "The menu is too cramped"); a click on mission 1's row must open its own screen, with EASY,
+## MEDIUM and HARD. menu_start, on a fresh save, first clicks mission 2's row (nothing may happen),
+## then on mission 1's screen clicks what's locked (MEDIUM and HARD: each greyed with its padlock,
+## and a click on it, or choosing it, does nothing), goes BACK to the select and into mission 1
+## again; then each bot clicks its pick (MENU_PICKS): the briefing must open, on the level built for
+## that setting (HARD: the MAIN FLOOR built under the menu built again, with HARD's extra wire). The
+## clicks go in as a phone's would (a press and a release where the button is on screen). RESULT
+## ends select=ok(setting) or select=bad(...).
+func _select_mission(d: Dictionary) -> void:
+	var fe = _level._frontend
+	var bad := PackedStringArray()
+	for b in fe.find_children("*", "Button", true, false):
+		if (b as Button).text == "START MISSION":
+			(b as Button).pressed.emit()
+	if not fe.in_missions():
+		bad.append("no-select")
+	var rows := 0
+	for n in fe.find_children("*", "", true, false):
+		if n is Frontend.MissionRow and not n.is_queued_for_deletion():
+			rows += 1
+			if n.built != (n.number == 1) or n.playable() != (n.number == 1) or n.disabled == n.playable():
+				bad.append("row-%d" % n.number)
+	if rows != 9:
+		bad.append("rows-%d" % rows)
+	if fe.chip(1, "easy") != null:
+		bad.append("settings-on-select")
+	var pick: Array = MENU_PICKS[scenario]
+	if scenario == "menu_start":
+		var two: Frontend.MissionRow = fe.mission_row(2)
+		if two == null:
+			bad.append("no-row-2")
+		else:
+			_click(two.get_global_rect().get_center())
+			if not fe.in_missions():
+				bad.append("2-opened")
+	_open_row(fe, pick[0], bad)
+	if scenario == "menu_start":
+		for locked in [[1, "medium"], [1, "hard"]]:
+			var c: Frontend.SettingChip = fe.chip(locked[0], locked[1])
+			if c == null or not c.disabled or c.open:
+				bad.append("%d-%s-not-locked" % locked)
+				continue
+			_click(c.get_global_rect().get_center())
+			if fe.choose(locked[0], locked[1]) or not fe.in_mission() or _level._graph.setting != RouteGraph.DEFAULT_SETTING:
+				bad.append("%d-%s-picked" % locked)
+		# BACK to the select, and into mission 1 again.
+		var back: Button = null
+		for b in fe.find_children("*", "Button", true, false):
+			if (b as Button).text == "BACK" and not b.is_queued_for_deletion():
+				back = b
+		if back == null:
+			bad.append("no-back")
+		else:
+			_click(back.get_global_rect().get_center())
+			if not fe.in_missions():
+				bad.append("back-not-to-select")
+			_open_row(fe, pick[0], bad)
+	var chosen: Frontend.SettingChip = fe.chip(pick[0], pick[1])
+	if chosen == null or chosen.disabled:
+		bad.append("pick-locked")
+	else:
+		if chosen.best >= 0.0:
+			bad.append("best-on-fresh-save")
+		_click(chosen.get_global_rect().get_center())
+	if not fe.in_briefing() or _level._graph.setting != String(pick[1]) or Progress.last != Progress.key(pick[0], pick[1]):
+		bad.append("pick-didn't-start-it(%s)" % _level._graph.setting)
+	if pick[1] == "hard":
+		var wire := false
+		for o in _level._obstacles:
+			if o["kind"] == "tripwire" and is_equal_approx(float(o["group"].get("at", 0)), 127.0) and o["group"].get("min_setting", "") == "hard":
+				wire = true
+		if not wire:
+			bad.append("hard-not-built")
+	d["select"] = "ok(%s)" % pick[1] if bad.is_empty() else "bad(%s)" % ",".join(bad)
+
+
+## In the mission select, a click on mission n's row: its screen must open, with its three settings.
+func _open_row(fe: Node, n: int, bad: PackedStringArray) -> void:
+	var row: Frontend.MissionRow = fe.mission_row(n)
+	if row == null or row.disabled:
+		bad.append("row-%d-not-pickable" % n)
+		return
+	_click(row.get_global_rect().get_center())
+	if not fe.in_mission() or fe.mission_shown() != n:
+		bad.append("row-%d-didn't-open" % n)
+	for s in RouteGraph.SETTINGS:
+		if fe.chip(n, s) == null:
+			bad.append("no-%d-%s" % [n, s])
+
+
+## A tap as a phone gives one, at `p` on screen: a press and a release (the GUI's click).
+func _click(p: Vector2) -> void:
+	for down in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = down
+		e.position = p
+		e.global_position = p
+		get_viewport().push_input(e, true)  # (in the game's own 270-wide pixels)
 
 
 ## The mission briefing, between START and the pan. menu_start reads it the way a player taps
@@ -934,14 +1148,11 @@ func _pan_due(rig: SoldierRig) -> bool:
 	return absf(fposmod(rig._idle_t + Briefing.CLOSE_TIME, SoldierRig.IDLE_LOOP) - 2.3) < 0.03
 
 
-## tunnel_alarm only shoots MAIN FLOOR's box (the one that can lift the TUNNEL door).
+## The alarm scenarios shoot alarm boxes only in their own areas (_alarm_in): tunnel_alarm and
+## fire_closes the WING's (to lift the basement door, or shut the fire escape), roof_calm the
+## ROOFTOPS', ground_alarms every one on its way.
 func _may_shoot_alarm() -> bool:
-	match scenario:
-		"ground_alarms":
-			return true
-		"tunnel_alarm":
-			return _level._runner.current == &"building_main_floor"
-	return false
+	return _level._runner.current in _alarm_in
 
 
 ## A live rifleman ahead within shooting range (runner_escapes taps him instead of the runner).
@@ -969,3 +1180,51 @@ func _lit_ahead(lane: int, d: float) -> bool:
 			if absf(_player.lane_x(lane) - px) < Searchlight.POOL_RADIUS + 0.5:
 				return true
 	return false
+
+
+## How many hits the boss on the pad takes on this setting (0 if none was built).
+func _boss_hp() -> int:
+	for b in _level._bosses:
+		if is_instance_valid(b["node"]):
+			return b["node"].max_health
+	return 0
+
+
+## The auto-save, as the run ends (`reason`, any ending): the progress and the route map must be on
+## the device by now (the bot's own files), no temp file left, each just as the game holds it; and
+## the progress's best time: on mission 1, getting out (each bot's first time out on its setting)
+## sets it to the run's time; any other ending sets none. "ok", or "bad(what)".
+func _check_saved(reason: StringName) -> String:
+	var bad := PackedStringArray()
+	var held := [Progress.to_data(), RunLog.save_data()]
+	for i in 2:
+		var p: String = _save_files[i]
+		if not FileAccess.file_exists(p) or FileAccess.file_exists(p + SaveFile.TMP):
+			bad.append("%s-not-written" % ["progress", "map"][i])
+			continue
+		if JSON.parse_string(FileAccess.get_file_as_string(p)) != JSON.parse_string(JSON.stringify(held[i])):
+			bad.append("%s-differs" % ["progress", "map"][i])
+	var best: Dictionary = held[0].get("best", {})
+	var k := Progress.key(1, _level._graph.setting)
+	if route == "mission_1" and reason == GameState.END_EXTRACTED:
+		if not best.has(k) or absf(float(best[k]) - _level._clock.elapsed) > 0.001 or best.size() != 1:
+			bad.append("best(%s)" % [best])
+	elif not best.is_empty():
+		bad.append("best-without-extraction(%s)" % [best])
+	if RunLog.save_data()["missions"].is_empty():
+		bad.append("map-empty")
+	return "ok" if bad.is_empty() else "bad(%s)" % ",".join(bad)
+
+
+func _remove_save_files() -> void:
+	for p in _save_files:
+		for f in [p, p + SaveFile.TMP]:
+			if FileAccess.file_exists(f):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
+
+
+## What the run opened in the mission select (Progress.record_extraction): RESULT's opened=, "-" for
+## nothing.
+func _opened() -> String:
+	var now: Array = Progress.to_data()["unlocked"].filter(func(k: String) -> bool: return not k in _open_before)
+	return ",".join(now) if not now.is_empty() else "-"
