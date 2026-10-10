@@ -603,7 +603,7 @@ func _load_route() -> void:
 
 
 ## The mission select's pick (Frontend: an open mission and setting). Mission n's level is built for
-## that setting, then its briefing opens as START MISSION's did. The same level as the one under the
+## that setting, then its briefing opens. The same level as the one under the
 ## menu: the setting is swapped in place (_use_setting); another mission's level (none is built yet
 ## but mission 1) is loaded fresh for it, and its briefing opens once it's up.
 func _on_mission_picked(n: int, which: String) -> void:
@@ -638,7 +638,7 @@ func _use_setting(which: String) -> void:
 	_build_branches()  # (the ones just thrown away, built again for this setting)
 
 
-## START MISSION: the mission briefing first (user: a codec conversation to read before the run),
+## A mission picked: the mission briefing first (user: a codec conversation to read before the run),
 ## over the menu's scene as it was: the camera swaying, CROSS in his ready loop, no run, no clock
 ## (all of that starts with start_run, after the pan). Its end (SKIP, or a tap after its last line)
 ## starts the opening pan. With no lines to play, straight to the pan. Retry never gets here (it

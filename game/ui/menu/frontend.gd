@@ -1,7 +1,7 @@
 class_name Frontend
 extends CanvasLayer
 ## Every menu screen, in the game's espionage style (UiKit): the main menu (over the slowly
-## swaying opening camera), the mission briefing after START (Briefing), SETTINGS, CONTROLS, the
+## swaying opening camera), the mission briefing (Briefing), SETTINGS, CONTROLS, the
 ## pause menu, and the end screens (the end-of-mission conversation, then the debrief). It keeps
 ## working while the game is paused. The level listens to its signals.
 
@@ -28,7 +28,7 @@ signal briefing_cue(sound: String, volume_db: float)
 signal debrief_opened(reason: StringName)
 
 ## END_TALK: the end-of-mission conversation (a Briefing), between the run and the debrief (END).
-## MISSIONS: the mission select, after START MISSION; MISSION: one mission's screen after it (its
+## MISSIONS: the mission select, after MISSION SELECT; MISSION: one mission's screen after it (its
 ## EASY / MEDIUM / HARD, each with his best time).
 enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION }
 
@@ -84,7 +84,7 @@ func hide_all() -> void:
 	_show(Screen.NONE)
 
 
-## START MISSION's briefing: the conversation in `script` (Briefing.load_file()).
+## A picked mission's briefing: the conversation in `script` (Briefing.load_file()).
 func show_briefing(script: Dictionary) -> void:
 	_briefing_script = script
 	_show(Screen.BRIEFING)
@@ -94,7 +94,7 @@ func in_briefing() -> bool:
 	return _screen == Screen.BRIEFING
 
 
-## The mission select (after START MISSION), up.
+## The mission select (after MISSION SELECT), up.
 func in_missions() -> bool:
 	return _screen == Screen.MISSIONS
 
@@ -279,7 +279,7 @@ func _build_main() -> void:
 	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_line())
 	Reticle.rule_bottom = title_rule()
 	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
-	var first := _button("START MISSION", 290, func() -> void: _open(Screen.MISSIONS))
+	var first := _button("MISSION SELECT", 290, func() -> void: _open(Screen.MISSIONS))
 	_button("SETTINGS", 318, func() -> void: _open(Screen.SETTINGS))
 	_button("CONTROLS", 346, func() -> void: _open(Screen.CONTROLS))
 	_place_wide(UiKit.label("PROOF OF CONCEPT BUILD", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
@@ -466,9 +466,10 @@ func _build_settings() -> void:
 	y = _slider_row("BRIGHTNESS", "brightness", y, 50, 150)
 	y = _toggle_row("SCREEN SHAKE", "screen_shake", y)
 	y = _toggle_row("RETRO FILTER", "retro_filter", y)
+	y = _toggle_row("BLOOD", "blood", y)
 	y = _section("CONTROLS", y + 4)
 	y = _choice_row("AIM", "aim", AIM_NAMES, y)
-	y = _choice_row("FIRE BUTTON", "fire_side", {"right": "RIGHT", "left": "LEFT"}, y)
+	y = _choice_row("TRIGGER", "fire_side", {"right": "RIGHT", "left": "LEFT"}, y)
 	y = _choice_row("SWIPE", "swipe", SWIPE_NAMES, y)
 	# RESET and BACK side by side, under the rows.
 	var reset := _button("RESET", y + 10, func() -> void:

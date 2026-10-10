@@ -103,6 +103,12 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
 - Just for looks: no change to gameplay.
 
+### PROPOSED — Menu and settings changes (user, 2026-10-10)
+- **Why (user):** "In the menu change start mission to mission select. In setting add a blood on off toggle which will disable or enable all blood effects in the game. Also in setting add trigger with left or right toggle which will change the placement of the trigger to fire in the game from left to right and vis versa."
+- The main menu's first button reads MISSION SELECT (was START MISSION).
+- SETTINGS gets a BLOOD ON / OFF toggle: off removes every blood effect (the mist when someone is shot, the pools under bodies, CROSS's and the boss's pools, the boss's KO burst, any blood decal). Saved on the device; ON by default.
+- The trigger side already existed as FIRE BUTTON LEFT / RIGHT under CONTROLS (it moves the FIRE trigger button); it's renamed TRIGGER to match.
+
 ### PROPOSED — Sound (user direction, 2026-10-01)
 - "Work on the sounds. Try to get that PS1-era sound, inspiration from MGS on PS1 and GoldenEye on N64." Until now the game had no sound at all.
 - **The era's sound:** low sample rates (22 kHz effects, 11–16 kHz ambience and music) and some bit-crush grit. Short, punchy, dry gunshots (GoldenEye). Echo built into the sounds (the PS1's reverb). Quiet humming ambience with the odd detail (MGS). Synth music that only comes in when the alert rises.

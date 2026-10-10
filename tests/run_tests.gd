@@ -54,6 +54,8 @@ func _run() -> void:
 	_test_boss()
 	_test_boss_ko()
 	_test_cross_death()
+	await _test_blood_setting()
+	await _test_settings_screen()
 	_test_end_typing()
 	_test_briefing()
 	_test_end_talk()
@@ -477,6 +479,151 @@ func _test_boss_ko() -> void:
 	_check(under_rotor, "boss KO: the cameras stay under the chopper's rotor")
 	_check(total <= 10.0, "boss KO: about 9 s in all (%.1f; LOCKED: cinematic beats short; the bots check the tap to skip)" % total)
 	boss.queue_free()
+
+
+## The BLOOD setting (user: "a blood on off toggle which will disable or enable all blood effects"):
+## on, every kind spawns as before (the hit mist on a rifle trooper, a security trooper and the boss,
+## the pools under a trooper, a security trooper and a dog once down, the boss's KO pool and the
+## mist of his KO hits, CROSS's mist and pool as he dies); off, none of them. ON by default. It's
+## asked as each one starts: switched mid-run, a pool already there goes on spreading, the next
+## effect follows the new setting.
+func _test_blood_setting() -> void:
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	_check(settings.DEFAULTS.get("blood") == true, "blood: ON by default")
+	var tt := Tuning.new()
+	var pools_in := func(n: Node) -> int:
+		var k := 0
+		for c in n.get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).material_override is ShaderMaterial \
+					and ((c as MeshInstance3D).material_override as ShaderMaterial).shader == Blood.POOL_SHADER:
+				k += 1
+		return k
+	var mists_in := func(n: Node) -> int:
+		return n.get_children().filter(func(c: Node) -> bool: return c is Blood.Mist).size()
+	for on in [true, false]:
+		settings._values["blood"] = on  # (in memory: the player's own settings file is left alone)
+		var word := "on" if on else "off"
+		_check(Blood.enabled() == on, "blood %s: Blood.enabled() says so" % word)
+		var holder := Node3D.new()
+		root.add_child(holder)
+		Blood.mist(holder, Vector3.ZERO, Vector3.FORWARD, 1)
+		var p1 := Blood.pool(holder, Vector3.ZERO, 1.0, 0.5, 1)
+		var p2 := Blood.pool_at(holder, Vector3.ZERO, 1.0, 2)
+		Blood.set_spread(p2, 0.5)  # (a null one, off: nothing, no error)
+		_check(mists_in.call(holder) == (1 if on else 0) and pools_in.call(holder) == (2 if on else 0) and (p1 != null) == on and (p2 != null) == on,
+				"blood %s: Blood's mist and pools %s" % [word, "spawn" if on else "don't spawn (null pools)"])
+		var rifle := RifleTrooper.new(tt)
+		var sec := SecurityTrooper.new(tt)
+		var dog := RusherDog.new(tt)
+		var boss := Boss.new(tt)
+		for n: Node3D in [rifle, sec, dog, boss]:
+			root.add_child(n)
+		boss.global_transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, -20.0))
+		rifle.hit()
+		_check(mists_in.call(rifle) == (1 if on else 0), "blood %s: a rifle trooper shot, %s" % [word, "a mist of blood" if on else "no mist"])
+		while rifle.is_alive():
+			rifle.hit()
+		sec.hit()
+		_check(mists_in.call(sec) == (1 if on else 0), "blood %s: a security trooper shot, %s" % [word, "a mist" if on else "no mist"])
+		while sec.is_alive():
+			sec.hit()
+		dog.hit()
+		_check(mists_in.call(dog) == 0, "blood %s: a dog shot has no mist (it never had one: a pool only)" % word)
+		while boss.is_alive():
+			boss.hit()
+		_check((mists_in.call(boss) > 0) == on and (boss._pool != null) == on and pools_in.call(boss) == (1 if on else 0),
+				"blood %s: the boss shot down, %s" % [word, "his mists and his KO pool" if on else "no mist and no KO pool"])
+		var boss_mists: int = mists_in.call(boss)
+		boss.replay_death(0.0)  # (the KO replay: his hits' mists again, the pool wound back)
+		boss.finish_death()
+		_check((mists_in.call(boss) > boss_mists) == on and pools_in.call(boss) == (1 if on else 0),
+				"blood %s: his KO replay %s" % [word, "bursts again over the one pool" if on else "has no burst and no pool"])
+		var cross: Node3D = (load("res://game/player/player.tscn") as PackedScene).instantiate()
+		root.add_child(cross)
+		cross.die(5.0)
+		_check(mists_in.call(cross) == (1 if on else 0) and pools_in.call(cross) == (1 if on else 0),
+				"blood %s: CROSS killed, %s" % [word, "his mist and his pool" if on else "no mist and no pool"])
+		for f in 10:
+			cross._die_step(0.1)  # (his death plays on, spreading his pool: or, off, nothing)
+		# The pools under the troopers and the dog come once they're down.
+		await create_timer(GuardRig.FALL_TIME + 0.25).timeout
+		_check(pools_in.call(rifle) == (1 if on else 0) and pools_in.call(sec) == (1 if on else 0) and pools_in.call(dog) == (1 if on else 0),
+				"blood %s: down, %s" % [word, "a pool under the rifle trooper, the security trooper and the dog" if on else "no pool under a trooper, the security trooper or the dog"])
+		for n: Node in [holder, rifle, sec, dog, boss, cross]:
+			n.free()
+	# Switched mid-run: a pool already spreading goes on; the next one follows the setting.
+	settings._values["blood"] = true
+	var mid := Node3D.new()
+	root.add_child(mid)
+	var spreading := Blood.pool_at(mid, Vector3.ZERO, 1.0, 3)
+	settings._values["blood"] = false
+	Blood.set_spread(spreading, 1.0)
+	Blood.mist(mid, Vector3.ZERO, Vector3.FORWARD, 3)
+	_check(spreading.visible and pools_in.call(mid) == 1 and mists_in.call(mid) == 0 and Blood.pool_at(mid, Vector3.ZERO, 1.0, 4) == null,
+			"blood: switched off mid-run, the pool already there goes on, the next effect doesn't come")
+	mid.free()
+	settings._values = saved
+
+
+## SETTINGS (user): BLOOD ON / OFF under DISPLAY; the FIRE trigger's side is TRIGGER (LEFT / RIGHT,
+## the setting fire_side), not FIRE BUTTON; the screen fits a 480-high screen (and so a tall phone's
+## 585: it's laid out from the top), its rows never crowding, RESET and BACK on screen. TRIGGER puts
+## the FIRE trigger bottom right or bottom left (where the HUD draws it and where a touch holds it).
+func _test_settings_screen() -> void:
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	fe.show_main()
+	await process_frame
+	_menu_button(fe, "SETTINGS").pressed.emit()
+	await process_frame
+	_check(_has_label(fe, "BLOOD") and _has_label(fe, "TRIGGER") and not _has_label(fe, "FIRE BUTTON"), "settings: BLOOD and TRIGGER rows (no FIRE BUTTON)")
+	var labels := {}
+	for l in fe.find_children("*", "Label", true, false):
+		if not l.is_queued_for_deletion():
+			labels[(l as Label).text] = l
+	var y_of := func(t: String) -> float: return (labels[t] as Label).position.y if labels.has(t) else -1.0
+	_check(y_of.call("BLOOD") > y_of.call("RETRO FILTER") and y_of.call("BLOOD") < y_of.call("CONTROLS"), "settings: BLOOD is in DISPLAY, under RETRO FILTER")
+	_check(y_of.call("TRIGGER") > y_of.call("AIM") and y_of.call("TRIGGER") < y_of.call("SWIPE"), "settings: TRIGGER is under CONTROLS, where FIRE BUTTON was")
+	# BLOOD's ON / OFF button, level with its label: a press switches it.
+	var blood_btn: Button = null
+	var trigger_btn: Button = null
+	for b in fe.find_children("*", "Button", true, false):
+		if absf((b as Button).position.y + 1.0 - y_of.call("BLOOD") + 3.0) < 1.0:
+			blood_btn = b
+		if absf((b as Button).position.y + 1.0 - y_of.call("TRIGGER") + 3.0) < 1.0:
+			trigger_btn = b
+	_check(blood_btn != null and blood_btn.text == ("ON" if settings.get_value("blood") else "OFF"), "settings: BLOOD's button shows the setting")
+	_check(trigger_btn != null and trigger_btn.text in ["< RIGHT >", "< LEFT >"], "settings: TRIGGER's button reads LEFT or RIGHT (%s)" % (trigger_btn.text if trigger_btn else "none"))
+	# Fits: every row and button on a 480-high screen, rows at least a row's height apart.
+	var bottom := 0.0
+	for c in fe.find_children("*", "Control", true, false):
+		if not c.is_queued_for_deletion() and (c is Button or c is Label or c is HSlider):
+			bottom = maxf(bottom, (c as Control).get_global_rect().end.y)
+	var ys: Array = []
+	for t in labels:
+		if (labels[t] as Label).position.x == 26.0:
+			ys.append((labels[t] as Label).position.y)
+	ys.sort()
+	var closest := INF
+	for i in range(1, ys.size()):
+		closest = minf(closest, ys[i] - ys[i - 1])
+	_check(bottom <= 480.0 - 8.0 and closest >= 20.0, "settings: fits a 480-high screen, so a tall phone's 585 too (bottom at %d), rows %d px apart at least" % [bottom, closest])
+	fe.free()
+	settings._values = saved
+	# TRIGGER: the FIRE trigger bottom right, or bottom left, where the HUD draws it and a touch holds it.
+	var tt := Tuning.new()
+	for v: Vector2 in [Vector2(270, 480), Vector2(270, 585)]:
+		tt.fire_on_left = false
+		var r := SwipeInput.fire_button(v, tt)
+		tt.fire_on_left = true
+		var l := SwipeInput.fire_button(v, tt)
+		_check(r.x > v.x * 0.75 and l.x < v.x * 0.25 and is_equal_approx(r.y, l.y) and r.y > v.y * 0.8 and is_equal_approx(l.x, v.x - r.x),
+				"trigger %dx%d: RIGHT bottom right, LEFT bottom left, the mirror of it" % [v.x, v.y])
+		_check(SwipeInput.on_fire_button(Vector2(l.x, l.y), v, tt) and not SwipeInput.on_fire_button(Vector2(r.x, r.y), v, tt),
+				"trigger %dx%d: LEFT, a touch there holds FIRE (and not on the right)" % [v.x, v.y])
 
 
 ## CROSS's death (user: "a momentum ragdoll", slowed a little): from running, standing, in the air,
@@ -4392,11 +4539,11 @@ func _test_mission_select() -> void:
 	fe.start_requested.connect(func(n: int, s: String) -> void: picks.append([n, s]))
 	fe.show_main()
 	await process_frame
-	var start := _menu_button(fe, "START MISSION")
-	_check(start != null, "mission select: the main menu still has START MISSION")
+	var start := _menu_button(fe, "MISSION SELECT")
+	_check(start != null, "mission select: the main menu still has MISSION SELECT")
 	start.pressed.emit()
 	await process_frame
-	_check(fe.in_missions() and picks.is_empty(), "mission select: START MISSION opens it (and starts nothing yet)")
+	_check(fe.in_missions() and picks.is_empty(), "mission select: MISSION SELECT opens it (and starts nothing yet)")
 	var rows: Array = fe.find_children("*", "", true, false).filter(func(n: Node) -> bool: return n.get_script() == FE.MissionRow and not n.is_queued_for_deletion())
 	var names := rows.map(func(r: Node) -> String: return r.title)
 	_check(rows.size() == 9 and names[0] == "COLD CALL" and names[8] == "HOT EXFIL", "mission select: all nine missions listed (%s)" % [names])
@@ -4442,9 +4589,9 @@ func _test_mission_select() -> void:
 	_check(fe.in_missions() and fe.mission_row(1) != null and fe.mission_row(1).has_focus(), "mission screen: BACK returns to the mission select")
 	_menu_button(fe, "BACK").pressed.emit()
 	await process_frame
-	_check(_menu_button(fe, "START MISSION") != null and not fe.in_missions(), "mission select: BACK returns to the main menu")
-	# Through again: START MISSION, mission 1, EASY: a tap starts it on EASY.
-	_menu_button(fe, "START MISSION").pressed.emit()
+	_check(_menu_button(fe, "MISSION SELECT") != null and not fe.in_missions(), "mission select: BACK returns to the main menu")
+	# Through again: MISSION SELECT, mission 1, EASY: a tap starts it on EASY.
+	_menu_button(fe, "MISSION SELECT").pressed.emit()
 	await process_frame
 	_tap_at(fe.mission_row(1).get_global_rect().get_center())
 	await process_frame
@@ -4456,7 +4603,7 @@ func _test_mission_select() -> void:
 	prog.record_run(1, "medium", &"killed", 40.0)
 	fe.show_main()
 	await process_frame
-	_menu_button(fe, "START MISSION").pressed.emit()
+	_menu_button(fe, "MISSION SELECT").pressed.emit()
 	await process_frame
 	_check(fe.mission_row(1).cleared == [true, false, false] and fe.mission_row(1).unlocked == [true, true, false],
 			"mission select: after EASY, mission 1's marks show EASY cleared and MEDIUM open")

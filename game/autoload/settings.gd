@@ -15,6 +15,7 @@ const DEFAULTS := {
 	"brightness": 100,      # percent of normal
 	"screen_shake": true,
 	"retro_filter": true,
+	"blood": true,          # blood effects (Blood): the mist and the pools
 	"aim": "auto_tap",      # "auto" | "auto_tap" | "tap"
 	"fire_side": "right",   # "right" | "left"
 	"swipe": "medium",      # "low" | "medium" | "high"

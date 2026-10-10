@@ -804,7 +804,7 @@ func set_firing(held: bool) -> void:
 		_fire.held = held
 
 
-## The FIRE button moved (the FIRE BUTTON setting): draw it in its new place.
+## The FIRE button moved (the TRIGGER setting): draw it in its new place.
 func redraw_fire() -> void:
 	if _fire:
 		_fire.queue_redraw()

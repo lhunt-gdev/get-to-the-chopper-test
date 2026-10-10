@@ -1,6 +1,6 @@
 class_name Briefing
 extends Control
-## The mission briefing (user): after START MISSION and before the opening pan, a conversation
+## The mission briefing (user): after a mission is picked and before the opening pan, a conversation
 ## between CROSS, his General and the mission briefer, in the game's own chunky, slanted look (the
 ## GTA-style blocks of the menus and the HUD), not a codec. The two faces are tilted, slanted cards on
 ## a diagonal: whoever CROSS is talking to up on the left, CROSS down on the right (user: "CROSS

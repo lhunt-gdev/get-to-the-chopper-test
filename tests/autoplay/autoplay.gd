@@ -901,7 +901,7 @@ func _watch_intro() -> void:
 	var rig: SoldierRig = _player._rig
 	if f == 138:
 		_level._frontend.briefing_done.connect(func() -> void: d["pan"] = int(d["f"]))  # (the pan starts)
-		_select_mission(d)  # (START MISSION, the mission select, the pick: the briefing opens)
+		_select_mission(d)  # (MISSION SELECT, the mission select, the pick: the briefing opens)
 		d["start"] = f
 	if d.has("start") and not d.has("pan"):
 		_watch_briefing(d, f)
@@ -948,7 +948,7 @@ func _watch_intro() -> void:
 	_intro_report += " select=%s" % d.get("select", "bad(never)")
 
 
-## menu_start / intro_skip: START MISSION pressed on the main menu must open the mission select,
+## menu_start / intro_skip: MISSION SELECT pressed on the main menu must open the mission select,
 ## listing all nine missions (2 to 9 COMING SOON, greyed and not pickable; no settings on it now: user,
 ## "The menu is too cramped"); a click on mission 1's row must open its own screen, with EASY,
 ## MEDIUM and HARD. menu_start, on a fresh save, first clicks mission 2's row (nothing may happen),
@@ -962,7 +962,7 @@ func _select_mission(d: Dictionary) -> void:
 	var fe = _level._frontend
 	var bad := PackedStringArray()
 	for b in fe.find_children("*", "Button", true, false):
-		if (b as Button).text == "START MISSION":
+		if (b as Button).text == "MISSION SELECT":
 			(b as Button).pressed.emit()
 	if not fe.in_missions():
 		bad.append("no-select")

@@ -99,7 +99,7 @@ expect boss_skip "reason=extracted alert=1 route=$G | covers=0 hits=0" "boss=1/0
 # Through the real main menu, the mission briefing and the opening pan (tapped through every line,
 # the pan starting mid gun check; or SKIP, then a tap skipping the pan): nothing of the run under
 # the briefing; CROSS's ready stance hands over to the run with no joint jumping, the pistol never
-# at the camera, no camera cut, control on time. START MISSION opens the mission select first (all
+# at the camera, no camera cut, control on time. MISSION SELECT opens the mission select first (all
 # nine missions, 2 to 9 COMING SOON), then mission 1's row its own screen (EASY / MEDIUM / HARD):
 # menu_start, on a fresh save, clicks what's locked (mission 2's row; mission 1 MEDIUM and HARD:
 # nothing happens), BACK to the select and into mission 1 again, then EASY; intro_skip (out of EASY

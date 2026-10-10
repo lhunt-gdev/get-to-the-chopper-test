@@ -111,7 +111,7 @@ enum TargetingMode {
 @export var target_range: float = 30.0
 ## FIRE button radius as a fraction of screen width (bottom-right corner).
 @export_range(0.06, 0.25) var fire_button_fraction: float = 0.13
-## FIRE BUTTON side (a setting, not tuning): true puts it bottom left.
+## The FIRE trigger's side (the TRIGGER setting, not tuning): true puts it bottom left.
 var fire_on_left := false
 ## Seconds between shots while FIRE is held. Placeholder weapon: unlimited ammo.
 @export var fire_interval: float = 0.2
