@@ -51,6 +51,8 @@ extends Node
 ##                  down into the SECURITY WING
 ##   warehouse_drop - (test range) main route to the WAREHOUSE, then its left-lane stairs down into
 ##                  the PUMP STATION and the STORM DRAIN's ladder up
+##   range_tunnel - (test range) the MAIN FLOOR's left-lane stairs down into the SERVICE TUNNEL,
+##                  on through the BOILER ROOM, the SEWER and the PUMP STATION, the STORM DRAIN's ladder up
 ##   roof_loud    - (test range) runs through the first wire (alert 2), up to the ROOFTOPS,
 ##                  straight on to the ROOF EDGE, right-lane ladder down
 ##   late_switch  - heads for the side stairs (mission 1: the WING's basement stairs; test range:
@@ -187,6 +189,12 @@ var _gates: Array[Dictionary] = []
 var _gates_shut := 0
 var _gates_bad := ""
 var _frame := 0
+## Every flight of stairs, watched on its security camera (user: "as I went down the stairs Cross
+## was not visible from the cctv cam"): the flights it ran, whether it's on one now, and the first
+## thing that went wrong, if anything (_watch_stairwell).
+var _flights := 0
+var _on_flight := false
+var _flight_bad := ""
 
 
 func _ready() -> void:
@@ -295,6 +303,8 @@ func _setup_test_range() -> void:
 			_prefer = {&"main_floor_lobby": 1, &"roof_edge": 1}
 		"warehouse_drop":
 			_prefer = {&"warehouse": -1, &"storm_drain": -1}
+		"range_tunnel":
+			_prefer = {&"building_main_floor": -1, &"storm_drain": -1}
 		"dog_bite", "dog_dodge":
 			_trip_in = [&"main_floor_lobby"]
 		"ground_loud", "squad_caught":
@@ -312,6 +322,7 @@ func _physics_process(_delta: float) -> void:
 		return  # (the KO replay: we just watch)
 	_shoot()
 	_watch_gates()
+	_watch_stairwell()
 	if d < 0.3 or _level.in_stairwell():
 		return  # in the start room or a stairwell: no swipes until we're through the door
 	if _level._boss_fight != null and is_instance_valid(_level._boss_fight) and _level._boss_fight.state == Boss.State.SPINDOWN:
@@ -875,13 +886,64 @@ func _gates_report() -> String:
 	return " gates=%d/%d/%s" % [_gates.size(), _gates_shut, "ok" if _gates_bad == "" else "bad(%s)" % _gates_bad]
 
 
+## Every frame on a flight of stairs (in_stairwell(), its security camera up), in every scenario: he
+## must be in the stairs' one lane, the whole way, inside the tube its camera is in (its walls hide
+## anything outside it); and from a metre in (the entrance door swinging open in front of him before
+## that) until he's near passing under the camera, his feet, chest and head must be in its picture,
+## on a tall phone too (19.5:9: 270x585). (Eased out of that lane by the locked door on the other
+## side of the split, he ran the whole flight inside its wall, out of the camera's view: user, "as I
+## went down the stairs Cross was not visible from the cctv cam".) Line of sight (_sees) is no test
+## here: the stairwell's sight boxes (its hidden roof slab, its walls as tall as they used to be)
+## stand where nothing is drawn. RESULT ends cctv=flights/ok.
+func _watch_stairwell() -> void:
+	var d := _player.distance_run()
+	var seg: Dictionary = _level._segment_at(d)
+	if not _level.in_stairwell() or not _level._is_stairs(seg):
+		_on_flight = false
+		return
+	if not _on_flight:
+		_on_flight = true
+		_flights += 1
+	var into: float = d - float(seg["start"])
+	if into < 0.0 or _flight_bad != "":
+		return
+	var ramp: float = seg["ramp_len"]
+	var lane_x: float = _player.lane_x(_level._stair_lane(seg))
+	var inside: float = _player.tuning.lane_width / 2.0  # (the tube's inner walls: a little further out)
+	var frame: Transform3D = seg["node"].global_transform * _level._frame_at(seg, into)
+	# (His first frame on it he's still placed by the road he came off: a few cm out.)
+	var off: float = (frame.affine_inverse() * _player.global_position).x - lane_x
+	if absf(off) > 0.15:
+		_flight_bad = "%s %.1fm: %.2f m out of the stairs' lane" % [seg["id"], into, off]
+		return
+	if into < 1.0 or into > ramp - 2.6:
+		return
+	var cam: Camera3D = _level._camera
+	var cam_frame: Transform3D = seg["node"].global_transform * _level._frame_at(seg, ramp - 0.4)
+	var cam_off: float = (cam_frame.affine_inverse() * cam.global_position).x - lane_x
+	if absf(cam_off) > inside:
+		_flight_bad = "%s %.1fm: the camera %.2f m out of the stairs' lane" % [seg["id"], into, cam_off]
+		return
+	var size: Vector2 = cam.get_viewport().get_visible_rect().size
+	var tall := Rect2(Vector2(size.x / 2.0 - size.y * 9.0 / 39.0, 0), Vector2(size.y * 18.0 / 39.0, size.y))  # 19.5:9, centred
+	for up in [0.3, 1.25, 1.7]:
+		var at: Vector3 = _player.global_position + Vector3(0, up + _player.jump_y, 0)
+		if cam.is_position_behind(at) or not tall.has_point(cam.unproject_position(at)):
+			_flight_bad = "%s %.1fm: %.2f m up him not in the camera's picture" % [seg["id"], into, up]
+			return
+
+
+func _stairwell_report() -> String:
+	return " cctv=%d/%s" % [_flights, "ok" if _flight_bad == "" else "bad(%s)" % _flight_bad]
+
+
 func _report(reason: String) -> void:
 	print("RESULT scenario=%s reason=%s alert=%d route=%s | covers=%d hits=%d missed=%d alarms=%d stumbles=%d doors=%d dogs=%d/%d/%d runner=%d/%d squad=%d/%d lights=%d time=%.1f snipers=%d/%d/%d" % [scenario, reason,
 			GameState.alert_level, RunLog.route_summary(), _count("cover"), _count("player_hit"), _count("trooper_missed"), _count("alarm_hit"), _count("stumble"), _count("door_bash"),
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved])
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved])
 	_remove_save_files()
 	get_tree().quit()
 

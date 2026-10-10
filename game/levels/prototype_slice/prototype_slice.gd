@@ -8806,14 +8806,23 @@ func _bar_lane(seg: Dictionary, edge: Dictionary, stub: Node3D) -> void:
 		for k in 8:
 			var at := inv * (m.global_transform * (box.position + box.size * Vector3(k & 1, (k >> 1) & 1, (k >> 2) & 1)))
 			reach = maxf(reach, -at.z)
-	_door_bars.append({"stub": stub, "lane": _handover_lanes(edge).x, "from": float(seg["end"]) - DOOR_NUDGE_AHEAD,
+	_door_bars.append({"stub": stub, "seg": seg, "lane": _handover_lanes(edge).x, "from": float(seg["end"]) - DOOR_NUDGE_AHEAD,
 			"to": float(seg["end"]) + reach + DOOR_PAST})
 
 
-## The lane a locked stairs door bars (_bar_lane) at route distance `d`, or -1.
+## The lane a locked stairs door bars (_bar_lane) at route distance `d`, or -1. Its lane is a lane of
+## the road the door is off (the bar's "seg"), so it bars it only on that road and on the road
+## straight on past the split, which keeps its lanes. Off the split to the side (the open stairs on
+## the other side of it) the lanes are numbered afresh (_on_node_entered): the same number is
+## another lane. Barred there too, for the half metre the bar reaches past the split, the locked fire
+## escape's lane 4 was the basement stairs' one lane (lane 0 becomes branch lane 4): he was eased
+## out of it, a lane over, and ran down the whole flight inside its wall, out of its security
+## camera's view (user: "as I went down the stairs Cross was not visible from the cctv cam"); and up
+## the fire escape, the locked basement door's lane 0 the same.
 func _barred_lane(d: float) -> int:
+	var here := _segment_at(d)
 	for b: Dictionary in _door_bars:
-		if d >= float(b["from"]) and d <= float(b["to"]):
+		if d >= float(b["from"]) and d <= float(b["to"]) and (is_same(here, b["seg"]) or not _turns(here["edge"])):
 			return b["lane"]
 	return -1
 

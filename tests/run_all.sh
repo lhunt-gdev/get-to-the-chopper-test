@@ -17,12 +17,16 @@ run() {  # scenario, then any more arguments for the bot (--route=...): its RESU
 }
 # Every run must end auto-saved (user: "auto save itself after the player finishes a run"), whatever
 # the ending: saved=ok (its progress and route map on the device as it ended, in the bot's own files;
-# getting out of mission 1 sets its best time to the run's).
+# getting out of mission 1 sets its best time to the run's). And on every flight of stairs it ran, CROSS
+# was in the stairs' one lane the whole way, in its security camera's picture (cctv=flights/ok: user,
+# "as I went down the stairs Cross was not visible from the cctv cam"; the bots that take stairs say
+# how many flights).
 check() {  # what it ran, expected substring(s): every one must be in the RESULT line in $last
   local ok=1
   for want in "${@:2}" "saved=ok"; do
     [[ "$last" == *"$want"* ]] || ok=0
   done
+  [[ "$last" =~ cctv=[0-9]+/ok ]] || ok=0  # (every flight of stairs: CROSS in its camera's picture the whole way)
   if [[ $ok == 1 ]]; then echo "PASS $last"; else echo "FAIL [$1] expected '${*:2}', got: ${last:-no result}"; fail=1; fi
 }
 expect() { run "$1"; check "$@"; }  # on mission 1
@@ -55,19 +59,19 @@ expect naive_skip  "reason=killed" "death=ok end=skipped" "talk=killed/skipped/o
 expect ground      "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "talk=extracted/tapped/ok" "setting=medium bosshp=30 opened=1:hard,1:medium,2:easy,2:medium"
 clean_time ground 78 85
 # Quiet: down the basement stairs, the BOILER ROOM's left ladder up.
-expect tunnel_quiet "reason=extracted alert=1 route=$U > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=9 $NONE" "boss=1/0/" "ko=3/0/ok"
+expect tunnel_quiet "reason=extracted alert=1 route=$U > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=9 $NONE" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok"
 clean_time tunnel_quiet 77 84
 # Through the WING's wire: the basement door slams, so the left lane carries straight on (alert 2).
 expect tunnel_loud "reason=extracted alert=2 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok"
 # Through the MAIN FLOOR's wire (alert 2), the WING's box shot (back to 1: the door lifts), down after all.
-expect tunnel_alarm "reason=extracted alert=1 route=$U > HELIPAD | covers=0 hits=0 missed=0 alarms=1 stumbles=0 doors=9 $NONE" "boss=1/0/" "ko=3/0/ok"
+expect tunnel_alarm "reason=extracted alert=1 route=$U > HELIPAD | covers=0 hits=0 missed=0 alarms=1 stumbles=0 doors=9 $NONE" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok"
 # Stays in the middle at the BOILER ROOM's end: no ladder there, CAPTURED.
-expect tunnel_miss_ladder "reason=captured alert=1 route=$U | covers=0 hits=0" "$NONE"
+expect tunnel_miss_ladder "reason=captured alert=1 route=$U | covers=0 hits=0" "cctv=1/ok" "$NONE"
 # Loud: through the WING's wire (alert 2), up the fire escape, the ROOF EDGE's right ladder down.
-expect fire_escape "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7 $NONE" "snipers=0/0/0" "boss=1/0/" "ko=3/0/ok"
+expect fire_escape "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7 $NONE" "cctv=1/ok" "snipers=0/0/0" "boss=1/0/" "ko=3/0/ok"
 clean_time fire_escape 71 78
 # As fire_escape, but stays in the middle at the ROOF EDGE: CAPTURED.
-expect miss_ladder "reason=captured alert=2 route=$R | covers=0 hits=0" "$NONE" "talk=captured/tapped/ok"
+expect miss_ladder "reason=captured alert=2 route=$R | covers=0 hits=0" "cctv=1/ok" "$NONE" "talk=captured/tapped/ok"
 # Quiet, heading for the fire escape: it's shut (the door, its padlock), he's eased a lane in and
 # carries straight on.
 expect fire_shut   "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok"
@@ -75,7 +79,7 @@ expect fire_shut   "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0
 # (back to 1): the fire door shuts again in front of him, and he carries straight on.
 expect fire_closes "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=1 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok"
 # Up the fire escape, the ROOFTOPS' box shot: back to SNEAKING for the ROOF EDGE and ARDBALLS.
-expect roof_calm   "reason=extracted alert=1 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=1 stumbles=0 doors=7 $NONE" "boss=1/0/" "ko=3/0/ok"
+expect roof_calm   "reason=extracted alert=1 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=1 stumbles=0 doors=7 $NONE" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok"
 # Heads for the basement stairs, then swipes back to the middle a few metres before the split:
 # straight on is still open.
 expect late_switch "reason=extracted alert=1 route=$G | covers=0 hits=0" "$NONE" "boss=1/0/" "ko=3/0/ok"
@@ -121,7 +125,7 @@ expect_on camper easy "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | cove
 # wire: still SNEAKING); the loud roof gets there about 10 s sooner.
 expect_on ground hard "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "setting=hard bosshp=40"
 clean_time "ground (hard)" 81 86
-expect_on fire_escape hard "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7 $NONE" "boss=1/0/" "ko=3/0/ok" "setting=hard bosshp=40"
+expect_on fire_escape hard "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7 $NONE" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok" "setting=hard bosshp=40"
 clean_time "fire_escape (hard)" 73 79
 expect_on camper hard "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | covers=1" "time=96.0" "setting=hard"
 
@@ -132,9 +136,11 @@ expect_on camper hard "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | cove
 # door, where a double door counts two leaves.
 TG="MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD"
 TR="MAIN FLOOR LOBBY > ROOFTOPS > WATER TOWERS > GANTRY > SKYLIGHTS > ANTENNA FARM > ROOF EDGE"
-expect_range roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15" "boss=1/0/" "ko=3/0/ok"
-expect_range warehouse_drop "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0" "boss=1/0/" "ko=3/0/ok"
-expect_range roof_loud   "reason=extracted alert=2 route=$TR > HELIPAD | covers=0 hits=0" "snipers=0/4/0" "boss=1/0/" "ko=3/0/ok"
+expect_range roof_down   "reason=extracted alert=1 route=MAIN FLOOR LOBBY > ROOFTOPS > SECURITY WING > STAFF CANTEEN > WAREHOUSE > LOADING DOCK > MAIN FLOOR EXIT > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=15" "cctv=2/ok" "boss=1/0/" "ko=3/0/ok"
+expect_range warehouse_drop "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING > STAFF CANTEEN > WAREHOUSE > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok"
+# The MAIN FLOOR's stairs down into the SERVICE TUNNEL (no bot took them), on to the STORM DRAIN's ladder.
+expect_range range_tunnel "reason=extracted alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SERVICE TUNNEL > BOILER ROOM > SEWER > PUMP STATION > STORM DRAIN > HELIPAD | covers=0 hits=0" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok"
+expect_range roof_loud   "reason=extracted alert=2 route=$TR > HELIPAD | covers=0 hits=0" "cctv=1/ok" "snipers=0/4/0" "boss=1/0/" "ko=3/0/ok"
 # The roof snipers are out at Alert 2: sniper_hit holds its lane for the first one (hit once) and
 # dodges the other three. The last number: snipers out of view on a tall phone when they locked.
 expect_range sniper_hit  "reason=extracted alert=2 route=$TR > HELIPAD | covers=0 hits=1" "snipers=1/3/0" "boss=1/0/" "ko=3/0/ok"
