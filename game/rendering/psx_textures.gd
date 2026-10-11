@@ -1625,8 +1625,8 @@ static func _start(key: String, base: Color, amount: float) -> Image:
 ## Posterise to the PS1-style palette, add mipmaps (for distance only; up close it's still
 ## unfiltered pixels) and cache.
 static func _finish(key: String, img: Image) -> Texture2D:
-	for y in SIZE:
-		for x in SIZE:
+	for y in img.get_height():
+		for x in img.get_width():
 			var c := img.get_pixel(x, y)
 			img.set_pixel(x, y, Color(roundf(c.r * LEVELS) / LEVELS, roundf(c.g * LEVELS) / LEVELS, roundf(c.b * LEVELS) / LEVELS))
 	img.generate_mipmaps()
@@ -1658,20 +1658,20 @@ static func _noise(img: Image, key: String, cell: int, amount: float) -> void:
 
 
 static func _put(img: Image, x: int, y: int, c: Color) -> void:
-	img.set_pixel(posmod(x, SIZE), posmod(y, SIZE), c)
+	img.set_pixel(posmod(x, img.get_width()), posmod(y, img.get_height()), c)
 
 
 ## Multiply a pixel's brightness (k < 1 darker).
 static func _shade(img: Image, x: int, y: int, k: float) -> void:
-	var px := posmod(x, SIZE)
-	var py := posmod(y, SIZE)
+	var px := posmod(x, img.get_width())
+	var py := posmod(y, img.get_height())
 	var c := img.get_pixel(px, py)
 	img.set_pixel(px, py, Color(c.r * k, c.g * k, c.b * k))
 
 
 static func _blend(img: Image, x: int, y: int, c: Color, a: float) -> void:
-	var px := posmod(x, SIZE)
-	var py := posmod(y, SIZE)
+	var px := posmod(x, img.get_width())
+	var py := posmod(y, img.get_height())
 	img.set_pixel(px, py, img.get_pixel(px, py).lerp(c, a))
 
 
@@ -1789,7 +1789,7 @@ static func _scratches(img: Image, key: String, count: int, area: Rect2i = Rect2
 		var y := rng.randi_range(area.position.y, area.end.y - 1)
 		var dx: int = [-1, 1][rng.randi() % 2]
 		for j in rng.randi_range(3, 7):
-			var c := img.get_pixel(posmod(x, SIZE), posmod(y, SIZE))
+			var c := img.get_pixel(posmod(x, img.get_width()), posmod(y, img.get_height()))
 			_shade(img, x, y, 1.6 if c.get_luminance() < 0.3 else 0.65)
 			x += dx
 			if rng.randf() < 0.4:
@@ -1979,3 +1979,357 @@ static func city_view() -> Texture2D:
 	var tex := ImageTexture.create_from_image(img)
 	_cache["city_view"] = tex
 	return tex
+
+
+# --- The chopper's atlas ----------------------------------------------------------------
+# One 256 x 128 texture for the whole extraction chopper (ChopperModel maps its parts onto it).
+# The paint is laid out as drawings of the helicopter itself, in its own space (metres; +z toward
+# you, the nose at -x, the tail at +x): the near side and the far side as side views (12 px a metre,
+# x from CHOPPER_X.x, y down from CHOPPER_TOP_Y), the top seen from above (6 px a metre), the ends
+# (8 px a metre); then a corner of small swatches: the cockpit glass, the lit cabin's walls and
+# floor, the door slid back, the rotor blades, the warning stripes, metal, the lamps' glows.
+
+const CHOPPER_SIZE := Vector2i(256, 128)
+const CHOPPER_PX := 12.0
+const CHOPPER_X := Vector2(-4.0, 11.0)
+const CHOPPER_TOP_Y := 4.6
+## The side views: near (rows 0-49), far (50-99), each CHOPPER_SIDE_ROWS tall, 180 px wide.
+const CHOPPER_SIDE_ROWS := 50
+## The top view (x across, z from -CHOPPER_TOP_Z down) and the end view (z across from
+## -CHOPPER_END_Z, y down from CHOPPER_END_Y).
+const CHOPPER_TOP := Rect2i(0, 100, 90, 17)
+const CHOPPER_TOP_PX := 6.0
+const CHOPPER_TOP_Z := 1.4
+const CHOPPER_END := Rect2i(90, 100, 22, 28)
+const CHOPPER_END_PX := 8.0
+const CHOPPER_END_Z := 1.35
+const CHOPPER_END_Y := 3.6
+## The swatches (pixels). glass_side / glass_top: the cockpit glass seen from the side (x across
+## CHOPPER_GLASS_X, y down CHOPPER_GLASS_Y) and from above (z down the rows). inside_wall /
+## inside_floor: the cabin (x across CHOPPER_INSIDE_X, y down CHOPPER_INSIDE_Y). door: the door
+## slid back (x across CHOPPER_DOOR_X, y down CHOPPER_DOOR_Y; its leading edge, at the opening, on
+## the left). blade: a main rotor blade root to tip; stripes: a tail rotor blade hub to tip.
+const CHOPPER_RECTS := {
+	"glass_side": Rect2i(180, 0, 64, 12), "glass_top": Rect2i(180, 12, 64, 12),
+	"inside_wall": Rect2i(180, 24, 76, 24), "inside_floor": Rect2i(180, 48, 76, 12),
+	"door": Rect2i(180, 60, 36, 30), "blade": Rect2i(216, 60, 40, 8), "stripes": Rect2i(216, 68, 40, 8),
+	"metal": Rect2i(216, 76, 16, 16), "black": Rect2i(232, 76, 16, 16), "grille": Rect2i(216, 92, 40, 8),
+	"seat": Rect2i(152, 116, 32, 12), "soot": Rect2i(184, 116, 16, 12),
+	"lamp_white": Rect2i(112, 100, 8, 8), "lamp_warm": Rect2i(120, 100, 8, 8), "lamp_red": Rect2i(128, 100, 8, 8),
+	"lamp_green": Rect2i(136, 100, 8, 8), "panel": Rect2i(144, 100, 8, 8),
+}
+const CHOPPER_GLASS_X := Vector2(-3.9, -1.8)
+const CHOPPER_GLASS_Y := Vector2(2.8, 1.4)
+const CHOPPER_INSIDE_X := Vector2(-1.8, 2.8)
+const CHOPPER_INSIDE_Y := Vector2(2.65, 0.8)
+const CHOPPER_DOOR_X := Vector2(1.0, 2.9)
+const CHOPPER_DOOR_Y := Vector2(2.6, 1.05)
+## The paint schemes: repaint the chopper by name (ChopperModel; a mission's "chopper": {"livery"}).
+## paint: the body; belly: below the lower seam; marking: the stencils; name and number: what's
+## stencilled on the boom (and the number's last two on the fin).
+const CHOPPER_LIVERIES := {
+	"condor": {"paint": Color("4c5638"), "belly": Color("363c2a"), "marking": Color("d0ccae"), "name": "CONDOR", "number": "C-27"},
+	"vorhalt": {"paint": Color("b08c34"), "belly": Color("2c2820"), "marking": Color("18160f"), "name": "VORHALT", "number": "V-09"},
+}
+
+
+## The extraction chopper's atlas in `livery` (CHOPPER_LIVERIES; an unknown one is CONDOR's).
+## Olive paint in panels with seams and rivets, a darker belly, scuffs and chipped paint, oil run
+## down from the engine and soot behind the exhausts, the agency's name and the tail number
+## stencilled on the boom, yellow-black stripes at the door's edges; the cockpit glass dark with the
+## instrument panel's green glow in it and a sheen across, the lit cabin's padded walls and tread
+## floor, black blades with yellow tips, a striped tail rotor.
+static func chopper_atlas(livery: String = "condor") -> Texture2D:
+	var key := "chopper_" + livery
+	if _cache.has(key):
+		return _cache[key]
+	var lv: Dictionary = CHOPPER_LIVERIES.get(livery, CHOPPER_LIVERIES["condor"])
+	var img := Image.create(CHOPPER_SIZE.x, CHOPPER_SIZE.y, false, Image.FORMAT_RGB8)
+	img.fill(lv["paint"])
+	for far in [false, true]:
+		_chopper_side(img, key, lv, far)
+	_chopper_top(img, key, lv)
+	_fill(img, CHOPPER_END, lv["paint"])
+	_noise_rect(img, key + "_end", CHOPPER_END, 4, 0.08)
+	_chopper_swatches(img, key, lv)
+	return _finish(key, img)
+
+
+## The pixel on a side view for the point (x, y) of the chopper.
+static func _cs(x: float, y: float, far: bool) -> Vector2i:
+	var u := (CHOPPER_X.y - x) if far else (x - CHOPPER_X.x)
+	return Vector2i(int(floorf(u * CHOPPER_PX)), int(floorf((CHOPPER_TOP_Y - y) * CHOPPER_PX)) + (CHOPPER_SIDE_ROWS if far else 0))
+
+
+## The pixels on a side view of the chopper's x0..x1, y0..y1.
+static func _cs_rect(x0: float, x1: float, y0: float, y1: float, far: bool) -> Rect2i:
+	var a := _cs(x0, y1, far)
+	var b := _cs(x1, y0, far)
+	return Rect2i(Vector2i(mini(a.x, b.x), a.y), Vector2i(absi(b.x - a.x), b.y - a.y))
+
+
+static func _chopper_side(img: Image, key: String, lv: Dictionary, far: bool) -> void:
+	var k := key + ("_far" if far else "_near")
+	var strip := Rect2i(0, CHOPPER_SIDE_ROWS if far else 0, 180, CHOPPER_SIDE_ROWS)
+	var paint: Color = lv["paint"]
+	_fill(img, strip, paint)
+	_fill(img, _cs_rect(-4.0, 11.0, 0.0, 1.0, far).intersection(strip), lv["belly"])  # the belly
+	_noise_rect(img, k, strip, 8, 0.1)
+	_noise_rect(img, k + "_fine", strip, 2, 0.05)
+	# Weathered: darker low down, a little faded up top.
+	for y in range(strip.position.y, strip.end.y):
+		var t := float(y - strip.position.y) / strip.size.y
+		for x in range(strip.position.x, strip.end.x):
+			_shade(img, x, y, 1.08 - 0.22 * t)
+	# Panel seams, with rivets along them.
+	var dir := -1 if far else 1
+	for sx: float in [-3.3, -2.6, -2.0, -1.8, 2.8, 3.5, 4.4, 7.0, 8.7, 9.3]:
+		var p := _cs(sx, CHOPPER_TOP_Y, far)
+		for y in range(strip.position.y, strip.end.y):
+			_shade(img, p.x, y, 0.62)
+			_shade(img, p.x + dir, y, 1.12)
+			if y % 3 == 0:
+				_rivet_dot(img, p.x + 2 * dir, y)
+	for sy: float in [1.0, 1.75, 2.78]:
+		var a := _cs(0.0, sy, far).y
+		for x in range(strip.position.x, strip.end.x):
+			_shade(img, x, a, 0.62)
+			_shade(img, x, a + 1, 1.12)
+			if x % 3 == 1:
+				_rivet_dot(img, x, a - 2)
+	# The crew door ahead of the cabin: its outline, window and handle.
+	_outline(img, _cs_rect(-1.75, -1.15, 0.95, 2.45, far), 0.6)
+	_fill(img, _cs_rect(-1.65, -1.25, 1.9, 2.35, far), Color("10181c"))
+	var h := _cs(-1.3, 1.55, far)
+	_put(img, h.x, h.y, Color("8a8c80"))
+	_put(img, h.x + 1, h.y, Color("8a8c80"))
+	# Yellow-black stripes up the edge of the opening.
+	_stripes(img, _cs_rect(-1.13, -1.0, 0.8, 2.6, far))
+	# Oil run down from the engine deck, scuffs and chipped paint low down and round the door.
+	_streaks_rect(img, k + "_oil", _cs_rect(-1.8, 2.8, 1.8, 2.78, far), 7, Color("1a1c14"), 0.35)
+	_blotches(img, k + "_chips", 26, 0, 1, paint.lightened(0.35), 0.5, _cs_rect(-3.6, 3.4, 0.6, 1.3, far))
+	_blotches(img, k + "_scuff", 8, 1, 3, Color("20221a"), 0.3, _cs_rect(-3.6, 9.5, 0.6, 2.6, far))
+	_scratches(img, k + "_scr", 30, _cs_rect(-3.6, 9.0, 0.7, 2.7, far))
+	# Soot behind the exhausts, along the boom.
+	var soot := _rng(k + "_soot")
+	var sp := _cs_rect(2.4, 6.5, 2.2, 3.15, far)
+	var from_x := _cs(2.5, 0.0, far).x
+	var mid_y := _cs(0.0, 2.85, far).y
+	for y in range(sp.position.y, sp.end.y):
+		for x in range(sp.position.x, sp.end.x):
+			var along := absf(float(x - from_x)) / sp.size.x
+			var up := 1.0 - absf(float(y - mid_y)) / (sp.size.y * 0.7)
+			var a := clampf((1.0 - along) * up * 1.1, 0.0, 0.85) * soot.randf_range(0.6, 1.0)
+			if a > 0.05:
+				_blend(img, x, y, Color("0e0e0c"), a)
+	# The agency's name on the boom, the number near its end and its last two on the fin (each
+	# reading left to right from its own side: on the far side it starts at the tail end).
+	var mark: Color = lv["marking"]
+	var name: String = lv["name"]
+	var num: String = lv["number"]
+	var tail := num.substr(num.length() - 2)
+	for m: Array in [[name, 4.55, 2.45], [num, 7.25, 2.42], [tail, 9.95, 3.55]]:
+		var text: String = m[0]
+		var x0: float = m[1]
+		if far:
+			x0 += (text.length() * 4 - 1) / CHOPPER_PX
+		var p := _cs(x0, m[2], far)
+		_stencil(img, text, p.x, p.y, mark, 0.9, 1, 0.0)
+	_stripes(img, _cs_rect(9.0, 9.25, 1.9, 2.6, far))  # a warning band round the boom by the tail rotor
+	_fill(img, _cs_rect(-3.95, -3.2, 1.2, 1.6, far), lv["belly"].darkened(0.3))  # the nose's anti-glare
+
+
+static func _chopper_top(img: Image, key: String, lv: Dictionary) -> void:
+	var r := CHOPPER_TOP
+	var paint: Color = lv["paint"]
+	_fill(img, r, paint.darkened(0.04))
+	_noise_rect(img, key + "_top", r, 4, 0.1)
+	var at := func(x: float, z: float) -> Vector2i:
+		return Vector2i(r.position.x + int((x - CHOPPER_X.x) * CHOPPER_TOP_PX), r.position.y + int((z + CHOPPER_TOP_Z) * CHOPPER_TOP_PX))
+	for sx: float in [-2.6, -1.8, -0.9, 2.8, 4.4, 7.0, 9.3]:
+		var p: Vector2i = at.call(sx, 0.0)
+		for y in range(r.position.y, r.end.y):
+			_shade(img, p.x, y, 0.65)
+	# The anti-glare panel on the nose, walkways either side of the engine, soot behind it.
+	var a: Vector2i = at.call(-3.9, -0.7)
+	var b: Vector2i = at.call(-3.0, 0.7)
+	_fill(img, Rect2i(a, b - a), lv["belly"].darkened(0.3))
+	for z: float in [-1.0, 1.0]:
+		var w0: Vector2i = at.call(-1.6, z - 0.15)
+		var w1: Vector2i = at.call(2.7, z + 0.15)
+		_fill(img, Rect2i(w0, w1 - w0), paint.darkened(0.25))
+	var s0: Vector2i = at.call(2.6, -0.9)
+	var s1: Vector2i = at.call(6.0, 0.9)
+	var rng := _rng(key + "_topsoot")
+	for y in range(s0.y, s1.y):
+		for x in range(s0.x, s1.x):
+			var t := 1.0 - float(x - s0.x) / (s1.x - s0.x)
+			_blend(img, x, y, Color("0e0e0c"), clampf(t * 0.8 * rng.randf_range(0.5, 1.0), 0.0, 0.8))
+	_scratches(img, key + "_topscr", 10, r)
+
+
+static func _chopper_swatches(img: Image, key: String, lv: Dictionary) -> void:
+	var R := CHOPPER_RECTS
+	var paint: Color = lv["paint"]
+	var frame := paint.darkened(0.3)
+	# The cockpit glass: deep blue-black, darker up top, a sheen across in diagonal bands.
+	for which: String in ["glass_side", "glass_top"]:
+		var g: Rect2i = R[which]
+		for y in range(g.position.y, g.end.y):
+			var t := float(y - g.position.y) / g.size.y
+			for x in range(g.position.x, g.end.x):
+				_put(img, x, y, Color("0a1218").lerp(Color("18303a"), t))
+				if (x + y) % 17 < 2:
+					_blend(img, x, y, Color("6a8890"), 0.45)
+	# The instrument panel's green glow low in the windscreen, its dials; the window frames.
+	var gs: Rect2i = R["glass_side"]
+	var gx := func(x: float) -> int:
+		return gs.position.x + int((x - CHOPPER_GLASS_X.x) / (CHOPPER_GLASS_X.y - CHOPPER_GLASS_X.x) * gs.size.x)
+	for y in range(gs.end.y - 4, gs.end.y):
+		for x in range(gx.call(-3.6), gx.call(-2.3)):
+			_blend(img, x, y, Color("3ad070"), 0.55 if y < gs.end.y - 2 else 0.85)
+	for x in range(gx.call(-3.4), gx.call(-2.6), 3):
+		_put(img, x, gs.end.y - 2, Color("e0ffd0"))
+	var gt: Rect2i = R["glass_top"]
+	for fx: float in [-2.62, -2.05]:
+		for y in range(gs.position.y, gt.end.y):
+			_put(img, gx.call(fx), y, frame)
+	for x in range(gt.position.x, gt.end.x):
+		_put(img, x, gt.position.y + gt.size.y / 2, frame)  # the centre post
+	# The cabin inside: padded olive walls (quilted, buttoned), the tread floor with tie-downs, the
+	# red webbing of the troop seats.
+	var w: Rect2i = R["inside_wall"]
+	_fill(img, w, Color("5a5e44"))
+	for y in range(w.position.y, w.end.y):
+		for x in range(w.position.x, w.end.x):
+			var lx := (x - w.position.x) % 6
+			var ly := (y - w.position.y) % 6
+			if lx == 0 or ly == 0:
+				_shade(img, x, y, 0.7)
+			elif lx == 3 and ly == 3:
+				_shade(img, x, y, 0.6)
+			elif lx == 1 or ly == 1:
+				_shade(img, x, y, 1.1)
+	_noise_rect(img, key + "_wall", w, 4, 0.08)
+	var f: Rect2i = R["inside_floor"]
+	_fill(img, f, Color("3c3e3a"))
+	for y in range(f.position.y, f.end.y):
+		for x in range(f.position.x, f.end.x):
+			if posmod(x + 2 * y, 5) == 0 or posmod(x - 2 * y, 5) == 0:
+				_shade(img, x, y, 1.25)
+	for x in range(f.position.x + 4, f.end.x, 12):
+		_rivet_dot(img, x, f.position.y + 2)
+		_rivet_dot(img, x, f.end.y - 3)
+	var st: Rect2i = R["seat"]
+	_fill(img, st, Color("5e261c"))
+	for y in range(st.position.y, st.end.y):
+		for x in range(st.position.x, st.end.x):
+			if x % 3 == 0 or y % 3 == 0:
+				_shade(img, x, y, 0.7)
+	_fill(img, R["soot"], Color("161614"))
+	# The door, slid back: a panel with its window, the insignia, its handle, stripes on its edge.
+	var d: Rect2i = R["door"]
+	_fill(img, d, paint.lightened(0.04))
+	_noise_rect(img, key + "_door", d, 4, 0.1)
+	_bevel(img, d, 1.3, 0.6)
+	_bevel(img, Rect2i(d.position + Vector2i(2, 2), d.size - Vector2i(4, 4)), 0.7, 1.2)
+	var win := Rect2i(d.position + Vector2i(10, 4), Vector2i(16, 9))
+	_fill(img, win, Color("10181c"))
+	for x in range(win.position.x, win.end.x, 5):
+		_put(img, x, win.position.y + 1, Color("4a6a72"))
+	_outline(img, win.grow(1), 0.5)
+	var c := d.position + Vector2i(18, 20)  # the insignia: a pale ring round a chevron
+	for y in range(-4, 5):
+		for x in range(-4, 5):
+			var r2 := x * x + y * y
+			if r2 <= 16 and r2 >= 9:
+				_put(img, c.x + x, c.y + y, lv["marking"])
+			elif r2 < 9 and absi(x) <= 1 + y / 2 and y >= -1:
+				_put(img, c.x + x, c.y + y, lv["marking"])
+	_put(img, d.position.x + 5, d.position.y + 16, Color("9a9c90"))
+	_put(img, d.position.x + 6, d.position.y + 16, Color("9a9c90"))
+	_stripes(img, Rect2i(d.position.x, d.position.y, 3, d.size.y))
+	_scratches(img, key + "_doorscr", 8, d)
+	# Rotor blades: black, a yellow tip; the tail rotor's striped toward a white tip.
+	var bl: Rect2i = R["blade"]
+	_fill(img, bl, Color("1a1c1c"))
+	_noise_rect(img, key + "_blade", bl, 2, 0.12)
+	_fill(img, Rect2i(bl.end.x - 3, bl.position.y, 3, bl.size.y), Color("d8b028"))
+	var sr: Rect2i = R["stripes"]
+	for x in range(sr.position.x, sr.end.x):
+		var on := x >= sr.position.x + 14 and ((x - sr.position.x) / 4) % 2 == 0
+		var col := Color("d8b028") if on else Color("1a1c1c")
+		if x >= sr.end.x - 2:
+			col = Color("e8e4dc")
+		for y in range(sr.position.y, sr.end.y):
+			_put(img, x, y, col)
+	_fill(img, R["metal"], Color("3a3c3a"))
+	_noise_rect(img, key + "_metal", R["metal"], 2, 0.15)
+	_fill(img, R["black"], Color("141414"))
+	var gr: Rect2i = R["grille"]
+	_fill(img, gr, Color("202220"))
+	for y in range(gr.position.y, gr.end.y, 2):
+		for x in range(gr.position.x, gr.end.x):
+			_put(img, x, y, Color("0a0a0a"))
+	# The lamps' glows (drawn unlit).
+	_fill(img, R["lamp_white"], Color("eef4ff"))
+	_fill(img, R["lamp_warm"], Color("ffd08a"))
+	_fill(img, R["lamp_red"], Color("ff3020"))
+	_fill(img, R["lamp_green"], Color("40ff70"))
+	_fill(img, R["panel"], Color("2a8a4a"))
+
+
+## Value noise added to brightness over just `r` (not tiling), `cell` pixels between values.
+static func _noise_rect(img: Image, key: String, r: Rect2i, cell: int, amount: float) -> void:
+	var rng := _rng(key + "_noise%d" % cell)
+	var gw := r.size.x / cell + 2
+	var gh := r.size.y / cell + 2
+	var v := PackedFloat32Array()
+	v.resize(gw * gh)
+	for i in gw * gh:
+		v[i] = rng.randf_range(-1.0, 1.0)
+	for y in r.size.y:
+		var fy := float(y) / cell
+		var y0 := int(fy)
+		var ty := smoothstep(0.0, 1.0, fy - y0)
+		for x in r.size.x:
+			var fx := float(x) / cell
+			var x0 := int(fx)
+			var tx := smoothstep(0.0, 1.0, fx - x0)
+			var n := lerpf(lerpf(v[y0 * gw + x0], v[y0 * gw + x0 + 1], tx), lerpf(v[(y0 + 1) * gw + x0], v[(y0 + 1) * gw + x0 + 1], tx), ty)
+			_shade(img, r.position.x + x, r.position.y + y, 1.0 + n * amount)
+
+
+## A small rivet head on a seam.
+static func _rivet_dot(img: Image, x: int, y: int) -> void:
+	_shade(img, x, y, 1.35)
+	_shade(img, x + 1, y + 1, 0.7)
+
+
+## A one-pixel line round `r` (k < 1 darker: a recess).
+static func _outline(img: Image, r: Rect2i, k: float) -> void:
+	for x in range(r.position.x, r.end.x):
+		_shade(img, x, r.position.y, k)
+		_shade(img, x, r.end.y - 1, k)
+	for y in range(r.position.y + 1, r.end.y - 1):
+		_shade(img, r.position.x, y, k)
+		_shade(img, r.end.x - 1, y, k)
+
+
+## Yellow-black warning stripes across `r`, a little worn.
+static func _stripes(img: Image, r: Rect2i) -> void:
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			_put(img, x, y, Color("c8a024") if ((x + y) / 3) % 2 == 0 else Color("181816"))
+			if (x * 7 + y * 13) % 11 == 0:
+				_shade(img, x, y, 0.75)
+
+
+## Streaks running down from the top of `r` (oil, water), each fading as it goes.
+static func _streaks_rect(img: Image, key: String, r: Rect2i, count: int, tint: Color, strength: float) -> void:
+	var rng := _rng(key)
+	for i in count:
+		var x := rng.randi_range(r.position.x, r.end.x - 1)
+		var length := rng.randi_range(maxi(1, r.size.y / 3), maxi(1, r.size.y))
+		for j in length:
+			_blend(img, x, r.position.y + j, tint, strength * (1.0 - float(j) / length))

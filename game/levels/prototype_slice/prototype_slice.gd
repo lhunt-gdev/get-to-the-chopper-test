@@ -4598,76 +4598,50 @@ func _build_helipad(parent: Node3D, seg: Dictionary, from: float) -> void:
 ## The chopper (user reference, built to the player's scale): a military transport helicopter about
 ## 13 m long with a 15 m rotor, broadside on the pad, nose to the left, tail to the right, its cabin
 ## door slid open toward you with a dim light inside, so you run straight in. Local +z is toward you.
-func _build_chopper_model(chopper: Node3D) -> void:
-	var body := Color("3a4036")
-	var dark := Color("262a24")
-	var glass := Color("16242c")
-	# The cabin, belly and nose; the door opening sits in the middle, right in front of you.
-	_box(chopper, Vector3(4.6, 2.0, 2.5), Vector3(0.5, 1.75, 0), body)  # cabin
-	_box(chopper, Vector3(4.4, 0.25, 2.2), Vector3(0.5, 0.65, 0), dark)  # belly
-	_box(chopper, Vector3(1.7, 1.6, 2.1), Vector3(-2.65, 1.65, 0), body)  # nose
-	var screen := _box(chopper, Vector3(1.0, 0.08, 1.9), Vector3(-2.85, 2.35, 0), glass)  # windscreen, sloping
-	screen.rotation.z = 0.55
-	_box(chopper, Vector3(0.5, 0.9, 1.8), Vector3(-3.55, 1.4, 0), body.darkened(0.1))  # chin
-	for s in [-1.0, 1.0]:
-		_box(chopper, Vector3(1.2, 0.7, 0.04), Vector3(-2.6, 2.05, s * 1.06), glass)  # cockpit side windows
-	_box(chopper, Vector3(0.3, 0.12, 1.4), Vector3(-2.1, 1.75, 0), Color.WHITE).material_override = \
-			PsxMaterials.glow(Color("2a8a4a"))  # the instrument panel glowing through the glass
-	# The door: slid back, the dark cabin inside with a dim light, a gun on its mount.
-	_box(chopper, Vector3(2.0, 1.7, 0.04), Vector3(0.0, 1.7, 1.26), Color("0e100e"))  # the opening
-	_box(chopper, Vector3(1.9, 1.75, 0.06), Vector3(1.95, 1.72, 1.3), body.lightened(0.06))  # the door, slid back
-	_box(chopper, Vector3(0.7, 0.5, 0.02), Vector3(1.95, 2.1, 1.34), glass)  # its window
-	_box(chopper, Vector3(1.9, 0.05, 0.1), Vector3(0.95, 2.62, 1.3), Color("6a6e66"))  # door rail
-	var inside := _box(chopper, Vector3(0.3, 0.06, 0.3), Vector3(0.0, 2.45, 0.6), Color.WHITE)
-	inside.material_override = PsxMaterials.glow(Color("c8a060"))
-	_ambience.add_lamp(inside, Color(1.0, 0.75, 0.45) * 0.9, 3.0, {"alert": false})
-	_box(chopper, Vector3(0.08, 0.08, 0.9), Vector3(-0.85, 1.75, 1.45), Color("141414"))  # door gun barrel
-	_box(chopper, Vector3(0.2, 0.2, 0.35), Vector3(-0.85, 1.75, 0.95), Color("1e1e1e"))  # its body
-	_box(chopper, Vector3(0.05, 0.75, 0.05), Vector3(-0.85, 1.35, 0.95), Color("2a2a2a"))  # its post
-	# The engine housing on top, the exhaust, the mast and rotor.
-	_box(chopper, Vector3(3.0, 0.65, 1.7), Vector3(0.7, 3.07, 0), body.darkened(0.08))
-	_box(chopper, Vector3(0.5, 0.35, 0.5), Vector3(2.35, 3.05, 0.45), dark)  # exhaust
-	_box(chopper, Vector3(0.22, 0.6, 0.22), Vector3(0.6, 3.65, 0), dark)  # mast
+## Low-poly and PS1-textured (ChopperModel's meshes on PsxTextures.chopper_atlas, in `livery`: a
+## repaint is a new name in PsxTextures.CHOPPER_LIVERIES): the body, engine, tail, skids, door and
+## gun in one lit mesh; the cockpit glass and the steady lights in one unlit; the rotor and the tail
+## rotor spinning; the tail light blinking.
+func _build_chopper_model(chopper: Node3D, livery: String = "condor") -> void:
+	var tex := PsxTextures.chopper_atlas(livery)
+	var lit := PsxMaterials.textured(tex)
+	var meshes := ChopperModel.meshes()
+	var part := func(parent: Node3D, key: String, mat: Material) -> void:
+		var m := MeshInstance3D.new()
+		m.name = key.to_pascal_case()
+		m.mesh = meshes[key]
+		m.material_override = mat
+		parent.add_child(m)
+	part.call(chopper, "hull", lit)
+	part.call(chopper, "glow", PsxMaterials.textured(tex, Vector2.ONE, true))
+	# The rotor and the tail rotor, spinning.
 	var rotor := Node3D.new()
+	rotor.name = "Rotor"
 	chopper.add_child(rotor)
-	rotor.position = Vector3(0.6, 3.98, 0)
-	_box(rotor, Vector3(0.6, 0.18, 0.6), Vector3.ZERO, dark)  # hub
-	for k in 4:  # four blades
-		var arm := Node3D.new()
-		rotor.add_child(arm)
-		arm.rotation.y = k * PI / 2.0
-		_box(arm, Vector3(7.6, 0.06, 0.42), Vector3(3.9, 0, 0), Color("141414"))
+	rotor.position = ChopperModel.ROTOR_AT
+	part.call(rotor, "rotor", lit)
 	var spin := rotor.create_tween().set_loops()
 	spin.tween_property(rotor, "rotation:y", TAU, 0.35).from(0.0)
-	# The tail boom, fin, stabiliser and tail rotor, to the right.
-	_box(chopper, Vector3(3.6, 0.85, 1.0), Vector3(4.6, 2.2, 0), body)
-	_box(chopper, Vector3(3.8, 0.55, 0.62), Vector3(8.3, 2.25, 0), body)
-	var fin := _box(chopper, Vector3(1.0, 2.2, 0.18), Vector3(10.0, 3.2, 0), body)
-	fin.rotation.z = -0.3
-	_box(chopper, Vector3(0.9, 0.06, 2.6), Vector3(9.2, 2.35, 0), body.darkened(0.05))  # stabiliser
 	var tail_rotor := Node3D.new()
+	tail_rotor.name = "TailRotor"
 	chopper.add_child(tail_rotor)
-	tail_rotor.position = Vector3(10.3, 3.6, 0.22)
-	for k in 2:
-		var tb := _box(tail_rotor, Vector3(0.18, 2.4, 0.04), Vector3.ZERO, Color("141414"))
-		tb.rotation.z = k * PI / 2.0
+	tail_rotor.position = ChopperModel.TAIL_ROTOR_AT
+	part.call(tail_rotor, "tail_rotor", lit)
 	var tspin := tail_rotor.create_tween().set_loops()
 	tspin.tween_property(tail_rotor, "rotation:z", TAU, 0.2).from(0.0)
-	# Skids.
-	for s in [-1.0, 1.0]:
-		_box(chopper, Vector3(6.2, 0.1, 0.1), Vector3(0.2, 0.08, s * 1.25), Color("4a4e48"))
-		for sx in [-1.4, 2.0]:
-			var strut := _box(chopper, Vector3(0.09, 0.62, 0.09), Vector3(sx, 0.38, s * 1.12), Color("4a4e48"))
-			strut.rotation.x = -s * 0.25
-	# Lights: a blinking red one on the fin, a red beacon on top, the landing light lighting the pad.
-	var tail := _box(chopper, Vector3(0.18, 0.18, 0.18), Vector3(10.35, 4.25, 0), Color.WHITE)
+	# Lights: the dim one in the cabin, a blinking red one on the fin, the landing light lighting
+	# the pad.
+	var inside := Node3D.new()
+	chopper.add_child(inside)
+	inside.position = ChopperModel.CABIN_LAMP_AT
+	_ambience.add_lamp(inside, Color(1.0, 0.75, 0.45) * 0.9, 3.0, {"alert": false})
+	var tail := _box(chopper, Vector3(0.18, 0.18, 0.18), ChopperModel.TAIL_LIGHT_AT, Color.WHITE)
 	tail.material_override = PsxMaterials.glow(Color("ff3020"))
 	_ambience.add_lamp(tail, Color(1.0, 0.15, 0.1) * 1.5, 5.0, {"blink": 1.1, "alert": false, "fixture": tail,
 			"on_mat": PsxMaterials.glow(Color("ff3020")), "off_mat": PsxMaterials.flat(Color("401010"))})
-	_box(chopper, Vector3(0.2, 0.14, 0.2), Vector3(0.7, 3.47, 0), Color.WHITE).material_override = PsxMaterials.glow(Color("ff3020"))
 	var land := Node3D.new()
 	chopper.add_child(land)
-	land.position = Vector3(0, 1.2, 3.0)
+	land.position = ChopperModel.LANDING_LIGHT_AT
 	_ambience.add_lamp(land, Color(0.9, 0.95, 1.0) * 1.2, 7.0, {"alert": false})
 
 
@@ -9092,7 +9066,7 @@ func _warm_door_cues() -> void:
 ## from the first try). The list: every PsxTextures function made with nothing passed and every
 ## CCTV screen and menu board (PsxTextures.makers()), then those made from the level's own choices:
 ## the walls and stairwell walls of each area on the route, the floor lines, a lockdown shutter's
-## steel and the drinks machines.
+## steel, the drinks machines and the chopper's paint.
 func _warm_textures() -> void:
 	_to_warm = PsxTextures.makers()
 	var themes := {}
@@ -9106,6 +9080,7 @@ func _warm_textures() -> void:
 	for tint: Color in VENDING_TINTS:
 		_to_warm.append(PsxTextures.vending_front.bind(0, tint))
 	_to_warm.append(PsxTextures.vending_front.bind(1))
+	_to_warm.append(PsxTextures.chopper_atlas.bind(_chopper_livery()))
 	_warm_next = 0
 
 
@@ -9317,7 +9292,13 @@ func _spawn_chopper(parent: Node3D, xf: Transform3D) -> void:
 		var lift := chopper.create_tween()
 		lift.tween_property(chopper, "position:y", xf.origin.y + 2.5, _clock.gone_at - _clock.elapsed)
 		_lift_tweens.append(lift)
-	_build_chopper_model(chopper)
+	_build_chopper_model(chopper, _chopper_livery())
+
+
+## The chopper's paint on this mission: its "chopper" "livery" (PsxTextures.CHOPPER_LIVERIES), or
+## CONDOR's when it doesn't say.
+func _chopper_livery() -> String:
+	return String(_graph.mission().get("chopper", {}).get("livery", "condor"))
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:

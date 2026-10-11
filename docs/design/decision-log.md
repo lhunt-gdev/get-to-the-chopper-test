@@ -103,6 +103,10 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
 - Just for looks: no change to gameplay.
 
+### PROPOSED — The chopper given a boost (user, 2026-10-11)
+- **Why (user):** "I'd like you to make the chopper looks better, maybe give it a ps1 texture keep the model in a ps1 style just give it an overall boost."
+- The extraction chopper (built in code, _build_chopper_model) keeps its size, its place on the pad, the open cabin door you run into, its lights and everything it does (landing, the rotor, lifting off, the KO replay shots, the sounds), and stays low-poly. It gets a better PS1 shape (a shaped nose and canopy, cabin, tail boom, sponsons or stub wings, skids, engine intakes and exhausts, rotor hub) and a hand-made PS1 texture made in code: military olive or dark grey paint with panel lines, rivets, weathering and soot, a CONDOR marking and tail number, warning stripes, a lit cockpit glass and cabin, so it reads at phone size. Mission 9's VORHALT gold chopper can reuse it as a repaint later.
+
 ### PROPOSED — Scoring and the scoreboard (user, 2026-10-10; Point: scoring)
 - **Why (user):** "The scoring for easy, medium and hard should be taken from the scores the player gets at the end or death of a run." Then: "Ok let's work on the score board."
 - **The score:** every run scores, whatever the ending: 10 a metre run, 250 an enemy down, 500 an alarm stopped, minus 500 an alarm set off; only an escape adds 50,000 less 5,000 a hit taken, and 1,000 a second of chopper time to spare; then x the setting (user: EASY x1, MEDIUM x2, HARD x3); never below 0. Any escape beats any failed run (a test proves it from route.json). Not scored: run time, stumbles (each is already a hit), the alert level, new areas found. Captured scores the same way as killed (user).
