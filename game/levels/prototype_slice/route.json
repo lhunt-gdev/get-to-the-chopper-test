@@ -7,6 +7,44 @@
     "medium": {"chopper": {"lands_at": 28, "lifts_at": 96, "gone_at": 106}, "boss": {"health": 30, "spinup": [1.1, 0.9, 0.75]}},
     "hard": {"chopper": {"lands_at": 28, "lifts_at": 86, "gone_at": 96}, "boss": {"health": 40, "spinup": [1.0, 0.8, 0.7]}}
   },
+  "house": {
+    "easy": [
+      {"name":"VESPER","score":106350,"ending":"extracted","alert":2,"from":"fire_escape (0.3 s less to spare)","v":1,"raw":{"distance":740,"downed":15,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":45.7,"time":72.3,"run_into":0,"top_alert":2}},
+      {"name":"ARDBALLS","score":99050,"ending":"extracted","alert":1,"from":"tunnel_quiet","v":1,"raw":{"distance":810,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":39.7,"time":78.3,"run_into":0,"top_alert":1}},
+      {"name":"CONDOR","score":98750,"ending":"extracted","alert":2,"from":"fire_closes","v":1,"raw":{"distance":820,"downed":7,"hits":0,"alarms_set_off":1,"alarms_stopped":1,"spare":38.8,"time":79.2,"run_into":0,"top_alert":2}},
+      {"name":"BISHOP","score":96700,"ending":"extracted","alert":1,"from":"cover","v":1,"raw":{"distance":820,"downed":6,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":37.0,"time":81.0,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":93500,"ending":"extracted","alert":1,"from":"boss_hit","v":1,"raw":{"distance":820,"downed":6,"hits":1,"alarms_set_off":0,"alarms_stopped":0,"spare":38.8,"time":79.2,"run_into":0,"top_alert":1}},
+      {"name":"VESPER","score":92900,"ending":"extracted","alert":1,"from":"stumble_once","v":1,"raw":{"distance":820,"downed":6,"hits":1,"alarms_set_off":0,"alarms_stopped":0,"spare":38.2,"time":79.8,"run_into":1,"top_alert":1}},
+      {"name":"VORHALT","score":10090,"ending":"captured","alert":2,"from":"miss_ladder","v":1,"raw":{"distance":709,"downed":14,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":-1.0,"time":66.8,"run_into":0,"top_alert":2}},
+      {"name":"CONDOR","score":9290,"ending":"chopper_left","alert":1,"from":"boss_hold_fire","v":1,"raw":{"distance":804,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":118.0,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":4620,"ending":"killed","alert":1,"from":"halfway","v":1,"raw":{"distance":387,"downed":3,"hits":3,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":36.9,"run_into":3,"top_alert":1}},
+      {"name":"ARDBALLS","score":300,"ending":"killed","alert":3,"from":"derived: the pad's length, nothing else","v":1,"raw":{"distance":30,"downed":0,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
+    ],
+    "medium": [
+      {"name":"VESPER","score":184500,"ending":"extracted","alert":2,"from":"fire_escape (0.3 s less to spare)","v":1,"raw":{"distance":740,"downed":15,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":31.6,"time":74.4,"run_into":0,"top_alert":2}},
+      {"name":"ARDBALLS","score":169700,"ending":"extracted","alert":1,"from":"tunnel_quiet","v":1,"raw":{"distance":810,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":25.5,"time":80.5,"run_into":0,"top_alert":1}},
+      {"name":"CONDOR","score":169100,"ending":"extracted","alert":2,"from":"fire_closes","v":1,"raw":{"distance":820,"downed":7,"hits":0,"alarms_set_off":1,"alarms_stopped":1,"spare":24.6,"time":81.4,"run_into":0,"top_alert":2}},
+      {"name":"BISHOP","score":165000,"ending":"extracted","alert":1,"from":"cover","v":1,"raw":{"distance":820,"downed":6,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":22.8,"time":83.2,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":158600,"ending":"extracted","alert":1,"from":"boss_hit","v":1,"raw":{"distance":820,"downed":6,"hits":1,"alarms_set_off":0,"alarms_stopped":0,"spare":24.6,"time":81.4,"run_into":0,"top_alert":1}},
+      {"name":"VESPER","score":157400,"ending":"extracted","alert":1,"from":"stumble_once","v":1,"raw":{"distance":820,"downed":6,"hits":1,"alarms_set_off":0,"alarms_stopped":0,"spare":24.0,"time":82.0,"run_into":1,"top_alert":1}},
+      {"name":"VORHALT","score":20180,"ending":"captured","alert":2,"from":"miss_ladder","v":1,"raw":{"distance":709,"downed":14,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":-1.0,"time":66.8,"run_into":0,"top_alert":2}},
+      {"name":"CONDOR","score":18580,"ending":"chopper_left","alert":1,"from":"boss_hold_fire","v":1,"raw":{"distance":804,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":106.0,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":9240,"ending":"killed","alert":1,"from":"halfway","v":1,"raw":{"distance":387,"downed":3,"hits":3,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":36.9,"run_into":3,"top_alert":1}},
+      {"name":"ARDBALLS","score":600,"ending":"killed","alert":3,"from":"derived: the pad's length, nothing else","v":1,"raw":{"distance":30,"downed":0,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
+    ],
+    "hard": [
+      {"name":"VESPER","score":240150,"ending":"extracted","alert":2,"from":"fire_escape (0.3 s less to spare)","v":1,"raw":{"distance":740,"downed":15,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":19.4,"time":76.6,"run_into":0,"top_alert":2}},
+      {"name":"CONDOR","score":220800,"ending":"extracted","alert":2,"from":"ground_alarms","v":1,"raw":{"distance":820,"downed":12,"hits":0,"alarms_set_off":3,"alarms_stopped":3,"spare":12.4,"time":83.6,"run_into":0,"top_alert":2}},
+      {"name":"ARDBALLS","score":217950,"ending":"extracted","alert":1,"from":"tunnel_quiet","v":1,"raw":{"distance":810,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":13.3,"time":82.7,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":211200,"ending":"extracted","alert":1,"from":"cover","v":1,"raw":{"distance":820,"downed":6,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":10.7,"time":85.3,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":201300,"ending":"extracted","alert":1,"from":"boss_hit","v":1,"raw":{"distance":820,"downed":6,"hits":1,"alarms_set_off":0,"alarms_stopped":0,"spare":12.4,"time":83.6,"run_into":0,"top_alert":1}},
+      {"name":"VESPER","score":199800,"ending":"extracted","alert":1,"from":"stumble_once","v":1,"raw":{"distance":820,"downed":6,"hits":1,"alarms_set_off":0,"alarms_stopped":0,"spare":11.9,"time":84.1,"run_into":1,"top_alert":1}},
+      {"name":"VORHALT","score":32520,"ending":"captured","alert":3,"from":"fire_closes","v":1,"raw":{"distance":709,"downed":17,"hits":0,"alarms_set_off":2,"alarms_stopped":1,"spare":-1.0,"time":66.8,"run_into":0,"top_alert":3}},
+      {"name":"CONDOR","score":27870,"ending":"chopper_left","alert":1,"from":"boss_hold_fire","v":1,"raw":{"distance":804,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":96.0,"run_into":0,"top_alert":1}},
+      {"name":"BISHOP","score":13860,"ending":"killed","alert":1,"from":"halfway","v":1,"raw":{"distance":387,"downed":3,"hits":3,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":36.9,"run_into":3,"top_alert":1}},
+      {"name":"ARDBALLS","score":900,"ending":"killed","alert":3,"from":"derived: the pad's length, nothing else","v":1,"raw":{"distance":30,"downed":0,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
+    ]
+  },
   "squad": false,
   "start": "main_floor_lobby",
   "nodes": [

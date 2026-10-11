@@ -12,8 +12,25 @@ echo "== Unit tests"
 echo "== Bot playthroughs"
 fail=0
 last=""
+# The scores (Score: the decision log's "Scoring and the scoreboard"): every mission 1 MEDIUM run's
+# score= is kept by its ending, so the end can check any escape beat any failed run.
+ESCAPES=""
+FAILS=""
 run() {  # scenario, then any more arguments for the bot (--route=...): its RESULT line, in $last
   last=$("$GODOT" --headless --path . --fixed-fps 60 res://tests/autoplay/autoplay.tscn -- --scenario="$1" "${@:2}" 2>&1 | grep RESULT || true)
+  if [[ $# -eq 1 && "$1" != menu_start && "$1" != intro_skip ]]; then  # (those two play EASY and HARD)
+    local s
+    s=$(sed -n 's/.* score=\([0-9]*\) .*/\1/p' <<<"$last")
+    if [[ -n "$s" ]]; then
+      if [[ "$last" == *"reason=extracted"* ]]; then ESCAPES="$ESCAPES $s"; else FAILS="$FAILS $s"; fi
+    fi
+  fi
+}
+# A run's score (RESULT's score=) must be between lo and hi.
+score_in() {  # what it ran, lo, hi
+  local s
+  s=$(sed -n 's/.* score=\([0-9]*\) .*/\1/p' <<<"$last")
+  if [[ -n "$s" ]] && (( s >= $2 && s <= $3 )); then echo "PASS [$1] score ${s} (${2}-${3})"; else echo "FAIL [$1] score ${s:-?}, wanted ${2}-${3}"; fail=1; fi
 }
 # Every run must end auto-saved (user: "auto save itself after the player finishes a run"), whatever
 # the ending: saved=ok (its progress and route map on the device as it ended, in the bot's own files;
@@ -56,8 +73,11 @@ NONE="dogs=0/0/0 runner=0/0 squad=0/0 lights=0"
 expect naive       "reason=killed" "death=ok end=typed" "talk=killed/tapped/ok"
 # Killed, SKIP in the conversation, then a tap on the end screen while it types: everything at once.
 expect naive_skip  "reason=killed" "death=ok end=skipped" "talk=killed/skipped/ok"
-expect ground      "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "talk=extracted/tapped/ok" "setting=medium bosshp=30 opened=1:hard,1:medium,2:easy,2:medium"
+expect ground      "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "talk=extracted/tapped/ok" "setting=medium bosshp=30 opened=1:hard,1:medium,2:easy,2:medium" "dist=820 "
 clean_time ground 78 85
+# A clean ground escape on MEDIUM: 820 m, 6 down, about 24 s to spare: (8,200 + 1,500 + 50,000 +
+# about 24,000) x2, about 168,600.
+score_in ground 160000 176000
 # Quiet: down the basement stairs, the BOILER ROOM's left ladder up.
 expect tunnel_quiet "reason=extracted alert=1 route=$U > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=9 $NONE" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok"
 clean_time tunnel_quiet 77 84
@@ -92,6 +112,10 @@ expect ground_loud "reason=extracted alert=3 route=$G | covers=0 hits=0" "$NONE"
 # Both wires, all three boxes on the way (MAIN FLOOR, WING, EXIT): back to SNEAKING.
 expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=3" "$NONE" "boss=1/0/" "ko=3/0/ok"
 expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1" "boss=1/0/" "ko=3/0/ok"
+# Killed half way (it stops shooting, jumping and sliding in the SECURITY WING): about 390 m, a few
+# down, x2: a failed run's score, a fraction of any escape's.
+expect halfway "reason=killed alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING | covers=0 hits=3" "setting=medium"
+score_in halfway 6000 13000
 # The boss at the chopper: stepping into a swept lane costs a hit; never shooting him, he blocks the
 # way and the chopper leaves.
 expect boss_hit "reason=extracted alert=1 route=$G | covers=0 hits=1" "boss=1/1/" "ko=3/0/ok"
@@ -110,6 +134,16 @@ expect boss_skip "reason=extracted alert=1 route=$G | covers=0 hits=0" "boss=1/0
 # and MEDIUM already) picks HARD, which builds the MAIN FLOOR under the menu again for it.
 expect menu_start "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12" "boss=1/0/" "ko=3/0/ok" "intro=ok" "brief=ok" "select=ok(easy)" "setting=easy bosshp=20 opened=1:medium,2:easy"
 expect intro_skip "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12" "boss=1/0/" "ko=3/0/ok" "intro=ok" "brief=ok" "select=ok(hard)" "setting=hard bosshp=40 opened=2:hard"
+# The scoreboard (user): ground on MEDIUM, SKIP in the end conversation, then the debrief's SCORE
+# line (x2 MEDIUM, NEW BEST on a fresh save), the name entry after it (filled in with CROSS; BOT
+# tapped in on its big keys: B, O, X, DEL, T, OK), the board with BOT blinking in its place among
+# the cast, EASY's board (the cast's only), BACK to the debrief, and BOT in the save on the device.
+expect scoreboard "reason=extracted alert=1 route=$G | covers=0 hits=0" "talk=extracted/skipped/ok" "setting=medium" "board=ok(#"
+# Any escape beat any failed run (every mission 1 MEDIUM bot above: the unit tests prove it for any
+# run from route.json, Score.band).
+lo_esc=$(tr ' ' '\n' <<<"$ESCAPES" | sed '/^$/d' | sort -n | head -1)
+hi_fail=$(tr ' ' '\n' <<<"$FAILS" | sed '/^$/d' | sort -n | tail -1)
+if [[ -n "$lo_esc" && -n "$hi_fail" ]] && (( lo_esc > hi_fail )); then echo "PASS [scores] the lowest escape (${lo_esc}) beat the highest failed run (${hi_fail})"; else echo "FAIL [scores] lowest escape ${lo_esc:-?}, highest failed run ${hi_fail:-?}"; fail=1; fi
 
 # ---- Mission 1's settings (route.json "settings"; user: "an easy medium and hard for each level"):
 # the same layout and routes, only the pressure changes. The bots above play MEDIUM (chopper lifts at
@@ -120,11 +154,14 @@ expect intro_skip "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 
 # getting out opened in the mission select (each bot starts on a fresh save: mission 1 EASY only).
 expect_on ground easy "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "setting=easy bosshp=20 opened=1:medium,2:easy"
 clean_time "ground (easy)" 76 82  # (about 27 s to spare before the lift-off)
+# The same clean run scores x1 on EASY (and x3 on HARD, below), with EASY's extra time to spare.
+score_in "ground (easy)" 92000 104000
 expect_on camper easy "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | covers=1" "time=118.0" "setting=easy"
 # HARD: a clean run straight on reaches the pad only just before the lift-off (it jumps the third
 # wire: still SNEAKING); the loud roof gets there about 10 s sooner.
 expect_on ground hard "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "setting=hard bosshp=40"
 clean_time "ground (hard)" 81 86
+score_in "ground (hard)" 205000 228000
 expect_on fire_escape hard "reason=extracted alert=2 route=$R > HELIPAD | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=7 $NONE" "cctv=1/ok" "boss=1/0/" "ko=3/0/ok" "setting=hard bosshp=40"
 clean_time "fire_escape (hard)" 73 79
 expect_on camper hard "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | covers=1" "time=96.0" "setting=hard"

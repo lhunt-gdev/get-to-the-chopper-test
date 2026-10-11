@@ -103,6 +103,12 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
 - Just for looks: no change to gameplay.
 
+### PROPOSED — Scoring and the scoreboard (user, 2026-10-10; Point: scoring)
+- **Why (user):** "The scoring for easy, medium and hard should be taken from the scores the player gets at the end or death of a run." Then: "Ok let's work on the score board."
+- **The score:** every run scores, whatever the ending: 10 a metre run, 250 an enemy down, 500 an alarm stopped, minus 500 an alarm set off; only an escape adds 50,000 less 5,000 a hit taken, and 1,000 a second of chopper time to spare; then x the setting (user: EASY x1, MEDIUM x2, HARD x3); never below 0. Any escape beats any failed run (a test proves it from route.json). Not scored: run time, stumbles (each is already a hit), the alert level, new areas found. Captured scores the same way as killed (user).
+- **On the debrief:** a DISTANCE row, a SCORE line rolling up as the tally lands, the setting's multiplier, NEW BEST.
+- **The board:** local, on the device, a top 10 for each mission and setting, pre-filled with the cast from real bot runs (VESPER near the top, BISHOP, CONDOR, VORHALT, ARDBALLS at the bottom, and a second ARDBALLS second from the top in place of the planned "???" (user: "Replace ??? With ARDBALLS")); a name of up to 8 letters on big on-screen keys, filled in with CROSS (user); saved with the rest after every run. A global board later, if ever (the app stores' own, if it goes native).
+
 ### PROPOSED — Menu and settings changes (user, 2026-10-10)
 - **Why (user):** "In the menu change start mission to mission select. In setting add a blood on off toggle which will disable or enable all blood effects in the game. Also in setting add trigger with left or right toggle which will change the placement of the trigger to fire in the game from left to right and vis versa."
 - The main menu's first button reads MISSION SELECT (was START MISSION).

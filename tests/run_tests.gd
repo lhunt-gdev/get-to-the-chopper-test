@@ -50,6 +50,10 @@ func _run() -> void:
 	_test_save_file()
 	await _test_mission_select()
 	_test_tally()
+	_test_score()
+	_test_score_band()
+	_test_scoreboard()
+	await _test_score_screens()
 	_test_snipers()
 	_test_boss()
 	_test_boss_ko()
@@ -747,9 +751,9 @@ func _test_end_typing() -> void:
 	while not t.is_done() and frames < 6000:
 		t._process(1.0 / 60.0)
 		frames += 1
-		if t._row == 2 and t._typed >= String(rows[2][0]).length() and one_from < 0:
+		if t._row == 3 and t._typed >= String(rows[3][0]).length() and one_from < 0:
 			one_from = frames
-		if t._row == 3 and one_from >= 0 and one_for == 0:
+		if t._row == 4 and one_from >= 0 and one_for == 0:
 			one_for = frames - one_from
 	_check(t.is_done() and typed[0] == letters and lands[0] == rows.size(),
 			"end screen: every label and word types out, a tick a letter (%d of %d), each row lands (%d)" % [typed[0], letters, lands[0]])
@@ -2515,19 +2519,21 @@ func _test_snipers() -> void:
 ## The end screen's tally (user, after DOS Doom): plain counts only, the chopper's spare time only
 ## when he got out, and the numbers counting up to their totals.
 func _test_tally() -> void:
-	var stats := {"time": 61.2, "spare": 9.0, "downed": 4, "hits": 2, "run_into": 15, "alarms_set_off": 1,
+	var stats := {"time": 61.2, "distance": 640.7, "spare": 9.0, "downed": 4, "hits": 2, "run_into": 15, "alarms_set_off": 1,
 			"alarms_stopped": 0, "top_alert": 2, "levels": "MAIN > BELOW", "new_areas": 3}
 	var rows := Tally.rows_for(stats)
-	_check(rows.size() == 10 and rows[1][0] == "CHOPPER TO SPARE", "tally: ten rows, with the chopper's spare time when he got out")
+	_check(rows.size() == 11 and rows[1][0] == "DISTANCE" and rows[2][0] == "CHOPPER TO SPARE",
+			"tally: eleven rows, DISTANCE after TIME, with the chopper's spare time when he got out")
 	stats["spare"] = -1.0
-	_check(Tally.rows_for(stats).size() == 9, "tally: no spare time when he didn't")
+	_check(Tally.rows_for(stats).size() == 10, "tally: no spare time when he didn't")
 	var texts := []
 	for row in rows:
 		texts.append(Tally.value_text(row, Tally.steps_of(row), Tally.steps_of(row)))
-	_check(texts == ["1:01.2", "0:09", "4", "2", "15", "1", "0", "CAUTION", "MAIN > BELOW", "3"], "tally: final values (%s)" % [texts])
+	_check(texts == ["1:01.2", "640 M", "0:09.0", "4", "2", "15", "1", "0", "CAUTION", "MAIN > BELOW", "3"], "tally: final values (%s)" % [texts])
 	_check(not ("%s" % [texts]).contains(" OF "), "tally: plain counts, no 'of N' totals (user)")
-	_check(Tally.steps_of(rows[4]) == Tally.MAX_STEPS and Tally.value_text(rows[4], 6, 12) in ["7", "8"], "tally: a big count counts up in at most a dozen steps")
-	_check(Tally.steps_of(rows[7]) == 0, "tally: a word lands at once")
+	_check(Tally.steps_of(rows[5]) == Tally.MAX_STEPS and Tally.value_text(rows[5], 6, 12) in ["7", "8"], "tally: a big count counts up in at most a dozen steps")
+	_check(Tally.steps_of(rows[8]) == 0, "tally: a word lands at once")
+	_check(Tally.value_text(rows[1], 5, 10) == "320 M", "tally: DISTANCE counts up in whole metres")
 	_check(Tally.value_text(["TIME", "time", 119.97, UiKit.PAPER], 10, 10) == "2:00.0", "tally: 1:59.97 reads 2:00.0, not 1:60.0")
 	# The longest route through the levels fits beside its label (squeezed if it must be).
 	var g := RouteGraph.from_json_file(TEST_RANGE)  # (its longest way: not in mission 1)
@@ -4404,7 +4410,7 @@ func _test_best_times() -> void:
 			"best times: the test range (no mission) and a setting that isn't one keep none")
 	# Kept in the save, and read back the same.
 	var data: Dictionary = p.to_data()
-	_check(data["version"] == 2 and data["best"] is Dictionary and is_equal_approx(float(data["best"]["1:easy"]), 81.4) and data["best"].size() == 2,
+	_check(data["version"] == 3 and data["best"] is Dictionary and is_equal_approx(float(data["best"]["1:easy"]), 81.4) and data["best"].size() == 2,
 			"best times: in the save, by mission and setting (%s)" % [data["best"]])
 	var q: Node = P.new()
 	q.from_data(JSON.parse_string(JSON.stringify(data)))
@@ -4715,3 +4721,311 @@ func _tap_at(p: Vector2) -> void:
 		e.position = p
 		e.global_position = p
 		root.push_input(e, true)
+
+
+## The score (Score; the decision log's "Scoring and the scoreboard"): 10 a metre, 250 an enemy down,
+## 500 an alarm stopped, less 500 one set off; only an escape adds 50,000 less 5,000 a hit and 1,000 a
+## second to spare (100 a tenth); x the setting (EASY x1, MEDIUM x2, HARD x3); never below 0. The
+## worked examples are real bot runs (RESULT's score=).
+func _test_score() -> void:
+	# The ground bot on MEDIUM: 820 m, 6 down, no hits or alarms, 24.6 s to spare.
+	var ground := {"distance": 820.4, "downed": 6, "hits": 0, "alarms_set_off": 0, "alarms_stopped": 0, "spare": 24.6, "time": 81.4}
+	_check(Score.base(ground) == 84300 and Score.total(ground, "medium") == 168600 and Score.total(ground, "easy") == 84300 and Score.total(ground, "hard") == 252900,
+			"score: a clean ground escape: 8,200 + 1,500 + 50,000 + 24,600 = 84,300, x1 / x2 / x3 (%d)" % Score.total(ground, "medium"))
+	# The halfway bot: killed 387 m in, 3 down, 3 hits (hits only cost off an escape).
+	var halfway := {"distance": 387.0, "downed": 3, "hits": 3, "run_into": 3, "spare": -1.0}
+	_check(Score.total(halfway, "medium") == 9240, "score: killed half way: 3,870 + 750 = 4,620, x2 = 9,240 (hits cost nothing off a failed run)")
+	var captured := halfway.duplicate()
+	captured["hits"] = 0
+	_check(Score.total(captured, "medium") == Score.total(halfway, "medium"), "score: captured scores the same way as killed (user)")
+	# A hit off an escape: 5,000; set off and stopped cancel out; time, stumbles, the alert, new areas
+	# don't score.
+	var hit := ground.duplicate()
+	hit["hits"] = 1
+	hit["run_into"] = 1
+	_check(Score.base(ground) - Score.base(hit) == 5000, "score: a hit taken costs 5,000 off an escape (a stumble is one: never twice)")
+	var both := ground.duplicate()
+	both["alarms_set_off"] = 1
+	both["alarms_stopped"] = 1
+	_check(Score.base(both) == Score.base(ground), "score: an alarm set off and then stopped scores 0 (nothing to farm)")
+	var other := ground.duplicate()
+	other.merge({"time": 500.0, "run_into": 9, "top_alert": 3, "new_areas": 7}, true)
+	_check(Score.base(other) == Score.base(ground), "score: run time, things run into, the alert and new areas don't score")
+	_check(Score.total({"distance": 20.0, "alarms_set_off": 1, "spare": -1.0}, "hard") == 0 and Score.total({"distance": -6.0}, "easy") == 0,
+			"score: never below 0 (in the office before the door, nothing)")
+	_check(Score.multiplier("easy") == 1 and Score.multiplier("medium") == 2 and Score.multiplier("hard") == 3 and Score.multiplier("") == 1,
+			"score: EASY x1, MEDIUM x2, HARD x3 (user); the test range x1")
+	# Each tally row's points add up to the score (the debrief rolls them in).
+	var sum := 0
+	for row in Tally.rows_for(both):
+		sum += int(row[4])
+	_check(sum == Score.base(both), "score: the tally's rows' points add up to it (%d, %d)" % [sum, Score.base(both)])
+	_check(Score.total(Score.raw_of(both), "medium") == Score.total(both, "medium") and Score.raw_of(both)["distance"] == 820 and is_equal_approx(Score.raw_of({"spare": 24.64})["spare"], 24.6),
+			"score: an entry's raw numbers give the same score back (whole metres, the spare time to the tenth)")
+	_check(Score.format(0) == "0" and Score.format(1000) == "1,000" and Score.format(168600) == "168,600" and Score.format(1234567) == "1,234,567",
+			"score: reads with commas (168,600)")
+	_check(Score.total(ground, "medium") % 10 == 0 and Score.total(halfway, "hard") % 10 == 0, "score: every score ends in 0, like an arcade's")
+
+
+## The guarantee (user: any escape beats any failed run): for every mission built and every setting
+## in its route.json (and the TEST RANGE), the most a run that didn't get out can score is below the
+## least an escape can (Score.band: the longest way with every enemy down and every alarm stopped,
+## against the shortest with nothing down, every alarm set off and a hit short of dying).
+func _test_score_band() -> void:
+	var t := load("res://game/config/default_tuning.tres") as Tuning
+	var files := []
+	for mi in Progress.MISSIONS:
+		if mi.has("route"):
+			files.append(String(mi["route"]))
+	files.append(TEST_RANGE)
+	for path in files:
+		var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+		var settings: Array = RouteGraph.SETTINGS if data.get("settings") is Dictionary else [""]
+		for s: String in settings:
+			var b := Score.band(data, s, t.player_hits)
+			_check(b["paths"] > 0 and b["escape_min"] > b["fail_max"],
+					"score band (%s %s): any escape (at least %s) beats any failed run (at most %s); %d ways, %d to %d m" % [
+					data.get("mission", path), s if s != "" else "-", Score.format(b["escape_min"]), Score.format(b["fail_max"]), b["paths"], b["shortest"], b["longest"]])
+	# The test can fail: a route with an army on it would let a failed run outscore an escape.
+	var army := {"start": "a", "nodes": [{"id": "a", "length": 100, "enemies": [], "next": [{"to": "pad"}]}, {"id": "pad", "length": 30, "end": "extract"}]}
+	for i in 200:
+		army["nodes"][0]["enemies"].append({"kind": "rifle_trooper", "lane": 2, "at": 10})
+	var bad := Score.band(army, "", t.player_hits)
+	_check(bad["escape_min"] <= bad["fail_max"], "score band: it catches a route where a failed run could outscore an escape")
+
+
+## The scoreboards (Progress): a top 10 per mission and setting, the cast's entries (route.json
+## "house", from bot runs) and his together; ties keep the older above; his entries carry name,
+## score, ending, alert, date, raw numbers and the score's version; saved, read back, an old save
+## still loads.
+func _test_scoreboard() -> void:
+	var P: GDScript = load("res://game/autoload/progress.gd")
+	var p: Node = P.new()
+	p.load_from("")
+	for s: String in RouteGraph.SETTINGS:
+		var top: Array = p.board(1, s)
+		var escapes := top.filter(func(e: Dictionary) -> bool: return e["ending"] == "extracted")
+		var ok: bool = top.size() == 10 and top.all(func(e: Dictionary) -> bool: return e["house"]) and top[0]["name"] == "VESPER" and top[9]["name"] == "ARDBALLS" \
+				and escapes.size() == 6 and top.slice(0, 6) == escapes
+		var scored: bool = top.all(func(e: Dictionary) -> bool: return int(e["score"]) == Score.total(e["raw"], s) and int(e["score"]) > 0)
+		var names := {}
+		for e in top:
+			names[e["name"]] = true
+		_check(ok and scored and names.has("BISHOP") and names.has("CONDOR") and names.has("VORHALT") and names.size() >= 5,
+				"board (%s): the cast's ten, VESPER on top, the six escapes above the four failures, ARDBALLS at the bottom, each scored from its raw numbers (%s)" % [
+				s, ", ".join(top.map(func(e: Dictionary) -> String: return "%s %d" % [e["name"], e["score"]]))])
+		var keys: Array = top[0].keys()
+		_check(not keys.has("route") and not keys.has("levels") and not keys.has("visited"), "board (%s): no entry knows the route (LOCKED)" % s)
+	# The ground bot's MEDIUM run (168,600): fourth, under VESPER, ARDBALLS and CONDOR; the bottom ARDBALLS (the killed one) pushed off.
+	var ground := {"distance": 820.0, "downed": 6, "hits": 0, "alarms_set_off": 0, "alarms_stopped": 0, "spare": 24.6, "time": 81.4, "top_alert": 1}
+	var r: Dictionary = p.record_run(1, "medium", &"extracted", 81.4, ground)
+	var top: Array = p.board(1, "medium")
+	_check(r["score"] == 168600 and r["rank"] == 4 and r["new_best_score"] and r["score_was"] == -1 and r["seq"] >= 1 and not top[3]["house"] and top[3]["name"] == "CROSS"
+			and top.size() == 10 and not top.any(func(e: Dictionary) -> bool: return e["name"] == "ARDBALLS" and e["ending"] == "killed"),
+			"board: a 168,600 on MEDIUM goes in fourth under CROSS, NEW BEST, and the bottom ARDBALLS drops off (%s)" % [r])
+	var mine: Dictionary = top[3]
+	_check(mine["ending"] == "extracted" and mine["alert"] == 1 and String(mine["date"]).length() == 10 and mine["v"] == Score.VERSION and mine["raw"]["distance"] == 820,
+			"board: his entry keeps its ending, alert, date, raw numbers and the score's version (%s)" % [mine])
+	var again: Dictionary = p.record_run(1, "medium", &"extracted", 81.4, ground)
+	_check(again["rank"] == 5 and not again["new_best_score"] and again["score_was"] == 168600, "board: the same score again goes under the first (ties: the older above), not a new best")
+	var low: Dictionary = p.record_run(1, "medium", &"killed", 30.0, {"distance": 387.0, "downed": 3, "hits": 3, "spare": -1.0})
+	_check(low["rank"] == 0 and low["score"] == 9240 and p.best_score(1, "medium") == 168600, "board: a death that doesn't beat the tenth isn't on it (%s)" % [low])
+	_check(p.record_run(1, "easy", &"killed", 5.0, {"distance": 0.0, "spare": -1.0})["new_best_score"] == false, "board: a score of 0 is never a NEW BEST")
+	_check(p.record_run(0, "easy", &"extracted", 60.0, ground)["rank"] == 0 and p.record_run(1, "extreme", &"extracted", 60.0, ground)["rank"] == 0,
+			"board: the test range (no mission) and a setting that isn't one have no board")
+	# The name entry's OK: renamed, cleaned, remembered for next time.
+	_check(p.rename(1, "medium", int(r["seq"]), "ace-1") and p.board(1, "medium")[3]["name"] == "ACE-1" and p.last_name == "ACE-1",
+			"board: the name entry renames his entry, and it's the name next time")
+	_check(P.clean_name("a*b c!") == "AB C" and P.clean_name("ARDBALLS99") == "ARDBALLS" and P.clean_name("  x  ") == "X" and P.clean_name(5) == "" and P.clean_name("???") == "" and P.clean_name("???", true) == "???",
+			"board: a name is capitals and the keys' letters only, up to 8")
+	_check(not p.rename(1, "medium", 9999, "NOBODY"), "board: renaming an entry that isn't there does nothing")
+	# Saved and read back; the next entry number goes on.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(p.to_data()))
+	var q: Node = P.new()
+	q.from_data(data)
+	_check(JSON.stringify(q.to_data()) == JSON.stringify(p.to_data()) and JSON.stringify(q.board(1, "medium")) == JSON.stringify(p.board(1, "medium")) and q.last_name == "ACE-1",
+			"board: kept in the save and read back the same")
+	var next: Dictionary = q.record_run(1, "hard", &"extracted", 70.0, ground)
+	_check(int(next["seq"]) > int(again["seq"]), "board: entry numbers go on from the save's")
+	# A save from before the boards (version 2): loads with the cast's boards only.
+	var old: Node = P.new()
+	old.from_data(JSON.parse_string("{\"version\": 2, \"unlocked\": [\"1:easy\", \"1:medium\"], \"cleared\": [\"1:easy\"], \"best\": {\"1:easy\": 80.0}, \"last\": \"1:medium\"}"))
+	_check(old.is_cleared(1, "easy") and is_equal_approx(old.best_time(1, "easy"), 80.0) and old.best_score(1, "easy") == -1
+			and old.board(1, "easy").all(func(e: Dictionary) -> bool: return e["house"]) and old.last_name == "CROSS",
+			"board: an old save (version 2) still loads, with the cast's boards and CROSS for the name")
+	# An entry scored with another version of the points is scored again from its raw numbers; broken
+	# ones are left out.
+	var redo: Node = P.new()
+	var raw := Score.raw_of(ground)
+	redo.from_data({"boards": {"1:hard": [{"name": "OLD", "score": 5, "ending": "extracted", "alert": 1, "raw": raw, "v": 0, "seq": 3},
+			{"name": "NORAW", "score": 9, "ending": "extracted", "seq": 4}, {"name": "", "score": 9, "ending": "extracted", "raw": raw, "seq": 5},
+			{"name": "BADEND", "score": 9, "ending": "won", "raw": raw, "seq": 6}], "x:hard": [], "1:extreme": []}, "seq": 2})
+	var hard: Array = redo.board(1, "hard").filter(func(e: Dictionary) -> bool: return not e["house"])
+	_check(hard.size() == 1 and hard[0]["name"] == "OLD" and int(hard[0]["score"]) == Score.total(raw, "hard") and int(redo.to_data()["seq"]) == 4,
+			"board: an entry from another score version is scored again from its numbers; broken ones are left out (%s)" % [hard])
+	# Ten better runs push the whole cast off; he keeps ten at most.
+	var big := ground.duplicate()
+	big["spare"] = 60.0
+	for i in 12:
+		p.record_run(1, "easy", &"extracted", 50.0, big)
+	var easy: Array = p.board(1, "easy")
+	_check(easy.size() == 10 and easy.all(func(e: Dictionary) -> bool: return not e["house"]) and p.to_data()["boards"]["1:easy"].size() == 10,
+			"board: better runs push the cast off; only his ten on it are kept")
+	p.reset()
+	_check(p.board(1, "easy").all(func(e: Dictionary) -> bool: return e["house"]) and p.board(1, "easy").size() == 10, "board: a wiped save gives back the cast's boards")
+	for n in [p, q, old, redo]:
+		n.free()
+
+
+## The scoreboard on screen: the debrief's SCORE line rolling up to the score, the multiplier, NEW
+## BEST; the name entry after it (big keys, filled in with CROSS, DEL, OK; a computer's keyboard);
+## then the board with the entry blinking, its EASY / MEDIUM / HARD switch, BACK to the debrief
+## shown at once; HIGH SCORES on the main menu and BOARD on the mission's screen. And it all fits
+## 270x480 and 270x585.
+func _test_score_screens() -> void:
+	var prog: Node = root.get_node("Progress")
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	prog.load_from("")
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var fe = FE.new()
+	root.add_child(fe)
+	var heard := {"multiplied": 0, "stamped": ""}
+	fe.score_multiplied.connect(func() -> void: heard["multiplied"] += 1)
+	fe.score_stamped.connect(func(k: String) -> void: heard["stamped"] = k)
+	var stats := {"time": 81.4, "distance": 820.0, "downed": 6, "hits": 0, "run_into": 0, "alarms_set_off": 0, "alarms_stopped": 0, "spare": 24.6,
+			"top_alert": 1, "levels": "MAIN", "new_areas": 0, "mission": 1, "setting": "medium", "unlocked": [], "new_best": false, "was_best": -1.0}
+	stats.merge(prog.record_run(1, "medium", &"extracted", 81.4, stats), true)
+	fe.show_end(&"extracted", stats)
+	await process_frame
+	var tally: Tally = null
+	for c in fe.find_children("*", "", true, false):
+		if c is Tally:
+			tally = c
+	_check(tally != null and tally.score_on and tally.final_score == 168600 and tally.mult_text() == "x2 MEDIUM" and tally.outcome == "NEW BEST #4",
+			"debrief: the SCORE line, x2 MEDIUM, NEW BEST #4 (%s)" % [[tally.final_score, tally.mult_text(), tally.outcome] if tally != null else "no tally"])
+	var rolled_up := true
+	var last := 0
+	var frames := 0
+	while not tally.is_done() and frames < 4000:
+		tally._process(1.0 / 60.0)
+		frames += 1
+		if not tally._multiplied:
+			rolled_up = rolled_up and tally.shown_score() >= last
+			last = tally.shown_score()
+	_check(tally.is_done() and tally.shown_score() == 168600 and heard["multiplied"] == 1 and heard["stamped"] == "new_best" and rolled_up,
+			"debrief: the score rolls up as the rows land, multiplies once, NEW BEST stamps in (%d, %s)" % [tally.shown_score(), heard])
+	_check(frames / 60.0 < 14.0, "debrief: the tally and its SCORE line are done in a reasonable time (%.1f s)" % (frames / 60.0))
+	var board_btn: Button = _menu_button(fe, "BOARD")
+	var vs: Vector2 = fe._root.get_viewport_rect().size
+	var bs := [_menu_button(fe, "RETRY"), board_btn, _menu_button(fe, "MAIN MENU")]
+	_check(bs.all(func(b: Variant) -> bool: return b != null) and not board_btn.disabled, "debrief: RETRY, BOARD and MAIN MENU")
+	var y0: float = board_btn.get_global_rect().position.y
+	var one_row: bool = bs.all(func(b: Button) -> bool: return is_equal_approx(b.get_global_rect().position.y, y0)) \
+			and bs[0].get_global_rect().end.x <= bs[1].get_global_rect().position.x and bs[1].get_global_rect().end.x <= bs[2].get_global_rect().position.x \
+			and bs[0].get_global_rect().position.x >= 0.0 and bs[2].get_global_rect().end.x <= vs.x
+	_check(one_row, "debrief: the three buttons side by side on one row, on the screen")
+	# The tallest debrief (an escape: 11 rows, the SCORE line, three lines under the buttons) fits 480.
+	var lines_bottom: float = FE.TALLY_TOP + tally.needed_height() + 6.0 + 4.0 + 28.0 + 2.0 * 12.0 + 9.0
+	_check(is_equal_approx(tally.needed_height(), 11 * Tally.ROW_H + Tally.SCORE_H) and lines_bottom <= 480.0 - 4.0 and board_btn.get_global_rect().end.y <= lines_bottom,
+			"debrief: fits a 480-high screen with the SCORE line and three lines under the buttons (%d)" % lines_bottom)
+	# The name entry opens a beat after the tally.
+	await create_timer(FE.NAME_BEAT + 0.3, true, false, true).timeout
+	await process_frame
+	_check(fe.in_name_entry() and fe.name_text() == "CROSS", "name entry: opens after the tally, filled in with CROSS (user)")
+	var caps: Array = fe.find_children("*", "", true, false).filter(func(c: Node) -> bool: return c.get_script() == FE.KeyCap and not c.is_queued_for_deletion())
+	var chars: Array = []
+	for c in caps:
+		if String(c.key).length() == 1:
+			chars.append(String(c.key))
+	chars.sort()
+	var want: Array = []
+	for ch in Progress.NAME_CHARS:
+		want.append(ch)
+	want.sort()
+	_check(caps.size() == 41 and chars == want and fe.key_cap("DEL") != null and fe.key_cap("OK") != null,
+			"name entry: a key for each of A-Z, 0-9, space, full stop and hyphen, and DEL and OK (%d keys)" % caps.size())
+	var inside: bool = caps.all(func(c: Control) -> bool: return c.get_global_rect().position.x >= 0.0 and c.get_global_rect().end.x <= vs.x and c.get_global_rect().end.y <= vs.y - 8.0)
+	_check(inside and caps.all(func(c: Control) -> bool: return c.size.x >= 30.0 and c.size.y >= 28.0), "name entry: big keys (30 px and up), all on the screen (%s)" % [vs])
+	_tap_at(fe.key_cap("X").get_global_rect().get_center())
+	await process_frame
+	_check(fe.name_text() == "X", "name entry: a tap on a key types it, the first replacing the name it was filled in with (%s)" % fe.name_text())
+	for k in ["Y", "Z", "0", "1", "2", "3", "4", "5", "6"]:
+		fe.press_key(k)
+	_check(fe.name_text() == "XYZ01234", "name entry: up to 8 letters (%s)" % fe.name_text())
+	fe.press_key("DEL")
+	fe.press_key("DEL")
+	var keys: Node = fe.find_children("*", "", true, false).filter(func(c: Node) -> bool: return c.get_script() == FE.NameKeys)[0]
+	var ev := InputEventKey.new()
+	ev.pressed = true
+	ev.keycode = KEY_PERIOD
+	ev.unicode = ".".unicode_at(0)
+	keys._input(ev)
+	_check(fe.name_text() == "XYZ012.", "name entry: DEL takes the last off; a computer's keyboard types too (%s)" % fe.name_text())
+	fe.press_key("OK")
+	await process_frame
+	var rows: Array = fe.board_rows()
+	var flashing: Array = rows.filter(func(r: Node) -> bool: return r.flash)
+	_check(fe.in_board() and fe.board_shown() == [1, "medium"] and rows.size() == 10 and flashing.size() == 1 and flashing[0].rank == 4
+			and flashing[0].entry["name"] == "XYZ012." and prog.last_name == "XYZ012.", "name entry: OK saves the name and opens the board, his entry blinking at #4")
+	for h in [480.0, 585.0]:
+		var step: float = FE.board_step(h)
+		var back_bottom: float = FE.BOARD_ROWS + 10.0 * step + 4.0 + 20.0
+		_check(back_bottom <= h - 8.0 and step >= 28.0, "board: ten rows and BACK fit a %d-high screen (BACK's bottom at %d)" % [h, back_bottom])
+		var grid_bottom: float = FE.name_grid_top(h) + 6.0 * (FE.KEY_SIZE.y + FE.KEY_GAP) - FE.KEY_GAP
+		_check(grid_bottom <= h - 8.0 and FE.name_grid_top(h) - 72.0 >= 84.0, "name entry: the keys fit a %d-high screen, low for a thumb, under the name (bottom at %d)" % [h, grid_bottom])
+	var f := UiKit.font()
+	var name_end := 40.0 + f.get_string_size("WWWWWWWW", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	var score_x := 242.0 - 10.0 - f.get_string_size("9,999,990", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	var end_end := 40.0 + f.get_string_size("AGENT CAPTURED", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	var alert_x := 242.0 - 10.0 - f.get_string_size("SNEAKING", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	_check(name_end + 6.0 <= score_x and end_end + 6.0 <= alert_x, "board: an 8-letter name clears the score, the longest ending clears the alert word")
+	# The switch: HARD's board, then BACK to the debrief, shown at once (nothing typed again).
+	fe.board_tab("hard").pressed.emit()
+	await process_frame
+	_check(fe.board_shown() == [1, "hard"] and fe.board_rows().all(func(r: Node) -> bool: return not r.mine) and fe.board_tab("hard").on,
+			"board: the switch shows HARD's board (the cast's only, his MEDIUM run not on it)")
+	_menu_button(fe, "BACK").pressed.emit()
+	await process_frame
+	var t2: Tally = null
+	for c in fe.find_children("*", "", true, false):
+		if c is Tally and not c.is_queued_for_deletion():
+			t2 = c
+	_check(fe.in_debrief() and t2 != null and t2.is_done() and t2.shown_score() == 168600, "board: BACK goes to the debrief as it was left, shown at once")
+	await create_timer(FE.NAME_BEAT + 0.2, true, false, true).timeout
+	_check(fe.in_debrief(), "debrief: the name entry doesn't open again once it's been done")
+	# BOARD from the debrief: the board, his entry blinking.
+	_menu_button(fe, "BOARD").pressed.emit()
+	await process_frame
+	_check(fe.in_board() and fe.board_shown() == [1, "medium"] and fe.board_rows().any(func(r: Node) -> bool: return r.flash), "debrief: BOARD opens its board")
+	# HIGH SCORES on the main menu (the mission and setting last picked), and back.
+	fe.show_main()
+	await process_frame
+	var hs: Button = _menu_button(fe, "HIGH SCORES")
+	var ctl: Button = _menu_button(fe, "CONTROLS")
+	_check(hs != null and ctl != null and ctl.get_global_rect().end.y + 8.0 <= 446.0, "main menu: HIGH SCORES, the buttons clear of the footer")
+	hs.pressed.emit()
+	await process_frame
+	_check(fe.in_board() and fe.board_shown()[0] == 1, "main menu: HIGH SCORES opens the board")
+	_menu_button(fe, "BACK").pressed.emit()
+	await process_frame
+	_check(_menu_button(fe, "MISSION SELECT") != null and not fe.in_board(), "board: BACK from HIGH SCORES to the main menu")
+	# The mission's screen: his top score on each setting, BOARD and BACK.
+	_menu_button(fe, "MISSION SELECT").pressed.emit()
+	await process_frame
+	fe.open_mission(1)
+	await process_frame
+	_check(fe.chip(1, "medium").score == 168600 and fe.chip(1, "easy").score == -1, "mission screen: each setting shows his top score")
+	_menu_button(fe, "BOARD").pressed.emit()
+	await process_frame
+	_check(fe.in_board(), "mission screen: BOARD opens the mission's board")
+	_menu_button(fe, "BACK").pressed.emit()
+	await process_frame
+	_check(fe.in_mission(), "board: BACK from the mission's screen to it")
+	# A run with no board (the test range): no name entry, BOARD off.
+	fe.show_end(&"extracted", {"time": 50.0, "distance": 100.0, "spare": 3.0, "mission": 0, "setting": "", "score": 51300, "rank": 0, "seq": 0})
+	await process_frame
+	_check(_menu_button(fe, "BOARD").disabled, "debrief: no board for the test range (BOARD off)")
+	fe.free()
+	prog.from_data(saved)
+	prog.save_path = saved_path

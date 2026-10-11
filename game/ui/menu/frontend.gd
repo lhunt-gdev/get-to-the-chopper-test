@@ -26,11 +26,16 @@ signal briefing_cue(sound: String, volume_db: float)
 ## The run's over and the debrief (the route map and the tally) has opened: after the end-of-mission
 ## conversation, or at once without one (the level plays the end's sting now).
 signal debrief_opened(reason: StringName)
+## The debrief's SCORE line: multiplied by the setting (a heavier thunk), and the line under it
+## stamped in ("new_best", "entry" or "best").
+signal score_multiplied
+signal score_stamped(kind: String)
 
 ## END_TALK: the end-of-mission conversation (a Briefing), between the run and the debrief (END).
 ## MISSIONS: the mission select, after MISSION SELECT; MISSION: one mission's screen after it (its
-## EASY / MEDIUM / HARD, each with his best time).
-enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION }
+## EASY / MEDIUM / HARD, each with his best time). NAME: the name entry, when a run makes a board's
+## top 10; BOARD: a mission's scoreboard (from the debrief, the mission's screen, HIGH SCORES).
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION, NAME, BOARD }
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
@@ -48,6 +53,20 @@ var _screen := Screen.NONE
 var _mission := 1
 ## Where SETTINGS / CONTROLS go back to.
 var _back_to := Screen.MAIN
+## The scoreboard shown (or last shown): its mission and setting, where its BACK goes, and his entry
+## to blink on it (its seq; 0: none).
+var _board_mission := 1
+var _board_setting := "easy"
+var _board_back := Screen.MAIN
+var _board_flash := 0
+## The debrief's been seen to its end (back from the board or the name entry: shown at once), and
+## whether the run's entry on its board still wants a name (the name entry opens after the tally).
+var _end_done := false
+var _name_pending := false
+## The name entry's name so far, and whether it's still the one it was filled in with (the first
+## key typed replaces it).
+var _name := ""
+var _name_fresh := true
 var _root: Control
 var _dim: ColorRect
 
@@ -155,6 +174,8 @@ func mission_row(n: int) -> MissionRow:
 func show_end(reason: StringName, stats: Dictionary, talk: Dictionary = {}) -> void:
 	_end_reason = reason
 	_end_stats = stats
+	_end_done = false
+	_name_pending = int(stats.get("rank", 0)) > 0 and int(stats.get("seq", 0)) > 0
 	if Briefing.lines_of(talk).is_empty():
 		_open_debrief()
 		return
@@ -202,6 +223,97 @@ static func best_line(new_best: bool, was: float) -> String:
 	return "NEW BEST TIME" if was < 0.0 else "NEW BEST TIME - WAS %s" % time_text(was)
 
 
+## The line under the debrief's SCORE (from the run's stats: Progress.record_run): ["new_best",
+## "NEW BEST" (and its place: "NEW BEST #2")] when it beat his own best there; ["entry", "NEW ENTRY
+## #4"] when it made the board but isn't his best; ["best", "BEST 161,000"] (his best there, dim)
+## otherwise; ["", ""] with no board (the TEST RANGE, or no score).
+static func score_outcome(stats: Dictionary) -> Array:
+	var rank := int(stats.get("rank", 0))
+	if bool(stats.get("new_best_score", false)):
+		return ["new_best", "NEW BEST #%d" % rank if rank > 0 else "NEW BEST"]
+	if rank > 0:
+		return ["entry", "NEW ENTRY #%d" % rank]
+	var best := maxi(int(stats.get("score_was", -1)), -1)
+	if best >= 0 and int(stats.get("mission", 0)) >= 1:
+		return ["best", "BEST %s" % Score.format(best)]
+	return ["", ""]
+
+
+## The name entry (a run made the top 10), up; the name in it so far.
+func in_name_entry() -> bool:
+	return _screen == Screen.NAME
+
+
+func name_text() -> String:
+	return _name
+
+
+## A scoreboard, up; which one ([mission, setting]).
+func in_board() -> bool:
+	return _screen == Screen.BOARD
+
+
+func board_shown() -> Array:
+	return [_board_mission, _board_setting]
+
+
+## Opens mission n's scoreboard on `setting` (BACK goes to `back`), his entry `flash` blinking on it
+## (0: none). False, and nothing happens, for a mission that isn't built or a setting that isn't one.
+func open_board(n: int, setting: String, back: Screen = Screen.MAIN, flash: int = 0) -> bool:
+	if not Progress.is_built(n) or not setting in RouteGraph.SETTINGS:
+		return false
+	_board_mission = n
+	_board_setting = setting
+	_board_back = back
+	_board_flash = flash
+	_show(Screen.BOARD)
+	return true
+
+
+## The name entry's keys: a letter, a number, " ", "." or "-" types it (up to the longest name; the
+## first replaces the name it was filled in with); "DEL" takes the last off; "OK" saves it
+## (Progress.rename) and opens the board with the entry blinking. False if the name entry isn't up.
+func press_key(key: String) -> bool:
+	if _screen != Screen.NAME:
+		return false
+	match key:
+		"OK":
+			_name_ok()
+		"DEL":
+			_name_fresh = false
+			_name = _name.substr(0, maxi(0, _name.length() - 1))
+		_:
+			if key.length() != 1 or not Progress.NAME_CHARS.contains(key.to_upper()):
+				return false
+			if _name_fresh:
+				_name = ""
+				_name_fresh = false
+			if _name.length() < Progress.NAME_MAX:
+				_name += key.to_upper()
+	for c in _root.get_children():
+		if c is NameSlots:
+			c.text = _name
+			c.queue_redraw()
+	return true
+
+
+func _name_ok() -> void:
+	var n := int(_end_stats.get("mission", 0))
+	var which := String(_end_stats.get("setting", ""))
+	var seq := int(_end_stats.get("seq", 0))
+	Progress.rename(n, which, seq, _name)
+	_name_pending = false
+	open_board(n, which, Screen.END, seq)
+
+
+## The name entry's key at `key` ("A", "DEL", "OK"...), while it's up; else null.
+func key_cap(key: String) -> Button:
+	for c in _root.get_children():
+		if c is KeyCap and not c.is_queued_for_deletion() and c.key == key:
+			return c
+	return null
+
+
 func _open_debrief() -> void:
 	_end_guard = _screen == Screen.END_TALK
 	_show(Screen.END)
@@ -241,6 +353,10 @@ func _show(s: Screen) -> void:
 			_build_pause()
 		Screen.END:
 			_build_end()
+		Screen.NAME:
+			_build_name()
+		Screen.BOARD:
+			_build_board()
 		Screen.BRIEFING, Screen.END_TALK:
 			_build_briefing()
 
@@ -280,8 +396,12 @@ func _build_main() -> void:
 	Reticle.rule_bottom = title_rule()
 	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
 	var first := _button("MISSION SELECT", 290, func() -> void: _open(Screen.MISSIONS))
-	_button("SETTINGS", 318, func() -> void: _open(Screen.SETTINGS))
-	_button("CONTROLS", 346, func() -> void: _open(Screen.CONTROLS))
+	# HIGH SCORES: the scoreboard of the mission and setting last picked.
+	_button("HIGH SCORES", 318, func() -> void:
+		var n := int(Progress.last.get_slice(":", 0))
+		open_board(n if Progress.is_built(n) else 1, Progress.last.get_slice(":", 1), Screen.MAIN))
+	_button("SETTINGS", 346, func() -> void: _open(Screen.SETTINGS))
+	_button("CONTROLS", 374, func() -> void: _open(Screen.CONTROLS))
 	_place_wide(UiKit.label("PROOF OF CONCEPT BUILD", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
 	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
 	first.grab_focus()
@@ -440,7 +560,8 @@ func _build_mission() -> void:
 		c.open = Progress.is_unlocked(n, which)
 		c.cleared = Progress.is_cleared(n, which)
 		c.best = Progress.best_time(n, which)
-		c.needs = String(RouteGraph.SETTINGS[s - 1]).to_upper() if s > 0 else ""
+		c.score = Progress.best_score(n, which)
+		c.needs =String(RouteGraph.SETTINGS[s - 1]).to_upper() if s > 0 else ""
 		c.position = Vector2(14, top + s * (SETTING_H + SETTING_GAP))
 		c.size = Vector2(size.x - 28, SETTING_H)
 		c.pressed.connect(func() -> void: choose(n, which))
@@ -448,8 +569,16 @@ func _build_mission() -> void:
 		if c.playable() and (focus == null or Progress.key(n, which) == Progress.last):
 			focus = c
 	var end := top + 3.0 * SETTING_H + 2.0 * SETTING_GAP
-	_place_wide(UiKit.label("BEST: YOUR FASTEST EXTRACTION", 8, Color(UiKit.DIM, 0.8), HORIZONTAL_ALIGNMENT_CENTER), end + 12.0)
+	_place_wide(UiKit.label("BEST: FASTEST EXTRACTION, TOP SCORE", 8, Color(UiKit.DIM, 0.8), HORIZONTAL_ALIGNMENT_CENTER), end + 12.0)
+	# The mission's scoreboard (on the setting last picked here, else EASY), and BACK, side by side.
+	var on := Progress.last.get_slice(":", 1) if int(Progress.last.get_slice(":", 0)) == n else "easy"
+	var board := _button("BOARD", end + 36.0, func() -> void: open_board(n, on, Screen.MISSION))
+	board.offset_left = -112
+	board.offset_right = -8
+	board.disabled = not Progress.is_built(n)
 	var back := _button("BACK", end + 36.0, func() -> void: _open(Screen.MISSIONS))
+	back.offset_left = 8
+	back.offset_right = 112
 	(focus if focus != null else back).grab_focus()
 
 
@@ -491,10 +620,14 @@ func _build_end() -> void:
 	var sub := UiKit.label(info[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER)
 	_place_wide(title, 80)
 	_place_wide(sub, 104)
-	# The debrief (the LOCKED post-run route record): the route map, then the tally under it.
+	# The debrief (the LOCKED post-run route record): the route map, then the tally under it, with
+	# the SCORE line (Tally.setup) at its foot.
 	var w := _root.get_viewport_rect().size.x
 	var panel := DebriefPanel.new()
-	panel.rect = Rect2(14, 132, w - 28, 236)
+	var tally := Tally.new()
+	var outcome := score_outcome(_end_stats)
+	tally.setup(_end_stats, outcome[0], outcome[1])
+	panel.rect = Rect2(14, DEBRIEF_TOP, w - 28, TALLY_TOP + tally.needed_height() + 6.0 - DEBRIEF_TOP)
 	_root.add_child(panel)
 	var x := panel.rect.position.x + 10.0
 	var inner := panel.rect.size.x - 20.0
@@ -528,11 +661,13 @@ func _build_end() -> void:
 	typer.add("DEBRIEF", 0.04, func(n: int) -> void: panel.shown = n)
 	# Which mission and setting it was, across from DEBRIEF.
 	var n := int(_end_stats.get("mission", 0))
-	if n >= 1 and n <= Progress.MISSIONS.size() and String(_end_stats.get("setting", "")) != "":
-		panel.tag = "%s / %s" % [Progress.MISSIONS[n - 1]["name"], String(_end_stats["setting"]).to_upper()]
+	var which := String(_end_stats.get("setting", ""))
+	if n >= 1 and n <= Progress.MISSIONS.size() and which != "":
+		panel.tag = "%s / %s" % [Progress.MISSIONS[n - 1]["name"], which.to_upper()]
 	# A new best time (user: the best for each setting), then what getting out opened (user: the
 	# unlocks), under the buttons, typed out after DEBRIEF.
-	var y := 436.0
+	var buttons_y := panel.rect.end.y + 4.0
+	var y := buttons_y + 28.0
 	var lines := PackedStringArray()
 	var best := best_line(bool(_end_stats.get("new_best", false)), float(_end_stats.get("was_best", -1.0)))
 	if best != "":
@@ -545,30 +680,65 @@ func _build_end() -> void:
 		y += 12.0
 	area_typer.delay = RouteMap.DRAW_TIME if map != null else 0.0
 	for t in [typer, area_typer]:
-		t.typed.connect(func() -> void: typed.emit())
 		_root.add_child(t)
-	var tally := Tally.new()
-	tally.rows = Tally.rows_for(_end_stats)
 	tally.delay = maxf(RouteMap.DRAW_TIME + 0.3 if map != null else 0.3, typer.length() + 0.1)
-	tally.position = Vector2(x, 236)
-	tally.size = Vector2(inner, Tally.ROW_H * tally.rows.size())
-	tally.ticked.connect(func() -> void: tally_ticked.emit())
-	tally.landed.connect(func() -> void: tally_landed.emit())
-	tally.typed.connect(func() -> void: typed.emit())
+	tally.position = Vector2(x, TALLY_TOP)
+	tally.size = Vector2(inner, tally.needed_height())
 	_root.add_child(tally)
 	# A tap anywhere but the buttons shows it all at once.
 	var skip := SkipArea.new()
-	skip.pressed.connect(func() -> void:
+	var show_all := func() -> void:
 		typer.finish()
 		area_typer.finish()
 		if map != null:
 			map.finish()
-		tally.skip())
+		tally.skip()
+	skip.pressed.connect(show_all)
 	_root.add_child(skip)
-	var first := _button("RETRY", 380, func() -> void: retry_requested.emit())
-	var second := _button("MAIN MENU", 408, func() -> void: menu_requested.emit())
-	if _end_guard:
-		for b: Button in [first, second]:
+	if _end_done:
+		show_all.call()  # (back from the board or the name entry: as it was left, nothing again)
+	# (its sounds after that, so it's quiet when it's shown at once)
+	for t in [typer, area_typer, tally]:
+		t.typed.connect(func() -> void: typed.emit())
+	tally.ticked.connect(func() -> void: tally_ticked.emit())
+	tally.landed.connect(func() -> void: tally_landed.emit())
+	tally.multiplied.connect(func() -> void: score_multiplied.emit())
+	tally.stamped.connect(func() -> void: score_stamped.emit(tally.outcome_kind))
+	# Once it's all shown: the name entry after a beat, if the run made the board and has no name yet
+	# (user: up to 8 letters on big keys, filled in with CROSS); else it's simply done.
+	tally.finished.connect(func() -> void:
+		_end_done = true
+		if not _name_pending:
+			return
+		var beat := Timer.new()
+		beat.one_shot = true
+		beat.wait_time = NAME_BEAT
+		beat.ignore_time_scale = true
+		beat.process_mode = Node.PROCESS_MODE_ALWAYS
+		tally.add_child(beat)  # (it goes with the screen if that's closed first)
+		beat.timeout.connect(func() -> void:
+			if _screen == Screen.END and _name_pending:
+				_open_name())
+		beat.start())
+	if tally.is_done():
+		_end_done = true
+	# RETRY, BOARD and MAIN MENU side by side (the run's board: the name entry first if its entry has
+	# no name yet; none for a run with no board, the TEST RANGE).
+	var first := _button("RETRY", buttons_y, func() -> void: retry_requested.emit())
+	var second := _button("BOARD", buttons_y, func() -> void:
+		if _name_pending:
+			_open_name()
+		else:
+			open_board(n, which, Screen.END, int(_end_stats.get("seq", 0)) if int(_end_stats.get("rank", 0)) > 0 else 0))
+	var third := _button("MAIN MENU", buttons_y, func() -> void: menu_requested.emit())
+	for i in 3:
+		var b: Button = [first, second, third][i]
+		b.offset_left = -126.0 + i * 86.0
+		b.offset_right = b.offset_left + 80.0
+	var has_board := Progress.is_built(n) and which in RouteGraph.SETTINGS
+	second.disabled = not has_board
+	if _end_guard and not _end_done:
+		for b: Button in [first, second, third]:
 			b.disabled = true
 			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# (the wait is the button's own: it goes with the screen if that's closed first)
@@ -579,13 +749,165 @@ func _build_end() -> void:
 		wait.process_mode = Node.PROCESS_MODE_ALWAYS
 		first.add_child(wait)
 		wait.timeout.connect(func() -> void:
-			for b: Button in [first, second]:
-				b.disabled = false
+			for b: Button in [first, second, third]:
+				b.disabled = b == second and not has_board
 				b.mouse_filter = Control.MOUSE_FILTER_STOP
 			first.grab_focus())
 		wait.start()
 	else:
 		first.grab_focus()
+
+
+## The name entry, for the run's entry on its board.
+func _open_name() -> void:
+	_name = Progress.last_name
+	_name_fresh = true
+	_show(Screen.NAME)
+
+
+## The debrief's panel's top and the tally's (px); the pause after the tally before the name entry
+## opens (s).
+const DEBRIEF_TOP := 132.0
+const TALLY_TOP := 236.0
+const NAME_BEAT := 1.0
+## The name entry's keys (user: "A-Z 0-9 space . -, DEL, OK"), 7 across, as they're laid out; " " is
+## the space key, and OK takes two keys' room.
+const KEY_ROWS := [["A", "B", "C", "D", "E", "F", "G"], ["H", "I", "J", "K", "L", "M", "N"], ["O", "P", "Q", "R", "S", "T", "U"],
+		["V", "W", "X", "Y", "Z", "0", "1"], ["2", "3", "4", "5", "6", "7", "8"], ["9", ".", "-", " ", "DEL", "OK"]]
+## A key's size and the gap between keys (px).
+const KEY_SIZE := Vector2(34, 30)
+const KEY_GAP := 2.0
+
+
+## The name entry's keys' top on a screen `height` high: low on the screen, where a thumb reaches
+## (60 px clear of the bottom), but never up into the name above them.
+static func name_grid_top(height: float) -> float:
+	var grid_h := KEY_ROWS.size() * (KEY_SIZE.y + KEY_GAP) - KEY_GAP
+	return maxf(88.0 + tall_shift(height, 50.0) + 72.0, height - 60.0 - grid_h)
+
+
+## How far down a tall screen moves a menu block (px): half the extra height over 480, up to `most`.
+static func tall_shift(height: float, most: float = 60.0) -> float:
+	return clampf(floorf((height - 480.0) / 2.0), 0.0, most)
+
+
+## The name entry (a run made the board's top 10; user: "names up to 8 letters on big on-screen keys
+## pre-filled with CROSS (last name used after that)"): NEW ENTRY #N, the score, the name in eight
+## slots, and a grid of big keys (A-Z, 0-9, space, full stop, hyphen; DEL, OK), never the phone's
+## own keyboard (it covers half the screen in Safari). A computer's keyboard types too. OK saves the
+## name and opens the board, the entry blinking on it. Skipped (RETRY or MAIN MENU before it opened),
+## the entry keeps the name it was filled in with.
+func _build_name() -> void:
+	var rank := int(_end_stats.get("rank", 0))
+	_header("NEW ENTRY #%d" % rank, "ENTER YOUR NAME")
+	var size := _root.get_viewport_rect().size
+	var top := name_grid_top(size.y) - 72.0  # (the score and the name just above the keys)
+	var n := int(_end_stats.get("mission", 0))
+	var which := String(_end_stats.get("setting", ""))
+	_place_wide(UiKit.label(Score.format(int(_end_stats.get("score", 0))), 16, UiKit.AMBER, HORIZONTAL_ALIGNMENT_CENTER), top)
+	if n >= 1 and n <= Progress.MISSIONS.size():
+		_place_wide(UiKit.label("%s / %s" % [Progress.MISSIONS[n - 1]["name"], which.to_upper()], 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), top + 20.0)
+	var slots := NameSlots.new()
+	slots.text = _name
+	slots.position = Vector2(roundf((size.x - NameSlots.width()) / 2.0), top + 36.0)
+	slots.size = Vector2(NameSlots.width(), NameSlots.H)
+	_root.add_child(slots)
+	var grid_top := name_grid_top(size.y)
+	var left := roundf((size.x - (7.0 * KEY_SIZE.x + 6.0 * KEY_GAP)) / 2.0)
+	var ok: KeyCap = null
+	for r in KEY_ROWS.size():
+		var col := 0
+		for k: String in KEY_ROWS[r]:
+			var cap := KeyCap.new()
+			cap.key = k
+			var cells := 2 if k == "OK" else 1
+			cap.position = Vector2(left + col * (KEY_SIZE.x + KEY_GAP), grid_top + r * (KEY_SIZE.y + KEY_GAP))
+			cap.size = Vector2(KEY_SIZE.x * cells + KEY_GAP * (cells - 1), KEY_SIZE.y)
+			cap.pressed.connect(func() -> void:
+				clicked.emit()
+				press_key(k))
+			_root.add_child(cap)
+			if k == "OK":
+				ok = cap
+			col += cells
+	var keys := NameKeys.new()
+	keys.typed.connect(func(k: String) -> void:
+		clicked.emit()
+		press_key(k))
+	_root.add_child(keys)
+	ok.grab_focus()
+
+
+## The scoreboard: mission n's top 10 on a setting (the cast's entries and his: Progress.board), each
+## with its place, name, score, ending and the highest alert in its colour; never the route (LOCKED:
+## areas you haven't found stay unknown). EASY / MEDIUM / HARD switch it; his entries are teal, the one
+## just entered blinks. BACK goes where it was opened from.
+func _build_board() -> void:
+	var n := _board_mission
+	_header("HIGH SCORES", "MISSION %02d: %s" % [n, Progress.MISSIONS[n - 1]["name"]])
+	var size := _root.get_viewport_rect().size
+	var tab_w := floorf((size.x - 28.0 - 2.0 * 6.0) / 3.0)
+	var focus: Button = null
+	for i in RouteGraph.SETTINGS.size():
+		var s: String = RouteGraph.SETTINGS[i]
+		var tab := BoardTab.new()
+		tab.setting = s
+		tab.on = s == _board_setting
+		tab.position = Vector2(14.0 + i * (tab_w + 6.0), BOARD_TABS)
+		tab.size = Vector2(tab_w, 16)
+		tab.pressed.connect(func() -> void:
+			clicked.emit()
+			if s != _board_setting:
+				_board_setting = s
+				_board_flash = 0 if _board_back != Screen.END or s != String(_end_stats.get("setting", "")) else _board_flash
+				_show(Screen.BOARD)
+				var again := board_tab(s)
+				if again != null:
+					again.grab_focus())
+		_root.add_child(tab)
+		if tab.on:
+			focus = tab
+	var step := board_step(size.y)
+	var entries := Progress.board(n, _board_setting)
+	for i in entries.size():
+		var e: Dictionary = entries[i]
+		var row := BoardRow.new()
+		row.rank = i + 1
+		row.entry = e
+		row.mine = not e["house"]
+		row.flash = row.mine and _board_flash > 0 and int(e["seq"]) == _board_flash
+		row.position = Vector2(14, BOARD_ROWS + i * step)
+		row.size = Vector2(size.x - 28, step - 4.0)
+		_root.add_child(row)
+	var back := _button("BACK", BOARD_ROWS + Progress.BOARD_SIZE * step + 4.0, func() -> void:
+		if _board_back == Screen.END:
+			_show(Screen.END)  # (as it was left: _end_done)
+		else:
+			_open(_board_back))
+	(focus if focus != null else back).grab_focus()
+
+
+## The board's switch and its first row (px).
+const BOARD_TABS := 88.0
+const BOARD_ROWS := 112.0
+
+
+## How far apart the board's rows are (px) on a screen `height` high (BACK under the last).
+static func board_step(height: float) -> float:
+	return clampf(floorf((height - BOARD_ROWS - 40.0) / Progress.BOARD_SIZE), 28.0, 40.0)
+
+
+## The board's switch for `setting` (while it's up), else null.
+func board_tab(setting: String) -> Button:
+	for c in _root.get_children():
+		if c is BoardTab and not c.is_queued_for_deletion() and c.setting == setting:
+			return c
+	return null
+
+
+## The board's rows (while it's up), top first.
+func board_rows() -> Array:
+	return _root.get_children().filter(func(c: Node) -> bool: return c is BoardRow and not c.is_queued_for_deletion())
 
 
 # --- Building blocks ------------------------------------------------------------------
@@ -959,8 +1281,9 @@ class SettingChip extends Button:
 	var built := true
 	var open := false
 	var cleared := false
-	## His best time on it (s; < 0: none yet).
+	## His best time on it (s; < 0: none yet), and his top score on its board (< 0: none yet).
 	var best := -1.0
+	var score := -1
 	## The setting to clear to open it ("" for EASY).
 	var needs := ""
 
@@ -1026,8 +1349,188 @@ class SettingChip extends Button:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.DIM, 0.9))
 		draw_string(f, Vector2(right - f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x, top + 26.0), t,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.AMBER if best >= 0.0 else Color(UiKit.DIM, 0.6))
+		# Under it, his top score on its board (the scoreboard: "--" until he has one).
+		var pts := "%s PTS" % Score.format(score) if score >= 0 else "-- PTS"
+		draw_string(f, Vector2(right - f.get_string_size(pts, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x, top + 40.0), pts,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.TEAL if score >= 0 else Color(UiKit.DIM, 0.6))
 
 	## A block's shape: the box with its top leaning `slant` right of its bottom.
 	static func lean(r: Rect2, slant: float) -> PackedVector2Array:
 		return PackedVector2Array([r.position + Vector2(slant, 0.0), Vector2(r.end.x, r.position.y),
 				r.end - Vector2(slant, 0.0), Vector2(r.position.x, r.end.y)])
+
+
+## The name entry's name: eight slots in a row, a letter (16 px) in each so far, the next slot's
+## underline blinking (the cursor).
+class NameSlots extends Control:
+	const SLOT := Vector2(20, 22)
+	const GAP := 4.0
+	const H := 22.0
+	var text := ""
+	var _t := 0.0
+
+	static func width() -> float:
+		return Progress.NAME_MAX * (SLOT.x + GAP) - GAP
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var f := UiKit.font()
+		for i in Progress.NAME_MAX:
+			var r := Rect2(i * (SLOT.x + GAP), 0, SLOT.x, SLOT.y)
+			draw_rect(r, Color(0.03, 0.08, 0.09, 0.92))
+			var cursor := i == text.length()
+			var line := UiKit.TEAL if cursor and fmod(_t, 0.8) < 0.5 else UiKit.TEAL_DIM
+			draw_rect(Rect2(r.position.x, r.end.y - 2.0, r.size.x, 2.0), line)
+			if i < text.length():
+				var ch := text[i]
+				var w := f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+				draw_string(f, Vector2(r.position.x + roundf((r.size.x - w) / 2.0) + 1.0, r.position.y + 17.0), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.PAPER)
+
+
+## One of the name entry's big keys: a slanted block like the game's other buttons, its letter in
+## 16 px (SP for the space; DEL; OK in red).
+class KeyCap extends Button:
+	const SLANT := 3.0
+	var key := "A"
+
+	func _ready() -> void:
+		flat = true
+		text = ""
+		focus_mode = Control.FOCUS_ALL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	func _draw() -> void:
+		var mode := get_draw_mode()
+		var fill := Color(0.03, 0.08, 0.09, 0.92)
+		var edge := UiKit.TEAL_DIM
+		var ink := UiKit.PAPER
+		if key == "OK":
+			fill = Color(0.24, 0.06, 0.04, 0.95)
+			edge = UiKit.RED
+		if mode in [DRAW_PRESSED, DRAW_HOVER_PRESSED]:
+			fill = Color(0.35, 0.08, 0.05, 0.95)
+			edge = UiKit.RED
+		elif has_focus() or mode == DRAW_HOVER:
+			fill = Color(0.45, 0.1, 0.06, 0.95) if key == "OK" else Color(0.05, 0.16, 0.16, 0.95)
+			edge = UiKit.PAPER if key == "OK" else UiKit.TEAL
+			ink = UiKit.PAPER if key == "OK" else UiKit.TEAL
+		var shape := SettingChip.lean(Rect2(Vector2.ZERO, size), SLANT)
+		draw_colored_polygon(shape, fill)
+		var line := shape.duplicate()
+		line.append(shape[0])
+		draw_polyline(line, edge, 1.0)
+		var f := UiKit.font()
+		var label: String = {" ": "SP"}.get(key, key)
+		var px := 16 if label.length() == 1 else 8
+		var w := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+		draw_string(f, Vector2(roundf((size.x - w) / 2.0) + 1.0, roundf(size.y / 2.0) + (7.0 if px == 16 else 4.0)), label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, px, ink)
+
+
+## A computer's keyboard on the name entry: letters, numbers, space, full stop and hyphen type;
+## Backspace is DEL, Enter is OK.
+class NameKeys extends Node:
+	signal typed(key: String)
+
+	func _input(event: InputEvent) -> void:
+		var k := event as InputEventKey
+		if k == null or not k.pressed or k.echo:
+			return
+		var out := ""
+		match k.keycode:
+			KEY_BACKSPACE, KEY_DELETE:
+				out = "DEL"
+			KEY_ENTER, KEY_KP_ENTER:
+				out = "OK"
+			_:
+				var ch := String.chr(k.unicode).to_upper() if k.unicode > 0 else ""
+				if ch.length() == 1 and Progress.NAME_CHARS.contains(ch):
+					out = ch
+		if out != "":
+			get_viewport().set_input_as_handled()
+			typed.emit(out)
+
+
+## The board's EASY / MEDIUM / HARD switch: a small slanted tab, filled teal when it's the one shown.
+class BoardTab extends Button:
+	var setting := "easy"
+	var on := false
+
+	func _ready() -> void:
+		flat = true
+		text = ""
+		focus_mode = Control.FOCUS_ALL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	func _draw() -> void:
+		var mode := get_draw_mode()
+		var fill := UiKit.TEAL if on else Color(0.03, 0.08, 0.09, 0.92)
+		var edge := UiKit.TEAL if on else UiKit.TEAL_DIM
+		var ink := UiKit.INK if on else UiKit.PAPER
+		if mode in [DRAW_PRESSED, DRAW_HOVER_PRESSED]:
+			fill = Color(0.35, 0.08, 0.05, 0.95)
+			edge = UiKit.RED
+			ink = UiKit.PAPER
+		elif not on and (has_focus() or mode == DRAW_HOVER):
+			edge = UiKit.TEAL
+			ink = UiKit.TEAL
+		var shape := SettingChip.lean(Rect2(Vector2.ZERO, size), 4.0)
+		draw_colored_polygon(shape, fill)
+		var line := shape.duplicate()
+		line.append(shape[0])
+		draw_polyline(line, edge, 1.0)
+		if has_focus() and on:
+			draw_polyline(line, UiKit.PAPER, 1.0)
+		var f := UiKit.font()
+		var label := setting.to_upper()
+		var w := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+		draw_string(f, Vector2(roundf((size.x - w) / 2.0) + 1.0, 11.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
+
+
+## One place on the board: its number on a slanted block, the name and the score; under them, how
+## the run ended and its highest alert (in its colour). His own entries are teal; the one just
+## entered blinks. Never the route (LOCKED).
+class BoardRow extends Control:
+	## How each ending reads (the end conversations' tags).
+	const ENDINGS := {"extracted": ["EXFIL COMPLETE", UiKit.GREEN], "killed": ["AGENT DOWN", UiKit.RED],
+			"captured": ["AGENT CAPTURED", UiKit.AMBER], "chopper_left": ["METER RAN OUT", UiKit.RED], "dead_end": ["NO WAY THROUGH", UiKit.RED]}
+	var rank := 1
+	var entry := {}
+	var mine := false
+	var flash := false
+	var _t := 0.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(delta: float) -> void:
+		if flash:
+			_t += delta
+			queue_redraw()
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		UiKit.panel(self, r, UiKit.TEAL if mine else UiKit.TEAL_DIM, Color(0.04, 0.12, 0.12, 0.95) if mine else UiKit.PANEL_SOLID, 6.0)
+		var f := UiKit.font()
+		var mid := roundf(size.y / 2.0)
+		var block := Rect2(8.0, mid - 7.0, 23.0, 13.0)
+		draw_colored_polygon(SettingChip.lean(block, 3.0), UiKit.TEAL if mine else UiKit.RED)
+		draw_string(f, Vector2(block.position.x + 5.0, mid + 3.0), "%02d" % rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.INK)
+		var lit := not flash or fmod(_t, 0.6) < 0.4
+		var ink := UiKit.TEAL if mine else UiKit.PAPER
+		if lit:
+			draw_string(f, Vector2(40.0, mid - 2.0), String(entry.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
+			var score := Score.format(int(entry.get("score", 0)))
+			draw_string(f, Vector2(0, mid - 2.0), score, HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, UiKit.AMBER)
+		var end: Array = ENDINGS.get(String(entry.get("ending", "")), [String(entry.get("ending", "")).to_upper(), UiKit.DIM])
+		draw_string(f, Vector2(40.0, mid + 9.0), end[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(end[1], 0.8))
+		var alert := clampi(int(entry.get("alert", 1)), 1, 3)
+		draw_string(f, Vector2(0, mid + 9.0), Tally.ALERT_NAMES[alert], HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, Tally.ALERT_COLORS[alert])

@@ -66,6 +66,15 @@ extends Node
 ##   ground_alarms - main route, runs through both wires, shoots every alarm box: back to Alert 1
 ##   stumble_once - main route, but runs straight into the first barrier: a stumble (1 HP, a
 ##                  little time), not the end of the run
+##   halfway      - main route, but from the SECURITY WING on it stops shooting, jumping and sliding:
+##                  killed half way to the pad (the cast's "killed halfway" board entry)
+##   scoreboard   - as ground (straight on, MEDIUM), SKIP in the end conversation, then the debrief:
+##                  the SCORE line rolls up to the run's score (x2 MEDIUM, NEW BEST: a fresh save);
+##                  the name entry opens after it (its place on the board with the cast), filled in
+##                  with CROSS; it taps B, O, X, DEL, T, OK on the big keys (BOT); the board must open
+##                  with BOT blinking in its place; it taps EASY (the cast's board only), then BACK
+##                  (the debrief, as it was), and BOT must be in the save on the device. RESULT ends
+##                  board=ok(#place NAME)
 ##   dog_bite     - (test range) runs through the lobby wire (Alert 2: the dogs come out), main
 ##                  route, never shoots the EXIT's guard dog and holds its lane when
 ##                  it charges: bitten (a hit and a stumble), and still gets out
@@ -118,7 +127,7 @@ const COVER_AT := 22.0
 ## The bots that stay on after the run for the end-of-mission conversation and the debrief, and how
 ## they get through the conversation: tap through every line, or SKIP.
 const TALK := {"naive": "tapped", "naive_skip": "skipped", "ground": "tapped", "boss_skip": "skipped", "miss_ladder": "tapped",
-		"squad_caught": "skipped", "camper": "tapped", "boss_hold_fire": "skipped"}
+		"squad_caught": "skipped", "camper": "tapped", "boss_hold_fire": "skipped", "scoreboard": "skipped"}
 
 var scenario := "ground"
 ## The mission's setting it plays (--setting=easy|medium|hard).
@@ -152,6 +161,9 @@ var _death_report := ""
 ## TALK: watching the end-of-mission conversation and the debrief opening after it, and the verdict.
 var _talk := {}
 var _talk_report := ""
+## scoreboard: watching the debrief's SCORE line, the name entry and the board after it, and the verdict.
+var _board := {}
+var _board_report := ""
 ## menu_start / intro_skip: watching the menu, START, the pan and the run's first second, and what
 ## it found.
 var _intro := {}
@@ -401,7 +413,9 @@ func _physics_process(_delta: float) -> void:
 			_player.handle_swipe(Vector2i.RIGHT if best > _player.lane else Vector2i.LEFT)
 			_cooldown = 5
 
-	# Jumping and sliding.
+	# Jumping and sliding (halfway: from the WING on, it runs into everything).
+	if scenario == "halfway" and _gave_up():
+		return
 	for o: Dictionary in obstacles:
 		if o["done"] or absf(o["x"] - _player.track_x) > 0.8:
 			continue
@@ -485,6 +499,12 @@ func _watch_ko() -> bool:
 	return false
 
 
+## halfway: from the SECURITY WING on (half way to the pad on the main route), it neither shoots
+## nor jumps nor slides: killed, half way there.
+func _gave_up() -> bool:
+	return _level._runner.current in [&"security_wing", &"staff_canteen", &"main_floor_exit", &"helipad"]
+
+
 ## Hold FIRE while there's something worth shooting.
 func _shoot() -> void:
 	if scenario == "boss_tap" and _player.standoff:
@@ -510,6 +530,8 @@ func _shoot() -> void:
 		want = target != null and not target is SecurityTrooper  # let him go
 	if target is RusherDog and scenario in ["dog_bite", "dog_dodge"] and _level._runner.current == &"main_floor_exit":
 		want = false  # leave the EXIT's dog to bite or be dodged (shoot the rest)
+	if scenario == "halfway" and _gave_up():
+		want = false  # (halfway: from the WING on it stops shooting)
 	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
 		want = false  # prove the cover works: only shoot once we're behind it...
 	if scenario == "cover" and _player.in_cover and _cover_frames < 90:
@@ -571,6 +593,7 @@ func _on_end(reason: StringName) -> void:
 func _process(_delta: float) -> void:
 	_watch_intro()
 	_watch_talk()
+	_watch_board()
 	if _death.is_empty() or _death.has("done"):
 		return
 	var d := _death
@@ -748,7 +771,9 @@ func _talk_verdict(t: Dictionary) -> void:
 	var ok: bool = String(t["bad"]) == "" and n >= 3 and read_ok
 	_talk_report = " talk=%s/%s/%s" % [t["reason"], t["how"], "ok" if ok else "bad(lines %d/%d tapped %d skipped %d open %d dead %d closed %d debrief %d%s)" % [
 			t["lines"], n, t["tapped"], t["skipped"], t["open_f"], t["dead_f"], t["closed_f"], t["debrief_f"], t["bad"]]]
-	if _death.is_empty():
+	if scenario == "scoreboard" and not _talk_report.contains("bad"):
+		_board = {"f": 0, "step": 0, "bad": "", "reason": String(t["reason"])}  # (it reports once it's been through the board)
+	elif _death.is_empty():
 		_report(String(t["reason"]))
 
 
@@ -943,9 +968,109 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved])
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved]
+			+ _score_report() + _board_report)
+	# The run's raw tally for the cast's board entries (tests/house/make_house.sh collects these).
+	var st: Dictionary = _level.last_stats
+	if not st.is_empty():
+		print("HOUSE " + JSON.stringify({"scenario": scenario, "route": route, "setting": _level._graph.setting, "ending": reason,
+				"score": int(st["score"]), "raw": Score.raw_of(st)}))
 	_remove_save_files()
 	get_tree().quit()
+
+
+## scoreboard, every frame after the debrief opens (see the top): the SCORE line, the name entry,
+## the board, back to the debrief, the save. Taps go in as a phone's would (_click).
+func _watch_board() -> void:
+	if _board.is_empty() or _board.has("done"):
+		return
+	var b := _board
+	b["f"] += 1
+	var f: int = b["f"]
+	var fe = _level._frontend
+	var st: Dictionary = _level.last_stats
+	if f > 60 * 40:
+		_board_verdict("timeout-at-step-%d" % b["step"])
+		return
+	match int(b["step"]):
+		0:  # the debrief: its SCORE line, to the run's score, then the name entry
+			for n in fe.find_children("*", "", true, false):
+				if n is Tally and not n.is_queued_for_deletion() and n.is_done():
+					b["seen"] = [n.shown_score(), n.mult_text(), n.outcome]
+			if fe.in_name_entry():
+				var seen: Array = b.get("seen", [])
+				if seen.size() != 3 or int(seen[0]) != int(st["score"]) or seen[1] != "x2 MEDIUM" or not String(seen[2]).begins_with("NEW BEST"):
+					_board_bad("score-line(%s)" % [seen])
+				if fe.name_text() != "CROSS":
+					_board_bad("filled-with-%s" % fe.name_text())
+				b["step"] = 1
+				b["at"] = f
+		1:  # B, O, X, DEL, T, OK on the big keys, a tap every 8 frames
+			var keys := ["B", "O", "X", "DEL", "T", "OK"]
+			var i := (f - int(b["at"])) / 8
+			if (f - int(b["at"])) % 8 == 7 and i < keys.size():
+				var cap: Button = fe.key_cap(keys[i])
+				if cap == null:
+					_board_bad("no-key-%s" % keys[i])
+				else:
+					_click(cap.get_global_rect().get_center())
+				if keys[i] == "OK":
+					b["step"] = 2
+					b["at"] = f
+		2:  # the board, BOT blinking in its place; then EASY
+			if f - int(b["at"]) < 4:
+				return
+			var flash: Array = fe.board_rows().filter(func(r: Node) -> bool: return r.flash)
+			if not fe.in_board() or fe.board_shown() != [1, "medium"] or flash.size() != 1 or flash[0].rank != int(st["rank"]) or flash[0].entry["name"] != "BOT":
+				_board_bad("board(%s)" % [fe.board_shown()])
+			var easy: Button = fe.board_tab("easy")
+			if easy != null:
+				_click(easy.get_global_rect().get_center())
+			b["step"] = 3
+			b["at"] = f
+		3:  # EASY's board: the cast's only; then BACK
+			if f - int(b["at"]) < 4:
+				return
+			if fe.board_shown() != [1, "easy"] or fe.board_rows().any(func(r: Node) -> bool: return r.mine) or fe.board_rows().size() != 10:
+				_board_bad("easy(%s)" % [fe.board_shown()])
+			for btn in fe.find_children("*", "Button", true, false):
+				if (btn as Button).text == "BACK" and not btn.is_queued_for_deletion():
+					_click((btn as Button).get_global_rect().get_center())
+			b["step"] = 4
+			b["at"] = f
+		4:  # the debrief as it was left; BOT in the save on the device
+			if f - int(b["at"]) < 4:
+				return
+			if not fe.in_debrief():
+				_board_bad("back-not-to-debrief")
+			var saved = JSON.parse_string(SaveFile.read_text(Progress.save_path))
+			var mine: Array = saved.get("boards", {}).get("1:medium", []) if saved is Dictionary else []
+			if mine.size() != 1 or mine[0]["name"] != "BOT" or int(mine[0]["score"]) != int(st["score"]) or saved.get("name") != "BOT":
+				_board_bad("save(%s)" % [mine])
+			_board_verdict("")
+
+
+func _board_bad(what: String) -> void:
+	if not String(_board["bad"]).contains(what):
+		_board["bad"] += " " + what
+
+
+func _board_verdict(extra: String) -> void:
+	if extra != "":
+		_board_bad(extra)
+	_board["done"] = true
+	var st: Dictionary = _level.last_stats
+	_board_report = " board=" + ("ok(#%d BOT)" % int(st.get("rank", 0)) if String(_board["bad"]) == "" else "bad(%s)" % String(_board["bad"]).strip_edges())
+	_report(String(_board["reason"]))
+
+
+## RESULT's score=: the run's score (Score, from its tally, x the setting), dist= (whole metres) and
+## rank= (its place on the mission's board with the cast; 0 off it, - with no board).
+func _score_report() -> String:
+	var st: Dictionary = _level.last_stats
+	if st.is_empty():
+		return " score=none"
+	return " score=%d dist=%d rank=%s" % [int(st["score"]), Score.metres(st), str(st["rank"]) if int(st.get("mission", 0)) >= 1 else "-"]
 
 
 ## menu_start / intro_skip, every frame from the menu to a second into the run: START 2.3 s in

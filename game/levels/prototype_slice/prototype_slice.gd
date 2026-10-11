@@ -352,6 +352,9 @@ var _boss_fight: Boss = null
 ## The boss's minigun pattern (his free lanes, his sweeps' directions): -1, a new one every run; the
 ## bots set one, so their runs repeat.
 var boss_seed := -1
+## The last run's debrief numbers as it ended (its tally, score and board place: _on_run_ended), for
+## the bots.
+var last_stats: Dictionary = {}
 ## The boss's KO replay (KoReplay; user): which shot is on (0..2; -1 when it isn't), its shots, real
 ## seconds into it and into this shot, whether it was skipped; and what it gives back at the end:
 ## whether the chopper's clock was running, and the camera's field of view. The camera cuts back
@@ -583,6 +586,10 @@ func _ready() -> void:
 	# The end screen's tally counting up, Doom style: a tick per step, a thunk as each row lands.
 	_frontend.tally_ticked.connect(func() -> void: _audio.play("tick", -6.0, 0.04, "UI"))
 	_frontend.tally_landed.connect(func() -> void: _audio.play("thunk", -3.0, 0.03, "UI"))
+	# The SCORE line: the multiplier lands with a heavier thunk; NEW BEST stamps in with a slap.
+	_frontend.score_multiplied.connect(func() -> void: _audio.play("thunk", 1.0, 0.0, "UI"))
+	_frontend.score_stamped.connect(func(kind: String) -> void:
+		_audio.play("mag_slap" if kind == "new_best" else "tick", -1.0 if kind == "new_best" else -4.0, 0.0, "UI"))
 	_frontend.typed.connect(func() -> void: _audio.play("tick", -8.0, 0.05, "UI"))
 	_frontend.briefing_cue.connect(func(sound: String, db: float) -> void: _audio.play(sound, db, 0.0, "UI"))
 	_frontend.debrief_opened.connect(_on_debrief_opened)
@@ -10412,13 +10419,20 @@ func _on_run_ended(reason: StringName) -> void:
 	# the settings, as each one changed). Got out: the unlocks (user: mission N+1 on this setting and
 	# every easier one, and this mission's next setting up) and his best time here (the run time of
 	# his fastest extraction). The debrief says what opened, and NEW BEST.
+	# The score (Score, from the tally: the decision log's "Scoring and the scoreboard"), whatever the
+	# ending, and onto the mission's board for this setting (Progress: its top 10 with the cast), under
+	# the name last used (the name entry renames it after the debrief).
 	var n := Progress.mission_number(StringName(_graph.mission().get("mission", "")))
 	stats["mission"] = n
 	stats["setting"] = _graph.setting
-	var rec: Dictionary = Progress.record_run(n, _graph.setting, reason, _clock.elapsed)
+	stats["distance"] = maxf(0.0, _player.distance_run())
+	var rec: Dictionary = Progress.record_run(n, _graph.setting, reason, _clock.elapsed, stats)
 	stats["unlocked"] = rec["unlocked"]
 	stats["new_best"] = rec["new_best"]
 	stats["was_best"] = rec["was"]
+	for k in ["score", "rank", "seq", "new_best_score", "score_was"]:
+		stats[k] = rec[k]
+	last_stats = stats
 	if reason == GameState.END_KILLED and _player.dying:
 		# Killed: his death plays out first (user), and he lies still a moment.
 		_player.died.connect(func() -> void:
