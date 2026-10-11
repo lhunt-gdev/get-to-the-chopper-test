@@ -1,7 +1,7 @@
 class_name SoldierRig
 extends Node3D
 ## The player character, Ernest Cross, codename CROSS (user). A PS1-style low-poly model (3,000
-## triangles, a 512 texture) made from the user's Meshy model of their turnaround sheet: rebuilt
+## triangles, a 512 texture) made from the user's high-poly model of their turnaround sheet: rebuilt
 ## into one clean skin, reduced, unwrapped and its colours baked on, then rigged with the game's 19
 ## joints and smooth skin weights, all in Blender (scripts in art_source/operative/tools).
 ##

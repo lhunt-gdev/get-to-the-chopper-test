@@ -63,6 +63,13 @@ var last_name := DEFAULT_NAME
 var _seq := 1
 ## The cast's entries from each mission's route file, by "N:setting" (read once).
 var _house_cache := {}
+## The demo pass (the decision log's "The demo pass"): the first-time tips already shown (FirstTips
+## ids -> true: each is shown once, ever, on this device; SETTINGS' SHOW AGAIN clears them), whether
+## the end-of-demo screen has been shown (once, after his first escape on any setting; CREDITS
+## opens it again), and whether the iPhone's ADD TO HOME SCREEN tip has been shown (once).
+var _tips_seen := {}
+var demo_end_seen := false
+var ios_tip_seen := false
 
 ## A board's size, the name the first entry is filled in with, the longest name, and the letters a
 ## name can have (the name entry's keys: A-Z, 0-9, space, full stop, hyphen).
@@ -352,6 +359,51 @@ func remember_pick(n: int, setting: String) -> void:
 		save()
 
 
+## Whether the first-time tip `id` (FirstTips) has been shown on this device.
+func tip_seen(id: String) -> bool:
+	return _tips_seen.has(id)
+
+
+## The tip `id` has been shown: never again (until SHOW AGAIN). Saved at once.
+func mark_tip(id: String) -> void:
+	if not _tips_seen.has(id):
+		_tips_seen[id] = true
+		save()
+
+
+## SETTINGS' SHOW AGAIN: every tip shown again on the next run. Saved at once.
+func reset_tips() -> void:
+	if not _tips_seen.is_empty():
+		_tips_seen.clear()
+		save()
+
+
+func tips_seen() -> Array:
+	var out := _tips_seen.keys()
+	out.sort()
+	return out
+
+
+## Whether the end-of-demo screen is due: he's got out of a mission (on any setting) and hasn't seen
+## it yet.
+func demo_end_due() -> bool:
+	return not demo_end_seen and not _cleared.is_empty()
+
+
+## The end-of-demo screen has been shown (once; CREDITS opens it again). Saved at once.
+func mark_demo_end() -> void:
+	if not demo_end_seen:
+		demo_end_seen = true
+		save()
+
+
+## The iPhone's ADD TO HOME SCREEN tip has been shown (once). Saved at once.
+func mark_ios_tip() -> void:
+	if not ios_tip_seen:
+		ios_tip_seen = true
+		save()
+
+
 ## A fresh start: only mission 1 EASY.
 func reset() -> void:
 	from_data({})
@@ -370,7 +422,8 @@ func to_data() -> Dictionary:
 	for k in _boards:
 		if not _boards[k].is_empty():
 			boards[k] = _boards[k].duplicate(true)
-	return {"version": 3, "unlocked": u, "cleared": c, "best": b, "last": last, "boards": boards, "name": last_name, "seq": _seq}
+	return {"version": 4, "unlocked": u, "cleared": c, "best": b, "last": last, "boards": boards, "name": last_name, "seq": _seq,
+			"tips": tips_seen(), "demo_end": demo_end_seen, "ios_tip": ios_tip_seen}
 
 
 ## From a save (as to_data gives it). Anything it can't read (a missing or broken file, a key that
@@ -387,7 +440,18 @@ func from_data(data: Variant) -> void:
 	last = FIRST
 	last_name = DEFAULT_NAME
 	_seq = 1
+	_tips_seen.clear()
+	demo_end_seen = false
+	ios_tip_seen = false
 	if data is Dictionary:
+		# (the demo pass's, version 4; an older save has none: every tip still to show)
+		var tips = data.get("tips")
+		if tips is Array:
+			for t in tips:
+				if t is String or t is StringName:
+					_tips_seen[String(t)] = true
+		demo_end_seen = data.get("demo_end") == true
+		ios_tip_seen = data.get("ios_tip") == true
 		for list in [["unlocked", _unlocked], ["cleared", _cleared]]:
 			var keys = data.get(list[0])
 			if keys is Array:

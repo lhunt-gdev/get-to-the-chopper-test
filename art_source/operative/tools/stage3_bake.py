@@ -1,6 +1,6 @@
 # Stage 3: a clean low-poly character (CHAR, as in stage 1). The 20k working copy is remeshed into one closed skin,
 # reduced to the target triangle count, unwrapped, and the working copy's colours are baked onto
-# a fresh texture for it (the standard game-art route: Meshy's surface is loose overlapping pieces
+# a fresh texture for it (the standard game-art route: the high-poly surface is loose overlapping pieces
 # that don't reduce cleanly on their own).
 import bpy, sys, os, mathutils
 sys.path.append(os.path.dirname(__file__))

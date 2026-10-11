@@ -3,7 +3,7 @@
 The guard dog's source files (the user's design: a German Shepherd in a tactical vest). Godot
 ignores this folder.
 
-- `dog.glb`: the Meshy model (about 822,000 triangles, 30 MB). It isn't committed (see
+- `dog.glb`: the high-poly source model (about 822,000 triangles, 30 MB). It isn't committed (see
   `.gitignore`), so keep your own copy.
 - `work/`: what the build makes along the way (not committed).
 

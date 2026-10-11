@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds CROSS for the game from his Meshy model (art_source/operative/ernest-cross.glb) into
+# Builds CROSS for the game from his high-poly source model (art_source/operative/ernest-cross.glb) into
 # game/player (cross.glb, cross.json). See build_character.sh for the stages.
 # Usage (from the project root): art_source/operative/tools/build_cross.sh [tris=3000] [tex=512]
 set -euo pipefail

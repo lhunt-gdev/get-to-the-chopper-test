@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds a character for the game from its Meshy model, end to end, and puts him in the game.
-#   SOURCE.glb (the Meshy model, ~0.5-1.3M triangles; its work files go in work/ beside it)
+# Builds a character for the game from its high-poly source model, end to end, and puts him in the game.
+#   SOURCE.glb (the high-poly source model, ~0.5-1.3M triangles; its work files go in work/ beside it)
 #     -> stage1_reduce.py   work/<name>_20k.blend           on the ground, a 20k working copy
 #     -> stage1b_apose.py   (only with "apose": a T-pose model's arms lowered to the A-pose)
 #     -> stage3_bake.py     work/<name>_low_<tris>.blend    remeshed, reduced, unwrapped, colours baked
@@ -10,7 +10,7 @@
 #     -> OUT_DIR/<name>.glb + OUT_DIR/<name>.json           (the model, and his lens positions)
 # Usage (from the project root):
 #   art_source/operative/tools/build_character.sh NAME SOURCE.glb OUT_DIR [tris=3000] [tex=512] [apose]
-#   e.g. build_character.sh guard art_source/guard/guard-meshy.glb game/enemies/guard 3000 512 apose
+#   e.g. build_character.sh guard art_source/guard/guard-source.glb game/enemies/guard 3000 512 apose
 # Set BLENDER to Blender's exe if it isn't in the default place. Run the game's import afterwards
 # (Godot does it when the editor opens, or: godot --headless --path . --import).
 set -euo pipefail

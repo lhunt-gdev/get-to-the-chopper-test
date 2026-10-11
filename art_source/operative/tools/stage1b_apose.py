@@ -1,4 +1,4 @@
-# Stage 1b (only for a character Meshy made in a T-pose, arms straight out): lower his arms to the
+# Stage 1b (only for a character model made in a T-pose, arms straight out): lower his arms to the
 # A-pose the rig expects (stage 4 and SoldierRig: the upper arms about 22 degrees out from hanging,
 # like CROSS), once, on the 20k working copy, before the remesh and bake.
 #

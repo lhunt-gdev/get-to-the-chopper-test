@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the scout for the game from his Meshy model (art_source/scout/scout.glb, made in a
+# Builds the scout for the game from his high-poly source model (art_source/scout/scout.glb, made in a
 # T-pose, so his arms are lowered to the A-pose first) into game/enemies/scout (scout.glb, scout.json).
 # See build_character.sh for the stages.
 # Usage (from the project root): art_source/operative/tools/build_scout.sh [tris=3000] [tex=512]

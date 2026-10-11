@@ -1,6 +1,6 @@
 class_name DogRig
 extends Node3D
-## The guard dog (the user's Meshy German Shepherd in a tactical vest), a PS1-style low-poly model
+## The guard dog (the German Shepherd model in a tactical vest), a PS1-style low-poly model
 ## (3,000 triangles, a 512 texture) rigged with a dog's 19 bones (hips, spine, chest, neck, head, two
 ## in the tail, and three in each leg) by art_source/operative/tools/build_dog.sh, about 0.72 m at
 ## the shoulder.

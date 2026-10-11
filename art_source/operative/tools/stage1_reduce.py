@@ -1,4 +1,4 @@
-# Stage 1: import a character's Meshy model, stand him on the ground,
+# Stage 1: import a character's high-poly source model, stand him on the ground,
 # save his colour texture, and reduce him to a 20k-triangle working copy.
 # CHAR (environment) names the character's files and objects: "cross" (the default), "guard"...
 import bpy, sys, math, os

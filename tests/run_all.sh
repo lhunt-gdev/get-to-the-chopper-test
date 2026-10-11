@@ -105,6 +105,13 @@ expect roof_calm   "reason=extracted alert=1 route=$R > HELIPAD | covers=0 hits=
 expect late_switch "reason=extracted alert=1 route=$G | covers=0 hits=0" "$NONE" "boss=1/0/" "ko=3/0/ok"
 # cover holds fire until it's in cover (the LOBBY's crate), kills the guard from there, goes on.
 expect cover       "reason=extracted alert=1 route=$G | covers=1 hits=0 missed=1" "$NONE" "boss=1/0/" "ko=3/0/ok"
+# The first-time tips (FirstTips; the decision log's "The demo pass"): every other bot plays without
+# them; tips plays as cover does, with them on, from a fresh save: each of the eight shown once (change
+# lane, jump, slide, cover, leaving it, FIRE, the tripwire, the doors), its card up while it is, none up
+# past 8 s (it taps one up 4 s), normal speed again within a second of each, and the run still gets
+# out unhurt (not to the tenth of a cover run: its waits in cover count frames, which pass sooner in
+# slowed time).
+expect tips        "reason=extracted alert=1 route=$G | covers=1 hits=0" "$NONE" "boss=1/0/" "ko=3/0/ok" "tips=8/ok"
 # camper never leaves cover: the chopper leaves without him (gone at 106 s).
 expect camper      "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | covers=1" "time=106.0" "talk=chopper_left/tapped/ok"
 # Both wires, no boxes: ALERT, and still no squad in mission 1.

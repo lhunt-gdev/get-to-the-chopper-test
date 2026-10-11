@@ -35,7 +35,16 @@ signal score_stamped(kind: String)
 ## MISSIONS: the mission select, after MISSION SELECT; MISSION: one mission's screen after it (its
 ## EASY / MEDIUM / HARD, each with his best time). NAME: the name entry, when a run makes a board's
 ## top 10; BOARD: a mission's scoreboard (from the debrief, the mission's screen, HIGH SCORES).
-enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION, NAME, BOARD }
+## CREDITS: from the main menu (the maker, the engine, how it was made); LICENCES: the Godot Engine's
+## licence and its third parties' notices, scrolling (from CREDITS); DEMO_END: the end-of-demo screen
+## (once, after his first escape, between the debrief and RETRY or MAIN MENU; from CREDITS after that).
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION, NAME, BOARD, CREDITS, LICENCES, DEMO_END }
+
+## Where to follow the game, for the end-of-demo screen (user: fill it in, e.g. "ITCH.IO/HOT-EXFIL" or a
+## social handle; nothing shows while it's empty).
+const FOLLOW_AT := ""
+## The game's maker, for CREDITS (the developer's name, from git).
+const MADE_BY := "LUKE HUNT"
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
@@ -69,6 +78,16 @@ var _name := ""
 var _name_fresh := true
 var _root: Control
 var _dim: ColorRect
+## The end-of-demo screen after his first escape (false: never; the bots don't leave the debrief anyway).
+var demo_end := true
+## What the end-of-demo screen's CONTINUE does (RETRY or MAIN MENU, as pressed on the debrief), and
+## whether it was opened from CREDITS instead (its button is BACK then).
+var _demo_then: Callable
+var _demo_from_credits := false
+## The iPhone's ADD TO HOME SCREEN tip on the main menu: forced on (renders, tests), and whether it's
+## up now.
+static var force_ios_tip := false
+var _ios_tip: IosTip = null
 
 
 func _ready() -> void:
@@ -359,6 +378,12 @@ func _show(s: Screen) -> void:
 			_build_board()
 		Screen.BRIEFING, Screen.END_TALK:
 			_build_briefing()
+		Screen.CREDITS:
+			_build_credits()
+		Screen.LICENCES:
+			_build_licences()
+		Screen.DEMO_END:
+			_build_demo_end()
 
 
 # --- Screens --------------------------------------------------------------------------
@@ -402,8 +427,24 @@ func _build_main() -> void:
 		open_board(n if Progress.is_built(n) else 1, Progress.last.get_slice(":", 1), Screen.MAIN))
 	_button("SETTINGS", 346, func() -> void: _open(Screen.SETTINGS))
 	_button("CONTROLS", 374, func() -> void: _open(Screen.CONTROLS))
-	_place_wide(UiKit.label("PROOF OF CONCEPT BUILD", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
+	# CREDITS: a small text button under the four (user: keep the menu uncrowded).
+	var credits := _button("CREDITS", 404, func() -> void: _open(Screen.CREDITS))
+	credits.theme_type_variation = "CompactButton"
+	credits.offset_left = -36
+	credits.offset_right = 36
+	credits.offset_bottom = 404 + 15
+	_place_wide(UiKit.label("DEMO", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
 	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
+	_ios_tip = null
+	if not Progress.ios_tip_seen and (force_ios_tip or ios_tip_here()):
+		# Once (user: the first time the menu shows in Safari on an iPhone), then remembered.
+		Progress.mark_ios_tip()
+		_ios_tip = IosTip.new()
+		_root.add_child(_ios_tip)
+		_ios_tip.pressed.connect(func() -> void:
+			clicked.emit()
+			_ios_tip.queue_free()
+			_ios_tip = null)
 	first.grab_focus()
 
 
@@ -600,6 +641,7 @@ func _build_settings() -> void:
 	y = _choice_row("AIM", "aim", AIM_NAMES, y)
 	y = _choice_row("TRIGGER", "fire_side", {"right": "RIGHT", "left": "LEFT"}, y)
 	y = _choice_row("SWIPE", "swipe", SWIPE_NAMES, y)
+	y = _tips_row(y)
 	# RESET and BACK side by side, under the rows.
 	var reset := _button("RESET", y + 10, func() -> void:
 		Settings.reset()
@@ -724,13 +766,13 @@ func _build_end() -> void:
 		_end_done = true
 	# RETRY, BOARD and MAIN MENU side by side (the run's board: the name entry first if its entry has
 	# no name yet; none for a run with no board, the TEST RANGE).
-	var first := _button("RETRY", buttons_y, func() -> void: retry_requested.emit())
+	var first := _button("RETRY", buttons_y, func() -> void: _leave_debrief(func() -> void: retry_requested.emit()))
 	var second := _button("BOARD", buttons_y, func() -> void:
 		if _name_pending:
 			_open_name()
 		else:
 			open_board(n, which, Screen.END, int(_end_stats.get("seq", 0)) if int(_end_stats.get("rank", 0)) > 0 else 0))
-	var third := _button("MAIN MENU", buttons_y, func() -> void: menu_requested.emit())
+	var third := _button("MAIN MENU", buttons_y, func() -> void: _leave_debrief(func() -> void: menu_requested.emit()))
 	for i in 3:
 		var b: Button = [first, second, third][i]
 		b.offset_left = -126.0 + i * 86.0
@@ -910,6 +952,239 @@ func board_rows() -> Array:
 	return _root.get_children().filter(func(c: Node) -> bool: return c is BoardRow and not c.is_queued_for_deletion())
 
 
+# --- The demo: the end-of-demo screen, CREDITS, LICENCES, the iPhone's saves tip ----------
+
+## RETRY or MAIN MENU on the debrief: after his first escape (on any setting), the end-of-demo screen
+## first, once (its CONTINUE then does what was pressed); otherwise straight on.
+func _leave_debrief(then: Callable) -> void:
+	if demo_end and Progress.demo_end_due():
+		Progress.mark_demo_end()
+		open_demo_end(then)
+		return
+	then.call()
+
+
+## The end-of-demo screen: CONTINUE does `then` (from the debrief); with no `then`, it's from CREDITS
+## and its button goes BACK there.
+func open_demo_end(then: Callable = Callable()) -> void:
+	_demo_then = then
+	_demo_from_credits = not then.is_valid()
+	_show(Screen.DEMO_END)
+
+
+func in_demo_end() -> bool:
+	return _screen == Screen.DEMO_END
+
+
+func in_credits() -> bool:
+	return _screen == Screen.CREDITS
+
+
+func in_licences() -> bool:
+	return _screen == Screen.LICENCES
+
+
+## The end-of-demo screen (the decision log's "The demo pass"): THANKS FOR PLAYING THE HOT EXFIL DEMO,
+## that more missions are coming (the eight jobs still to come for CONDOR, by name, from the mission
+## select's list), where to follow the game (FOLLOW_AT; nothing while it's empty), and CONTINUE (or
+## BACK, from CREDITS).
+func _build_demo_end() -> void:
+	var size := _root.get_viewport_rect().size
+	var top := tall_shift(size.y, 40.0)
+	var heads := demo_end_lines()
+	# THANKS FOR PLAYING / THE HOT EXFIL DEMO in the dossier header, the game's logo under it.
+	_root.add_child(HeaderBar.new())
+	_place_wide(UiKit.label(heads[0], 16, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 44)
+	_place_wide(UiKit.label(heads[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), 66)
+	var logo := Logo.new()
+	_place_wide(logo, 86 + top)
+	logo.offset_bottom = 86 + top + Logo.height()
+	var y := 86.0 + top + Logo.height() + 14.0
+	_place_wide(UiKit.label(heads[2], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), y)
+	_place_wide(UiKit.label(heads[3], 8, UiKit.AMBER, HORIZONTAL_ALIGNMENT_CENTER), y + 13.0)
+	# The jobs to come, on a codec panel, each COMING SOON.
+	var coming := coming_missions()
+	var box := Box.new()
+	box.position = Vector2(26, y + 30.0)
+	box.size = Vector2(size.x - 52, 12.0 + coming.size() * 12.0)
+	_root.add_child(box)
+	for i in coming.size():
+		var l := UiKit.label(String(coming[i]), 8, UiKit.DIM)
+		l.position = box.position + Vector2(12, 8 + i * 12.0)
+		_root.add_child(l)
+		var soon := UiKit.label("SOON", 8, Color(UiKit.TEAL, 0.7))
+		soon.position = box.position + Vector2(box.size.x - 12 - 24, 8 + i * 12.0)
+		_root.add_child(soon)
+	y = box.position.y + box.size.y + 14.0
+	var follow := follow_lines()
+	for i in follow.size():
+		_place_wide(UiKit.label(follow[i], 8, UiKit.PAPER if i == 0 else UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), y)
+		y += 12.0
+	var button_y := maxf(y + 12.0, 410.0 + top)
+	var b := _button("BACK" if _demo_from_credits else "CONTINUE", button_y, func() -> void:
+		if _demo_from_credits:
+			_open(Screen.CREDITS)
+		elif _demo_then.is_valid():
+			_demo_then.call())
+	b.grab_focus()
+
+
+## The lines across the end-of-demo screen's top (the tests read them).
+static func demo_end_lines() -> PackedStringArray:
+	return PackedStringArray(["THANKS FOR PLAYING", "THE HOT EXFIL DEMO", "MORE MISSIONS ARE ON THE WAY:", "EIGHT MORE JOBS FOR CONDOR"])
+
+
+## The missions still to come, as the end-of-demo screen lists them ("02 SHORT LEASH"...): every one
+## not built yet.
+static func coming_missions() -> PackedStringArray:
+	var out := PackedStringArray()
+	for i in Progress.MISSIONS.size():
+		if not Progress.is_built(i + 1):
+			out.append("%02d %s" % [i + 1, Progress.MISSIONS[i]["name"]])
+	return out
+
+
+## Where to follow the game (FOLLOW_AT): its two lines, or none while it's empty.
+static func follow_lines(at: String = FOLLOW_AT) -> PackedStringArray:
+	if at.strip_edges() == "":
+		return PackedStringArray()
+	return PackedStringArray(["FOLLOW THE GAME:", at.strip_edges().to_upper()])
+
+
+## CREDITS (from the main menu): who made it, the engine it's made with (its licence under
+## LICENCES, as the Godot licence asks), how its art and sound were made; LICENCES, THE DEMO (the
+## end-of-demo screen again) and BACK.
+func _build_credits() -> void:
+	_header("CREDITS", "HOT EXFIL DEMO")
+	var top := tall_shift(_root.get_viewport_rect().size.y, 40.0)
+	var y := 92.0 + top
+	for block: Array in credit_blocks():
+		_place_wide(UiKit.label(String(block[0]), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), y)
+		_place_wide(UiKit.label(String(block[1]), 16, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), y + 12.0)
+		y += 34.0
+		for extra in block.slice(2):
+			_place_wide(UiKit.label(String(extra), 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), y)
+			y += 12.0
+		y += 10.0
+	_button("LICENCES", y + 6.0, func() -> void: _open(Screen.LICENCES))
+	_button("THE DEMO", y + 34.0, func() -> void: open_demo_end())
+	_button("BACK", y + 62.0, func() -> void: _open(Screen.MAIN)).grab_focus()
+
+
+## What CREDITS says, a block at a time: [its label, its headline, any lines under it].
+static func credit_blocks() -> Array:
+	return [
+		["A GAME BY", MADE_BY],
+		["MADE WITH", "GODOT ENGINE", "GODOTENGINE.ORG", "MIT LICENCE: SEE LICENCES"],
+		["LEVELS, TEXTURES, SOUND, MUSIC", "MADE IN CODE", "CHARACTERS MADE WITH BLENDER"],
+	]
+
+
+## LICENCES: as the Godot licence asks of a game made with it, its notice ("THIS GAME USES GODOT
+## ENGINE, AVAILABLE UNDER THE FOLLOWING LICENSE:" and the licence text, from the engine itself, so it
+## stays right whatever version it's exported with), then the third parties' notices inside the
+## engine (each component's name, its copyright lines and its licence: Engine.get_copyright_info())
+## and their licences' full texts (Engine.get_license_info()), scrolling (a drag, or the wheel).
+## Built a few paragraphs a frame (LicenceView), so it opens at once.
+func _build_licences() -> void:
+	_header("LICENCES", "GODOT ENGINE + THIRD PARTIES")
+	var size := _root.get_viewport_rect().size
+	var view := LicenceView.new()
+	view.position = Vector2(12, 84)
+	view.size = Vector2(size.x - 24, size.y - 84 - 34)
+	_root.add_child(view)
+	_button("BACK", size.y - 28, func() -> void: _open(Screen.CREDITS)).grab_focus()
+
+
+## The licence screen's text, paragraph by paragraph ([text, colour] pairs): the Godot notice and
+## licence, the third parties' notices, then their licences' texts. In the pixel font's letters
+## (licence_text()).
+static func licence_paragraphs() -> Array:
+	var out: Array = []
+	out.append(["THIS GAME USES GODOT ENGINE, AVAILABLE UNDER THE FOLLOWING LICENSE:", UiKit.TEAL])
+	for p in Engine.get_license_text().split("\n\n"):
+		if p.strip_edges() != "":
+			out.append([licence_text(p), UiKit.PAPER])
+	out.append(["THIRD-PARTY NOTICES", UiKit.TEAL])
+	out.append([licence_text("Godot Engine includes software by third parties under their own licences, compatible with the MIT licence:"), UiKit.DIM])
+	for c: Dictionary in Engine.get_copyright_info():
+		var lines := PackedStringArray([String(c.get("name", ""))])
+		for part: Dictionary in c.get("parts", []):
+			for who in part.get("copyright", []):
+				lines.append("(C) " + String(who) + ".")
+			lines.append("LICENCE: " + String(part.get("license", "")) + ".")
+		out.append([licence_text(" ".join(lines)), UiKit.PAPER])
+	out.append(["LICENCE TEXTS", UiKit.TEAL])
+	var info := Engine.get_license_info()
+	var names := info.keys()
+	names.sort()
+	for k in names:
+		out.append([licence_text(String(k)), UiKit.AMBER])
+		for p in String(info[k]).split("\n\n"):
+			if p.strip_edges() != "":
+				out.append([licence_text(p), UiKit.PAPER])
+	return out
+
+
+## Text as the pixel font draws it: the copyright sign as (C), a backtick as ', a backslash as /, the lines inside a paragraph joined
+## (the label wraps it to the screen), and anything else it has no letter for left out.
+static func licence_text(t: String) -> String:
+	var s := t.replace("©", "(C)").replace("`", "'").replace("\\", "/").replace("\r", "")
+	var lines := s.split("\n")
+	for i in lines.size():
+		lines[i] = lines[i].strip_edges()
+	s = " ".join(lines).strip_edges()
+	var out := ""
+	for ch in s:
+		var code := ch.unicode_at(0)
+		if code >= 32 and code <= 126:
+			out += ch
+	while out.contains("  "):
+		out = out.replace("  ", " ")
+	return out
+
+
+## The iPhone's saves tip (user): only in Safari on an iPhone or iPad, and never once it's running
+## from the Home Screen (there it keeps its saves: Safari can clear a site's saves after about a week
+## unvisited). What the browser says about itself, read through JavaScriptBridge; never on any other
+## platform or browser.
+static func ios_tip_here() -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var js := "JSON.stringify({ua: navigator.userAgent || '', sa: navigator.standalone === true, " \
+			+ "dm: !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches), tp: navigator.maxTouchPoints || 0})"
+	var got = JavaScriptBridge.eval(js, true)
+	var info = JSON.parse_string(String(got)) if got is String else null
+	if not info is Dictionary:
+		return false
+	return ios_tip_wanted(String(info.get("ua", "")), bool(info.get("sa", false)), bool(info.get("dm", false)), int(info.get("tp", 0)))
+
+
+## The tip's rule, from what the browser says: `ua` its user agent, `standalone` navigator.standalone
+## (true from the Home Screen), `display_standalone` the display-mode: standalone media query, and
+## `touch_points` navigator.maxTouchPoints. Safari on iOS only: an iPhone, iPod or iPad (an iPad asks
+## for the desktop site with a Mac's user agent, so a "Macintosh" with a touch screen counts), with
+## Safari's Version/ and Safari/ marks and none of the other iOS browsers' or apps' (Chrome, Firefox,
+## Edge, Opera, DuckDuckGo, Google, Yandex, and the in-app ones of Facebook, Instagram and others);
+## and not from the Home Screen.
+static func ios_tip_wanted(ua: String, standalone: bool, display_standalone: bool, touch_points: int) -> bool:
+	if standalone or display_standalone:
+		return false
+	var ios := ua.contains("iPhone") or ua.contains("iPad") or ua.contains("iPod") or (ua.contains("Macintosh") and touch_points > 1)
+	if not ios or not ua.contains("Safari/") or not ua.contains("Version/"):
+		return false
+	for other in ["CriOS", "FxiOS", "EdgiOS", "OPiOS", "OPT/", "DuckDuckGo", "GSA/", "YaBrowser", "FBAN", "FBAV", "Instagram",
+			"Line/", "Twitter", "Snapchat", "TikTok", "musical_ly", "Pinterest", "LinkedInApp"]:
+		if ua.contains(other):
+			return false
+	return true
+
+
+## The iPhone's saves tip, up on the main menu.
+func ios_tip_up() -> bool:
+	return _ios_tip != null and is_instance_valid(_ios_tip) and not _ios_tip.is_queued_for_deletion()
+
+
 # --- Building blocks ------------------------------------------------------------------
 
 func _open(s: Screen) -> void:
@@ -979,6 +1254,35 @@ func _toggle_row(text: String, key: String, y: float) -> float:
 		clicked.emit()
 		Settings.set_value(key, not bool(Settings.get_value(key)))
 		b.text = "ON" if Settings.get_value(key) else "OFF")
+	return y + 22.0
+
+
+## SETTINGS' TIPS row (the first-time tips: FirstTips): ON / OFF, and SHOW AGAIN, which brings every
+## tip back for the next run (and turns them on).
+func _tips_row(y: float) -> float:
+	_row_label("TIPS", y)
+	var toggle := Button.new()
+	toggle.text = "ON" if Settings.get_value("tips") else "OFF"
+	toggle.theme_type_variation = "CompactButton"
+	_root.add_child(toggle)
+	toggle.position = Vector2(192, y - 1)
+	toggle.size = Vector2(48, 15)
+	toggle.pressed.connect(func() -> void:
+		clicked.emit()
+		Settings.set_value("tips", not bool(Settings.get_value("tips")))
+		toggle.text = "ON" if Settings.get_value("tips") else "OFF")
+	var again := Button.new()
+	again.text = "SHOW AGAIN"
+	again.theme_type_variation = "CompactButton"
+	_root.add_child(again)
+	again.position = Vector2(104, y - 1)
+	again.size = Vector2(80, 15)
+	again.pressed.connect(func() -> void:
+		clicked.emit()
+		Progress.reset_tips()
+		Settings.set_value("tips", true)
+		toggle.text = "ON"
+		again.text = "DONE")
 	return y + 22.0
 
 
@@ -1534,3 +1838,109 @@ class BoardRow extends Control:
 		draw_string(f, Vector2(40.0, mid + 9.0), end[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(end[1], 0.8))
 		var alert := clampi(int(entry.get("alert", 1)), 1, 3)
 		draw_string(f, Vector2(0, mid + 9.0), Tally.ALERT_NAMES[alert], HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, Tally.ALERT_COLORS[alert])
+
+
+## A plain codec panel (the end-of-demo screen's list of the jobs to come).
+class Box extends Control:
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		UiKit.panel(self, Rect2(Vector2.ZERO, size), UiKit.TEAL_DIM, UiKit.PANEL, 6.0)
+
+
+## The iPhone's saves tip on the main menu (user: "ADD TO HOME SCREEN TO KEEP YOUR PROGRESS", with the
+## share icon): a small codec panel across the top of the screen, over the swaying camera and clear of
+## the title and the buttons, with an X; a tap on it closes it.
+class IosTip extends Button:
+	const TOP := 6.0
+	const H := 50.0
+	var _t := 0.0
+
+	func _ready() -> void:
+		flat = true
+		focus_mode = Control.FOCUS_NONE
+		text = ""
+		var w := get_viewport_rect().size.x
+		position = Vector2(8, TOP)
+		size = Vector2(w - 16, H)
+		add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+		add_theme_stylebox_override("hover", StyleBoxEmpty.new())
+		add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+		add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	## Its lines (the tests read them): the headline, then how.
+	static func lines() -> PackedStringArray:
+		return PackedStringArray(["ADD TO HOME SCREEN", "TO KEEP YOUR PROGRESS", "TAP", "THEN ADD TO HOME SCREEN"])
+
+	func _draw() -> void:
+		var f := UiKit.font()
+		var r := Rect2(Vector2.ZERO, size)
+		UiKit.panel(self, r, UiKit.AMBER, Color(UiKit.PANEL, 0.94), 6.0)
+		var ls := lines()
+		# ADD TO HOME SCREEN / TO KEEP YOUR PROGRESS, an X to close it (a tap anywhere on it does).
+		draw_string(f, Vector2(10, 13), ls[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.AMBER)
+		draw_string(f, Vector2(size.x - 16, 13), "X", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+		draw_string(f, Vector2(10, 25), ls[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
+		# TAP [share] THEN ADD TO HOME SCREEN: Safari's share icon, a box with an arrow up out of it.
+		var x := 10.0
+		draw_string(f, Vector2(x, 41), ls[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+		x += f.get_string_size(ls[2] + " ", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+		share_icon(self, Vector2(x + 5, 37), UiKit.TEAL, 0.5 + 0.5 * sin(_t * 4.0))
+		x += 16.0
+		draw_string(f, Vector2(x, 41), ls[3], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+
+	## Safari's share icon round `c`: an open-topped box with an arrow rising out of it (bob: 0..1,
+	## the arrow's lift).
+	static func share_icon(ci: CanvasItem, c: Vector2, col: Color, bob: float = 0.0) -> void:
+		var box := PackedVector2Array([c + Vector2(-2, -3), c + Vector2(-5, -3), c + Vector2(-5, 5), c + Vector2(5, 5), c + Vector2(5, -3), c + Vector2(2, -3)])
+		ci.draw_polyline(box, col, 1.0)
+		var lift := -roundf(bob)
+		ci.draw_line(c + Vector2(0, 2 + lift), c + Vector2(0, -7 + lift), col, 1.0)
+		ci.draw_polyline(PackedVector2Array([c + Vector2(-3, -4 + lift), c + Vector2(0, -7 + lift), c + Vector2(3, -4 + lift)]), col, 1.0)
+
+
+## The licence screen's text (Frontend.licence_paragraphs()), in a scrolling column: a drag (touch, or
+## the mouse) or the wheel scrolls it; its paragraphs are added a few a frame so the screen opens at
+## once.
+class LicenceView extends ScrollContainer:
+	const PER_FRAME := 12
+	var _box: VBoxContainer
+	var _todo: Array = []
+
+	func _ready() -> void:
+		horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_box = VBoxContainer.new()
+		_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_box.add_theme_constant_override("separation", 6)
+		add_child(_box)
+		_todo = Frontend.licence_paragraphs()
+		_add(PER_FRAME * 2)
+
+	func _process(_delta: float) -> void:
+		if not _todo.is_empty():
+			_add(PER_FRAME)
+
+	func _add(n: int) -> void:
+		for i in mini(n, _todo.size()):
+			var p: Array = _todo.pop_front()
+			var l := UiKit.label(String(p[0]), 8, p[1])
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(size.x - 10.0, 0)
+			_box.add_child(l)
+
+	## Whether every paragraph is in (the tests).
+	func is_built() -> bool:
+		return _todo.is_empty()
+
+	## All of it, as shown.
+	func text() -> String:
+		var out := PackedStringArray()
+		for l in _box.get_children():
+			out.append((l as Label).text)
+		return "\n".join(out)

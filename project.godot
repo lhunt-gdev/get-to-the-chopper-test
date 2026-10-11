@@ -6,7 +6,7 @@ config_version=5
 [application]
 
 config/name="HOT EXFIL"
-config/description="HOT EXFIL: a PS1-style action runner for your phone. Fight your way out and reach the chopper before it lifts off. Proof-of-concept build."
+config/description="HOT EXFIL: a PS1-style action runner for your phone. Fight your way out and reach the chopper before it lifts off. Demo."
 run/main_scene="res://game/levels/prototype_slice/prototype_slice.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 

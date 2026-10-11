@@ -60,6 +60,11 @@ func _run() -> void:
 	_test_cross_death()
 	await _test_blood_setting()
 	await _test_settings_screen()
+	_test_first_tips()
+	await _test_tips_setting()
+	await _test_demo_end()
+	await _test_credits()
+	await _test_ios_tip()
 	_test_end_typing()
 	_test_briefing()
 	_test_end_talk()
@@ -74,7 +79,21 @@ func _run() -> void:
 	await _test_locked_doors()
 	await _test_targeting_priority()
 	print("%d checks, %d failed" % [_checks, _failures])
+	await _settle_audio(root)
 	quit(1 if _failures > 0 else 0)
+
+
+## Before the run quits (or a level made here goes): every sound under `node` stopped, then a few
+## moments for the audio server to let their playbacks go, so nothing is left over at exit ("ObjectDB
+## instances leaked at exit": the playbacks of sounds still playing as the test quit).
+func _settle_audio(node: Node) -> void:
+	for p in node.find_children("*", "", true, false):
+		if p is AudioStreamPlayer or p is AudioStreamPlayer3D or p is AudioStreamPlayer2D:
+			p.stop()
+			p.stream = null
+	# (headless, the audio is mixed on its own clock, not the frames': give it real time)
+	await create_timer(0.3, true, false, true).timeout
+	await process_frame
 
 
 func _check(cond: bool, msg: String) -> void:
@@ -1158,7 +1177,8 @@ func _test_end_talk() -> void:
 	fe.debrief_opened.connect(func(reason: StringName) -> void: opened.append(reason))
 	fe.show_end(&"dead_end", {}, Briefing.conversation(data, "dead_end"))
 	_check(fe.in_debrief() and opened.size() == 1 and opened[0] == &"dead_end", "end talk: no conversation for dead_end: the debrief at once (%s)" % [opened])
-	# RETRY and MAIN MENU on the debrief, as before.
+	# RETRY and MAIN MENU on the debrief, as before (the end-of-demo screen aside: _test_demo_end).
+	fe.demo_end = false
 	var asked := {"retry": 0, "menu": 0}
 	fe.retry_requested.connect(func() -> void: asked["retry"] += 1)
 	fe.menu_requested.connect(func() -> void: asked["menu"] += 1)
@@ -2099,6 +2119,22 @@ func _test_cutout_figures(live: GuardRig, eye: Vector3, feet: Vector3) -> void:
 	var shader := lit_code.contains("uniform bool cutout_floor = true;") and lit_code.contains("FRAGCOORD.xy, cutout_floor)") 			and inc.contains("(keep_floor && at.y <= cutout_misc.x)") and PsxMaterials.GLASS_SHADER.code.contains("FRAGCOORD.xy, true)")
 	_check(figures >= 3 and to_floor and level_floor and boot_cut > 0.5 and floor_kept == 0.0 and shader,
 			"the cutout: a guard or a dog between the camera and CROSS dissolves all the way down (%d materials, boots and paws: %.2f of a boot cut), while the level's floor under him stays (%.2f)" % [figures, boot_cut, floor_kept])
+	# The rim (user: the dissolve left faint dithered legs of a live guard at the rim near the lens): a
+	# figure goes all at once inside the hole, its dithered rim and the fade near his depth included,
+	# and is whole outside it; the level's surfaces (walls, props) keep the dithered edge as they were.
+	var chest := Cutout.centre(feet, 0.0)
+	var depth := eye.distance_to(chest)
+	var side := (chest - eye).cross(Vector3.UP).normalized()
+	var pt := func(s: float, k: float) -> Vector3: return eye + (chest - eye) * s + side * (Cutout.RADIUS * k * s)
+	var fade_s := (depth - Cutout.MARGIN - 0.5 * Cutout.DEPTH_FADE) / depth
+	var rim: Vector3 = pt.call(0.5, 0.9)
+	var edge: Vector3 = pt.call(0.5, 0.99)
+	var out: Vector3 = pt.call(0.5, 1.05)
+	var deep: Vector3 = pt.call(fade_s, 0.2)
+	var figure_ok := _cut_cover(rim, false) == 1.0 and _cut_cover(edge, false) == 1.0 and _cut_cover(deep, false) == 1.0 and _cut_cover(out, false) == 0.0
+	var wall_ok := _cut_cover(rim, true) > 0.2 and _cut_cover(rim, true) < 0.5 and _cut_cover(deep, true) > 0.3 and _cut_cover(deep, true) < 0.7 and _cut_cover(out, true) == 0.0
+	var code_ok := inc.contains("if (!keep_floor) {") and inc.contains("return d < 1.0;") and inc.contains("float cover = clamp((1.0 - d) * cutout_misc.w, 0.0, 1.0) * min(near, 1.0);")
+	_check(figure_ok and wall_ok and code_ok, "the cutout: a guard or a dog goes all at once inside the hole, rim and depth fade included (no dithered legs left at the rim), whole outside it; walls and props keep the dithered edge (rim %.2f, fade %.2f)" % [_cut_cover(rim, true), _cut_cover(deep, true)])
 	# Down: solid, his rifle and his radio too; the boss killed; a dog shot.
 	var radio := MeshInstance3D.new()
 	radio.mesh = BoxMesh.new()
@@ -2141,6 +2177,8 @@ func _cut_cover(p: Vector3, keep_floor := true) -> float:
 	if near <= 0.0 or along <= 0.01:
 		return 0.0
 	var d := (v / along - f).length() * Cutout.fwd.w
+	if not keep_floor:
+		return 1.0 if d < 1.0 else 0.0  # (a figure: all of it inside the hole, rim and all)
 	return clampf((1.0 - d) * Cutout.misc.w, 0.0, 1.0) * minf(near, 1.0)
 
 
@@ -2828,6 +2866,7 @@ func _test_locked_doors() -> void:
 		await _locked_doors_walk(level, gs, zone)
 		await _locked_door_checks(level, gs)
 	_check(await _squad_at_alert_3(level, gs) == 5, "squad switch: on the test range, ALERT sends the squad after him (5)")
+	await _settle_audio(level)
 	level.queue_free()
 	await process_frame
 	# Mission 1: the SECURITY WING's two doors, one each side of the one split. The basement stairs
@@ -2841,6 +2880,7 @@ func _test_locked_doors() -> void:
 	# Mission 1 has the basics only ("squad": false): ALERT sends nobody after him.
 	var squad := await _squad_at_alert_3(level, gs)
 	_check(squad == 0 and not level._squad_on, "squad switch: in mission 1, ALERT sends no squad (%d)" % squad)
+	await _settle_audio(level)
 	level.queue_free()
 	await process_frame
 	gs.alert_level = was_alert
@@ -4410,7 +4450,7 @@ func _test_best_times() -> void:
 			"best times: the test range (no mission) and a setting that isn't one keep none")
 	# Kept in the save, and read back the same.
 	var data: Dictionary = p.to_data()
-	_check(data["version"] == 3 and data["best"] is Dictionary and is_equal_approx(float(data["best"]["1:easy"]), 81.4) and data["best"].size() == 2,
+	_check(data["version"] == 4 and data["best"] is Dictionary and is_equal_approx(float(data["best"]["1:easy"]), 81.4) and data["best"].size() == 2,
 			"best times: in the save, by mission and setting (%s)" % [data["best"]])
 	var q: Node = P.new()
 	q.from_data(JSON.parse_string(JSON.stringify(data)))
@@ -5026,6 +5066,373 @@ func _test_score_screens() -> void:
 	fe.show_end(&"extracted", {"time": 50.0, "distance": 100.0, "spare": 3.0, "mission": 0, "setting": "", "score": 51300, "rank": 0, "seq": 0})
 	await process_frame
 	_check(_menu_button(fe, "BOARD").disabled, "debrief: no board for the test range (BOARD off)")
+	fe.free()
+	prog.from_data(saved)
+	prog.save_path = saved_path
+
+
+## Whether the pixel font has a letter for every character of `text` (UiKit.GLYPHS; lower case draws as
+## upper).
+func _font_has(text: String) -> bool:
+	for ch in text.to_upper():
+		if not UiKit.GLYPHS.has(ch):
+			return false
+	return true
+
+
+## The first-time tips (FirstTips; the decision log's "The demo pass"): each at its moment and in its
+## order (change lane just through the door with room ahead; jump, slide and the tripwire's once it's
+## the next thing in his lane and close, never too close to act; cover; FIRE with a guard to shoot;
+## the doors near the junction with nothing left before it), never while a guard's aiming at him (but
+## FIRE's) or in cover (but leaving it); each gone when he does what it says, or the moment's passed;
+## the game slowed for it, never stopped (the hold down to MIN_SCALE right where a swipe clears it,
+## the rest gently, the doors' gently on top of the junction's slowdown); each shown once, ever,
+## remembered in the save (SHOW AGAIN clears them; an old save has none seen); TIPS on by default, a
+## SETTINGS row with SHOW AGAIN; the card's lines in letters the font has, inside it, on both phone
+## sizes, clear of the clock, the junction's prompt and the FIRE trigger.
+func _test_first_tips() -> void:
+	var settings: Node = root.get_node("Settings")
+	var prog: Node = root.get_node("Progress")
+	_check(settings.DEFAULTS.get("tips") == true, "tips: SETTINGS' TIPS on by default")
+	var at := func(more: Dictionary) -> Dictionary:
+		var s := {"seen": {}, "d": 20.0, "lane": 2, "gap": INF, "next": "", "in_cover": false, "airborne": false, "sliding": false,
+				"aimed_at": false, "target": false, "firing": false, "split": INF, "clear_to_split": false}
+		s.merge(more, true)
+		return s
+	var all_but := func(id: String) -> Dictionary:
+		var seen := {}
+		for k in FirstTips.ORDER:
+			if k != id:
+				seen[k] = true
+		return seen
+	_check(FirstTips.pick(at.call({"d": 1.0, "gap": 18.0, "next": "jump"})) == "lane" and FirstTips.pick(at.call({"d": 1.0, "gap": 6.0, "next": "jump"})) == "jump",
+			"tips: CHANGE LANE first, just through the door with room ahead in his lane (else what's ahead)")
+	var picks := {
+		"jump": [{"next": "jump", "gap": 10.0}, {"next": "jump", "gap": 20.0}, {"next": "jump", "gap": 3.2}],
+		"slide": [{"next": "slide", "gap": 10.0}, {"next": "slide", "gap": 16.0}, {"next": "slide", "gap": 3.0}],
+		"alert": [{"next": "jump_or_alert", "gap": 12.0}, {"next": "jump_or_alert", "gap": 30.0}, {"next": "jump", "gap": 12.0}],
+		"cover": [{"next": "cover", "gap": 12.0}, {"next": "cover", "gap": 20.0}, {"next": "cover", "gap": 2.0}],
+		"cover_out": [{"in_cover": true}, {"in_cover": false}, {"in_cover": false, "next": "cover", "gap": 1.0}],
+		"fire": [{"target": true, "gap": 20.0}, {"target": false, "gap": 20.0}, {"target": true, "gap": 5.0}],
+		"doors": [{"split": 20.0, "clear_to_split": true}, {"split": 40.0, "clear_to_split": true}, {"split": 20.0, "clear_to_split": false}],
+	}
+	for id: String in picks:
+		var cases: Array = picks[id]
+		var seen: Dictionary = all_but.call(id)
+		_check(FirstTips.pick(at.call(cases[0].merged({"seen": seen}))) == id and FirstTips.pick(at.call(cases[1].merged({"seen": seen}))) == ""
+				and FirstTips.pick(at.call(cases[2].merged({"seen": seen}))) == "",
+				"tips: %s at its moment, not too early nor too late (too close to act on) or for something else" % id.to_upper())
+	var seen_all_but_jump: Dictionary = all_but.call("jump")
+	_check(FirstTips.pick(at.call({"seen": seen_all_but_jump, "next": "jump", "gap": 10.0, "aimed_at": true})) == ""
+			and FirstTips.pick(at.call({"seen": all_but.call("fire"), "target": true, "gap": 20.0, "aimed_at": true})) == "fire"
+			and FirstTips.pick(at.call({"seen": seen_all_but_jump, "next": "jump", "gap": 10.0, "airborne": true})) == ""
+			and FirstTips.pick(at.call({"seen": all_but.call("doors"), "split": 20.0, "clear_to_split": true, "in_cover": true})) == "",
+			"tips: never mid-danger: none while a guard's aiming at him (but FIRE's: a guard's what it's about), mid-jump, or in cover (but leaving it)")
+	var every := {}
+	for k in FirstTips.ORDER:
+		every[k] = true
+	_check(FirstTips.pick(at.call({"seen": every, "in_cover": true, "target": true, "gap": 10.0, "next": "jump", "split": 10.0, "clear_to_split": true})) == "",
+			"tips: none once each has been shown")
+	_check(FirstTips.pick(at.call({"in_cover": true, "d": 1.0, "gap": 30.0})) == "cover_out", "tips: leaving cover first, while he's in it")
+	_check(FirstTips.pick(at.call({"in_cover": true, "gap": 0.5, "target": true})) == "fire" and FirstTips.pick(at.call({"seen": {"fire": true}, "in_cover": true, "gap": 0.5, "target": true})) == "cover_out",
+			"tips: behind cover with a guard to shoot, HOLD FIRE first (the calmest place to learn it), then leaving cover")
+	# Done when he does it (or the moment's passed).
+	var from: Dictionary = at.call({"lane": 2, "next": "jump", "gap": 8.0})
+	var done_ok: bool = FirstTips.done("jump", from, at.call({"next": "jump", "gap": 4.0, "airborne": true})) and not FirstTips.done("jump", from, at.call({"next": "jump", "gap": 4.0})) \
+			and FirstTips.done("slide", from, at.call({"next": "slide", "sliding": true})) and not FirstTips.done("slide", from, at.call({"next": "slide"})) \
+			and FirstTips.done("alert", from, at.call({"next": "jump_or_alert", "airborne": true})) and FirstTips.done("alert", from, at.call({"next": "cover"})) \
+			and FirstTips.done("lane", from, at.call({"lane": 3, "gap": 20.0})) and not FirstTips.done("lane", from, at.call({"lane": 2, "gap": 20.0})) \
+			and FirstTips.done("cover", from, at.call({"in_cover": true})) and not FirstTips.done("cover", from, at.call({"next": "cover", "gap": 6.0})) \
+			and FirstTips.done("cover_out", from, at.call({"in_cover": false})) and not FirstTips.done("cover_out", from, at.call({"in_cover": true})) \
+			and FirstTips.done("fire", from, at.call({"target": true, "firing": true})) and not FirstTips.done("fire", from, at.call({"target": true})) \
+			and FirstTips.done("doors", from, at.call({"split": INF})) and not FirstTips.done("doors", from, at.call({"split": 5.0}))
+	_check(done_ok, "tips: each goes when he does what it says (jumps, slides, changes lane, takes cover, leaves it, holds FIRE, goes through the doors), not before")
+	# The game's speed: slowed, never stopped.
+	var hold_ok := is_equal_approx(FirstTips.scale_for("jump", FirstTips.HOLD_GAP), FirstTips.MIN_SCALE) and FirstTips.MIN_SCALE > 0.0 \
+			and is_equal_approx(FirstTips.scale_for("slide", 30.0), FirstTips.HOLD_FROM_SCALE) and FirstTips.scale_for("alert", 2.0) == FirstTips.MIN_SCALE
+	var last := INF
+	for g in range(30, 0, -1):
+		var sc := FirstTips.scale_for("jump", float(g) * 0.5)
+		hold_ok = hold_ok and sc <= last + 0.0001
+		last = sc
+	var t := load("res://game/config/default_tuning.tres") as Tuning
+	var soft_ok := FirstTips.scale_for("lane", 5.0) == FirstTips.SOFT_SCALE and FirstTips.scale_for("fire", 5.0) == FirstTips.SOFT_SCALE \
+			and FirstTips.scale_for("cover", 5.0) == FirstTips.SOFT_SCALE and FirstTips.scale_for("cover_out", 5.0) == 1.0 \
+			and FirstTips.scale_for("doors", 5.0) * t.junction_time_scale > 0.3 and FirstTips.SOFT_SCALE >= 0.3
+	var eased := 1.0
+	var frames := 0
+	while eased > FirstTips.MIN_SCALE and frames < 1000:
+		eased = FirstTips.ease_scale(eased, FirstTips.MIN_SCALE, 1.0 / 60.0)
+		frames += 1
+	_check(hold_ok and soft_ok and frames >= 12, "tips: the game slowed, never stopped: the hold eases down to %.2f x where a swipe clears it (%.1f m short), the rest gently (%.2f x; the doors' %.2f x on top of the junction's own), eased in over %d frames"
+			% [FirstTips.MIN_SCALE, FirstTips.HOLD_GAP, FirstTips.SOFT_SCALE, FirstTips.DOORS_SCALE, frames])
+	# Once each, remembered on the device (the save), SHOW AGAIN clears them, an old save has none.
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	var path := "user://test_tips_%d.json" % randi()
+	prog.load_from(path)
+	var fresh: bool = not prog.tip_seen("jump") and prog.tips_seen().is_empty()
+	prog.mark_tip("jump")
+	prog.mark_tip("jump")
+	prog.load_from(path)
+	var kept: bool = prog.tip_seen("jump") and prog.tips_seen() == ["jump"] and not prog.tip_seen("slide")
+	prog.reset_tips()
+	prog.load_from(path)
+	var cleared: bool = prog.tips_seen().is_empty()
+	prog.from_data({"version": 3, "unlocked": ["1:easy"]})
+	var old: bool = prog.tips_seen().is_empty() and not prog.demo_end_seen and not prog.ios_tip_seen
+	_check(fresh and kept and cleared and old, "tips: each shown once, remembered in the save on the device; SHOW AGAIN brings them all back; a save from before them has none seen")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	prog.from_data(saved)
+	prog.save_path = saved_path
+	# The card: its lines in the font's letters, inside it, on both phone sizes, clear of the clock and
+	# junction prompt above and the FIRE trigger below.
+	var f := UiKit.font()
+	var fits := true
+	var card := FirstTips.Card.new()
+	for id: String in FirstTips.TIPS:
+		card.id = id
+		for line: String in card.lines():
+			fits = fits and _font_has(line) and f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= FirstTips.Card.W - 16.0
+		for v: Vector2 in [Vector2(270, 480), Vector2(270, 585)]:
+			var r: Rect2 = card.box(v)
+			var fire := SwipeInput.fire_button(v, t)
+			fits = fits and r.position.x >= 8.0 and r.end.x <= v.x - 8.0 and r.position.y >= 84.0 and r.end.y < fire.y - fire.z - 8.0
+	card.free()
+	_check(fits and FirstTips.ORDER.size() == FirstTips.TIPS.size(), "tips: every card's lines fit it in letters the font has; the card fits 480 and 585 high, under the junction's prompt and over the FIRE trigger")
+
+
+## The settings' TIPS row (the first-time tips): ON / OFF, and SHOW AGAIN, which brings them all back
+## and turns them on.
+func _test_tips_setting() -> void:
+	var settings: Node = root.get_node("Settings")
+	var prog: Node = root.get_node("Progress")
+	var saved: Dictionary = settings._values.duplicate()
+	var saved_prog: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	prog.load_from("")
+	prog.mark_tip("lane")
+	settings._values["tips"] = false
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	fe.show_main()
+	await process_frame
+	_menu_button(fe, "SETTINGS").pressed.emit()
+	await process_frame
+	var again := _menu_button(fe, "SHOW AGAIN")
+	var row := _has_label(fe, "TIPS")
+	var off := _menu_button(fe, "OFF")
+	_check(row and again != null and off != null, "tips setting: SETTINGS has a TIPS row (OFF here), with SHOW AGAIN")
+	if again != null:
+		again.pressed.emit()
+	_check(prog.tips_seen().is_empty() and settings.get_value("tips") == true and again != null and again.text == "DONE",
+			"tips setting: SHOW AGAIN brings every tip back and turns TIPS on")
+	fe.free()
+	settings._values = saved
+	prog.from_data(saved_prog)
+	prog.save_path = saved_path
+
+
+## The end-of-demo screen (the decision log's "The demo pass"): not before his first escape; after
+## it, on any setting, RETRY or MAIN MENU on the debrief opens it first, once (CONTINUE then does what
+## was pressed), and never again; CREDITS' THE DEMO opens it again (BACK to CREDITS). It says THANKS FOR
+## PLAYING THE HOT EXFIL DEMO, that more missions are coming (eight more jobs for CONDOR, the eight not
+## built yet), and where to follow the game only when that's filled in; it fits 480 and 585 high.
+func _test_demo_end() -> void:
+	var prog: Node = root.get_node("Progress")
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	prog.load_from("")
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var fe = FE.new()
+	root.add_child(fe)
+	var asked := {"retry": 0, "menu": 0}
+	fe.retry_requested.connect(func() -> void: asked["retry"] += 1)
+	fe.menu_requested.connect(func() -> void: asked["menu"] += 1)
+	var press := func(text: String) -> void:
+		var b: Button = _menu_button(fe, text)
+		if b != null:
+			b.pressed.emit()
+	# Killed, before he's ever got out: straight on.
+	fe.show_end(&"killed", {})
+	press.call("RETRY")
+	_check(asked["retry"] == 1 and not fe.in_demo_end() and not prog.demo_end_due(), "demo end: not before his first escape (RETRY straight on)")
+	# His first escape (on HARD, say: any setting).
+	prog.record_run(1, "medium", &"extracted", 80.0)
+	_check(prog.demo_end_due(), "demo end: due after his first escape, on any setting")
+	fe.show_end(&"extracted", {})
+	press.call("MAIN MENU")
+	var shown: bool = fe.in_demo_end() and asked["menu"] == 0
+	var lines: PackedStringArray = FE.demo_end_lines()
+	var says: bool = lines[0] == "THANKS FOR PLAYING" and lines[1] == "THE HOT EXFIL DEMO" and _has_label(fe, "THANKS FOR PLAYING") and _has_label(fe, "THE HOT EXFIL DEMO") \
+			and _has_label(fe, "EIGHT MORE JOBS FOR CONDOR") and _has_label(fe, "02 SHORT LEASH") and _has_label(fe, "09 HOT EXFIL")
+	var coming: PackedStringArray = FE.coming_missions()
+	_check(shown and says and coming.size() == 8, "demo end: after the debrief (MAIN MENU pressed), THANKS FOR PLAYING THE HOT EXFIL DEMO, eight more jobs for CONDOR, by name (%d)" % coming.size())
+	_check(FE.follow_lines("").is_empty() and FE.follow_lines("itch.io/hot-exfil") == PackedStringArray(["FOLLOW THE GAME:", "ITCH.IO/HOT-EXFIL"])
+			and _has_label(fe, "FOLLOW THE GAME:") == (FE.FOLLOW_AT.strip_edges() != ""),
+			"demo end: where to follow the game, only once it's filled in (FOLLOW_AT: \"%s\")" % FE.FOLLOW_AT)
+	var bottom := 0.0
+	for c in fe.find_children("*", "Control", true, false):
+		if not c.is_queued_for_deletion() and (c is Button or c is Label):
+			bottom = maxf(bottom, (c as Control).get_global_rect().end.y)
+			for l in [c]:
+				if l is Label:
+					_check(_font_has((l as Label).text) and (l as Label).get_global_rect().end.x <= fe._root.get_viewport_rect().size.x, "demo end: '%s' in the font's letters, on screen" % (l as Label).text)
+	_check(bottom <= 480.0 - 8.0 and bottom + FE.tall_shift(585.0, 40.0) <= 585.0 - 8.0, "demo end: fits 480 and 585 high (bottom at %d)" % bottom)
+	press.call("CONTINUE")
+	_check(asked["menu"] == 1 and not prog.demo_end_due() and prog.demo_end_seen, "demo end: CONTINUE does what was pressed (MAIN MENU), and it's remembered")
+	fe.show_end(&"extracted", {})
+	press.call("RETRY")
+	_check(asked["retry"] == 2 and not fe.in_demo_end(), "demo end: once only (the next escape's RETRY straight on)")
+	# From CREDITS, again.
+	fe.show_main()
+	await process_frame
+	press.call("CREDITS")
+	await process_frame
+	press.call("THE DEMO")
+	await process_frame
+	var again: bool = fe.in_demo_end() and _menu_button(fe, "BACK") != null and _menu_button(fe, "CONTINUE") == null
+	press.call("BACK")
+	await process_frame
+	_check(again and fe.in_credits() and asked["menu"] == 1 and asked["retry"] == 2, "demo end: CREDITS' THE DEMO opens it again; BACK to CREDITS")
+	fe.free()
+	prog.from_data(saved)
+	prog.save_path = saved_path
+
+
+## CREDITS (from the main menu, a small button under the four, which still fit with it: the main
+## menu says DEMO, with the build stamp, and no PROOF OF CONCEPT BUILD) and LICENCES: the game's
+## maker, the Godot Engine; the licence screen with the notice the Godot licence asks for ("This game
+## uses Godot Engine, available under the following license:", its copyright lines and the MIT text,
+## from the engine), every third party's notice inside the engine and their licences' texts, in the
+## font's letters, scrolling.
+func _test_credits() -> void:
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var fe = FE.new()
+	root.add_child(fe)
+	fe.show_main()
+	await process_frame
+	var labels := []
+	for l in fe.find_children("*", "Label", true, false):
+		if not l.is_queued_for_deletion():
+			labels.append((l as Label).text)
+	_check("DEMO" in labels and not "PROOF OF CONCEPT BUILD" in labels and labels.any(func(t: String) -> bool: return t.begins_with("BUILD ")),
+			"credits: the main menu says DEMO (no PROOF OF CONCEPT BUILD), the build stamp under it")
+	var buttons: Array = fe.find_children("*", "Button", true, false).filter(func(b: Node) -> bool: return not b.is_queued_for_deletion() and b.visible)
+	var rects: Array = buttons.map(func(b: Node) -> Rect2: return (b as Control).get_global_rect())
+	var apart := true
+	for i in rects.size():
+		for j in range(i + 1, rects.size()):
+			apart = apart and not (rects[i] as Rect2).grow(-0.5).intersects(rects[j] as Rect2)
+	var credits := _menu_button(fe, "CREDITS")
+	_check(credits != null and apart and credits.get_global_rect().end.y < 446.0 and credits.get_global_rect().position.y > _menu_button(fe, "CONTROLS").get_global_rect().end.y,
+			"credits: a small CREDITS button under CONTROLS, clear of the four and of DEMO")
+	credits.pressed.emit()
+	await process_frame
+	var says: bool = fe.in_credits() and _has_label(fe, "A GAME BY") and _has_label(fe, FE.MADE_BY) and FE.MADE_BY == "LUKE HUNT" and _has_label(fe, "GODOT ENGINE")
+	var bottom := 0.0
+	for c in fe.find_children("*", "Control", true, false):
+		if not c.is_queued_for_deletion() and (c is Button or c is Label):
+			bottom = maxf(bottom, (c as Control).get_global_rect().end.y)
+	_check(says and bottom <= 472.0 and bottom + FE.tall_shift(585.0, 40.0) <= 577.0, "credits: A GAME BY LUKE HUNT, made with the Godot Engine; fits 480 and 585 high (bottom at %d)" % bottom)
+	_menu_button(fe, "LICENCES").pressed.emit()
+	await process_frame
+	var view: ScrollContainer = null
+	for c in fe.find_children("*", "ScrollContainer", true, false):
+		if not c.is_queued_for_deletion():
+			view = c
+	var frames := 0
+	while view != null and not view.is_built() and frames < 600:
+		await process_frame
+		frames += 1
+	var text: String = view.text() if view != null else ""
+	var paras: Array = FE.licence_paragraphs()
+	var godot_ok := text.begins_with("THIS GAME USES GODOT ENGINE, AVAILABLE UNDER THE FOLLOWING LICENSE:") and text.contains("Copyright (c) 2014-present Godot Engine contributors") \
+			and text.contains("Juan Linietsky, Ariel Manzur") and text.contains("Permission is hereby granted, free of charge") and text.contains("THE SOFTWARE IS PROVIDED \"AS IS\"")
+	var third := 0
+	for comp: Dictionary in Engine.get_copyright_info():
+		if text.contains(FE.licence_text(String(comp["name"]))):
+			third += 1
+	var texts := 0
+	for k in Engine.get_license_info():
+		if text.contains(FE.licence_text(String(k))):
+			texts += 1
+	var letters := true
+	for p: Array in paras:
+		letters = letters and _font_has(String(p[0]))
+	_check(view != null and godot_ok, "licences: the Godot notice and licence, from the engine (This game uses Godot Engine..., its copyright lines, the MIT text)")
+	_check(third == Engine.get_copyright_info().size() and texts == Engine.get_license_info().size() and letters,
+			"licences: every third party's notice (%d of %d) and every licence's text (%d of %d), in the font's letters" % [third, Engine.get_copyright_info().size(), texts, Engine.get_license_info().size()])
+	_check(view != null and view.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED and view.get_v_scroll_bar().max_value > view.size.y * 10.0 and frames > 1,
+			"licences: it scrolls (%d px of it in a %d px view), built over %d frames (it opens at once)" % [view.get_v_scroll_bar().max_value if view else 0, view.size.y if view else 0, frames])
+	_menu_button(fe, "BACK").pressed.emit()
+	await process_frame
+	_check(fe.in_credits(), "licences: BACK to CREDITS")
+	fe.free()
+
+
+## The iPhone's saves tip (user: "ADD TO HOME SCREEN TO KEEP YOUR PROGRESS", with the share icon):
+## the rule (Safari on an iPhone, iPod or iPad, not from the Home Screen; never another browser),
+## then on the main menu once, a tap closing it, never again; never off the web unless forced.
+func _test_ios_tip() -> void:
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var safari := "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+	var ipad_desk := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
+	var others := {
+		"chrome ios": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1",
+		"firefox ios": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/127.0 Mobile/15E148 Safari/605.1.15",
+		"edge ios": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 EdgiOS/125.2535.87 Mobile/15E148 Safari/605.1.15",
+		"duckduckgo ios": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 DuckDuckGo/7 Safari/605.1.15",
+		"google app": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/321.0.643765214 Mobile/15E148 Safari/604.1",
+		"facebook app": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/470.0.0.43.108]",
+		"instagram app": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 337.0.3.23.54",
+		"android chrome": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+		"android samsung": "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36",
+		"mac safari": ipad_desk,
+		"windows chrome": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+		"windows firefox": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+	}
+	var never := []
+	for k in others:
+		if FE.ios_tip_wanted(others[k], false, false, 0 if k == "mac safari" else 5):
+			never.append(k)
+	_check(FE.ios_tip_wanted(safari, false, false, 5) and FE.ios_tip_wanted(ipad_desk, false, false, 5) and never.is_empty(),
+			"ios tip: in Safari on an iPhone (and an iPad asking for the desktop site), never in any other browser or app (%s)" % [never])
+	_check(not FE.ios_tip_wanted(safari, true, false, 5) and not FE.ios_tip_wanted(safari, false, true, 5) and not FE.ios_tip_wanted("", false, false, 0),
+			"ios tip: never once it's running from the Home Screen (navigator.standalone, or display-mode: standalone)")
+	_check(not FE.ios_tip_here(), "ios tip: never off the web (here: %s)" % OS.get_name())
+	var prog: Node = root.get_node("Progress")
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	prog.load_from("")
+	var fe = FE.new()
+	root.add_child(fe)
+	fe.show_main()
+	await process_frame
+	var none_unforced: bool = not fe.ios_tip_up()
+	FE.force_ios_tip = true
+	fe.show_main()
+	await process_frame
+	var up: bool = fe.ios_tip_up() and prog.ios_tip_seen
+	var tip = fe._ios_tip
+	var clear := true
+	var lines: PackedStringArray = FE.IosTip.lines()
+	if tip != null:
+		var r: Rect2 = tip.get_global_rect()
+		clear = r.position.y >= 0.0 and r.end.y < 62.0 and r.end.x <= fe._root.get_viewport_rect().size.x - 4.0
+		var f := UiKit.font()
+		clear = clear and f.get_string_size(lines[0] + "  X", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= r.size.x - 20.0 \
+				and f.get_string_size(lines[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= r.size.x - 20.0 \
+				and f.get_string_size(lines[2] + "    " + lines[3], HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= r.size.x - 24.0
+		tip.pressed.emit()
+	await process_frame
+	var closed: bool = not fe.ios_tip_up()
+	fe.show_main()
+	await process_frame
+	var once: bool = not fe.ios_tip_up()
+	FE.force_ios_tip = false
+	_check(none_unforced and up and clear and closed and once and lines[0] + " " + lines[1] == "ADD TO HOME SCREEN TO KEEP YOUR PROGRESS",
+			"ios tip: on the main menu once (ADD TO HOME SCREEN TO KEEP YOUR PROGRESS, the share icon), over the camera above the title, a tap closes it, never again")
 	fe.free()
 	prog.from_data(saved)
 	prog.save_path = saved_path

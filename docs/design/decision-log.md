@@ -103,6 +103,14 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
 - Just for looks: no change to gameplay.
 
+### PROPOSED — The demo pass (user, 2026-10-11)
+- **Why (user):** "i want to release a demo version of this game is what we have so far worthy of a demo or does more work need to be done to polish it?" Then: "Yes, start the demo pass." The demo is mission 1 (COLD CALL) on all three settings; mission 2 waits until it is out.
+- **First-time help:** one-time prompts in mission 1's opening stretch (EASY or the first run on any setting): swipe to change lane, swipe up to jump, down to slide, running into cover, holding FIRE, tripwires and alarm boxes, the junction's doors; each shown once, remembered on the device, never mid-danger, skippable, and a setting to show them again.
+- **Demo framing:** the menu's PROOF OF CONCEPT BUILD reads DEMO; an end-of-demo screen after the first escape (more missions coming, where to follow the game); a CREDITS screen (the game's maker, the Godot engine's licence credit, made-in-code art and sound).
+- **Keeping saves on an iPhone:** a one-time tip in Safari on iOS to add the game to the Home Screen (Safari can clear a site's saves after about a week unvisited).
+- **Small fixes:** the faint dithered legs left at the camera dissolve's rim, the test run's exit warnings, and nothing in the demo still saying TEST.
+- **For the user (not code):** testing on other phones (an older iPhone, an Android) and a desktop browser; hosting on itch.io; the trademark and name checks.
+
 ### PROPOSED — The chopper given a boost (user, 2026-10-11)
 - **Why (user):** "I'd like you to make the chopper looks better, maybe give it a ps1 texture keep the model in a ps1 style just give it an overall boost."
 - The extraction chopper (built in code, _build_chopper_model) keeps its size, its place on the pad, the open cabin door you run into, its lights and everything it does (landing, the rotor, lifting off, the KO replay shots, the sounds), and stays low-poly. It gets a better PS1 shape (a shaped nose and canopy, cabin, tail boom, sponsons or stub wings, skids, engine intakes and exhausts, rotor hub) and a hand-made PS1 texture made in code: military olive or dark grey paint with panel lines, rivets, weathering and soot, a CONDOR marking and tail number, warning stripes, a lit cockpit glass and cabin, so it reads at phone size. Mission 9's VORHALT gold chopper can reuse it as a repaint later.

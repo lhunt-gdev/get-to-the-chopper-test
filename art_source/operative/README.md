@@ -3,10 +3,10 @@
 The player character's source files. Godot ignores this folder (`art_source/.gdignore`), so
 nothing here goes into the game build.
 
-- `ernest-cross.glb`: the Meshy model (about 1.3 million triangles, 2048 textures, 46 MB). It isn't
+- `ernest-cross.glb`: the high-poly source model (about 1.3 million triangles, 2048 textures, 46 MB). It isn't
   committed (see `.gitignore`), so keep your own copy.
 - `reference_sheet.png`: the turnaround sheet he was designed from.
-- `tools/`: the Blender scripts that turn the Meshy model into the game's model.
+- `tools/`: the Blender scripts that turn the high-poly source model into the game's model.
 - `work/`: what the scripts make along the way (not committed).
 
 ## Rebuilding him
@@ -24,12 +24,12 @@ Options: `build_cross.sh <triangles> <texture size>`, for example `build_cross.s
 
 The stages:
 
-1. `stage1_reduce.py`: imports the Meshy model, stands him on the ground, saves his colour texture
+1. `stage1_reduce.py`: imports the high-poly source model, stands him on the ground, saves his colour texture
    and reduces him to a 20k-triangle working copy.
-1b. `stage1b_apose.py` (only for a model Meshy made in a T-pose, arms straight out, like the
+1b. `stage1b_apose.py` (only for a source model made in a T-pose, arms straight out, like the
    guard): lowers his arms to the A-pose the rig expects (about 22 degrees out from hanging, like
    CROSS), bending each shoulder round smoothly so it doesn't crease.
-2. `stage3_bake.py`: remeshes the working copy into one closed skin (Meshy's surface is loose,
+2. `stage3_bake.py`: remeshes the working copy into one closed skin (the high-poly surface is loose,
    overlapping pieces that tear when reduced directly), reduces it to the target triangle count,
    unwraps it, and bakes the working copy's base colour onto a fresh texture (packed into the file).
 3. `stage4_rig.py`: turns him to face the game's forward (his boots tell which way: the toes reach
@@ -42,12 +42,12 @@ The stages:
 checking the results (renders and printouts). `find_lenses.py` is the lens finder on its own;
 stage 4 does it now.
 
-If the Meshy model changes, drop the new one in as `ernest-cross.glb` and run the script again.
+If the high-poly source model changes, drop the new one in as `ernest-cross.glb` and run the script again.
 The game's poses (`game/player/soldier_rig.gd`) work from the skeleton's joints, so they carry over.
 
 ## Other characters
 
-The scripts work for any Meshy character, named by the `CHAR` environment variable (file and object
+The scripts work for any high-poly character, named by the `CHAR` environment variable (file and object
 names follow it). `tools/build_character.sh` runs them all for one:
 
 ```bash

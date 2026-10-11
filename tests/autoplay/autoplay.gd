@@ -130,6 +130,15 @@ const TALK := {"naive": "tapped", "naive_skip": "skipped", "ground": "tapped", "
 		"squad_caught": "skipped", "camper": "tapped", "boss_hold_fire": "skipped", "scoreboard": "skipped"}
 
 var scenario := "ground"
+## How it plays (tips plays as cover does, with the first-time tips on).
+var _plays := "ground"
+## tips: every first-time tip seen (FirstTips id -> times shown, the frame it showed), the longest one
+## stayed up (real s), what went wrong, and the frame the last closed.
+var _tips := {}
+var _tip_up_real := 0.0
+var _tip_longest := 0.0
+var _tips_bad := ""
+var _tip_closed_at := -1.0
 ## The mission's setting it plays (--setting=easy|medium|hard).
 var setting := RouteGraph.DEFAULT_SETTING
 ## What was open in its (in-memory) progress as it started, so RESULT can say what getting out opened.
@@ -220,6 +229,7 @@ func _ready() -> void:
 	# The bots never touch the player's saved progress: theirs is kept in memory, fresh each run
 	# (only mission 1 EASY open). intro_skip has got out of mission 1 on EASY and MEDIUM, so HARD is
 	# open for it to pick.
+	_plays = "cover" if scenario == "tips" else scenario
 	Progress.load_from("")
 	if scenario == "intro_skip":
 		Progress.record_extraction(1, "easy")
@@ -248,6 +258,14 @@ func _ready() -> void:
 	_level.setting = RouteGraph.DEFAULT_SETTING if scenario in ["menu_start", "intro_skip"] else setting
 	# (menu_start and intro_skip run the ground route: the same boss)
 	_level.boss_seed = absi(hash("ground" if scenario in ["menu_start", "intro_skip"] else scenario)) % 100000
+	# The first-time tips (FirstTips): off for every bot (they'd slow its runs), but tips, which plays
+	# with them on, whatever the device's SETTINGS say (from a fresh save: none seen yet).
+	_level.tips = scenario == "tips"
+	if scenario == "tips":
+		_level.tip_shown.connect(func(id: String) -> void:
+			if _tips.has(id):
+				_tips_bad += " %s-twice" % id
+			_tips[id] = int(_tips.get(id, 0)) + 1)
 	add_child(_level)
 	_player = _level.get_node("Player")
 	GameState.run_ended.connect(_on_end)
@@ -323,7 +341,9 @@ func _setup_test_range() -> void:
 			_trip_in = [&"main_floor_lobby", &"building_main_floor"]
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	if scenario == "tips":
+		_watch_tips(delta)
 	if not GameState.run_active or scenario in ["naive", "naive_skip"]:
 		return
 	var d := _player.distance_run()
@@ -398,7 +418,7 @@ func _physics_process(_delta: float) -> void:
 				score -= 60.0  # a searchlight's pool will be there when we get there
 			if _blocked_ahead(obstacles, lane, d):
 				score -= 100.0
-			if scenario in ["cover", "camper"] and d < COVER_AT and not _took_cover:
+			if _plays in ["cover", "camper"] and d < COVER_AT and not _took_cover:
 				score -= absf(lane - 1) * 200.0  # head for the cover block's lane
 			if not _level._runner._shown_labels.is_empty() or _junction_soon():
 				var lean := int(_prefer.get(_level._runner.current, 0))
@@ -438,6 +458,44 @@ func _physics_process(_delta: float) -> void:
 ## The boss at the chopper: while his minigun spins up, step toward the nearest of his 2 free
 ## lanes (a lane a frame, ties toward the middle), then hold through the sweep and the spin-down.
 ## boss_hit steps into a swept lane for his first sweep instead.
+## tips, every frame: the card on the HUD is the tip up (and none when none is); none stays up past
+## TIP_MOST s of real time (the bot taps one that's been up TIP_TAP s, as a player might: the rest go
+## by what it does); once one's gone the game is back to normal speed within a real second (bar the
+## junction's own slowdown); and at the end, every tip shown, once each, and remembered in the save.
+const TIP_TAP := 4.0
+const TIP_MOST := 8.0
+
+
+func _watch_tips(delta: float) -> void:
+	var real := delta / maxf(Engine.time_scale, 0.01)
+	var up: String = _level._tip
+	if _level._hud.tip_shown() != up:
+		_tips_bad += " card(%s/%s)" % [_level._hud.tip_shown(), up]
+	if up != "":
+		_tip_up_real += real
+		_tip_longest = maxf(_tip_longest, _tip_up_real)
+		_tip_closed_at = -1.0
+		if _tip_up_real >= TIP_TAP and _tip_up_real - real < TIP_TAP:
+			_level._on_tap(Vector2(135, 300))
+	else:
+		if _tip_up_real > 0.0:
+			_tip_closed_at = 0.0
+		_tip_up_real = 0.0
+		if _tip_closed_at >= 0.0:
+			_tip_closed_at += real
+			if _tip_closed_at > 1.0 and _level._tip_scale != 1.0 and GameState.run_active:
+				_tips_bad += " slow-after(%.2f)" % _level._tip_scale
+				_tip_closed_at = -1.0
+
+
+func _tips_report() -> String:
+	if scenario != "tips":
+		return ""
+	var all := FirstTips.ORDER.all(func(id: String) -> bool: return int(_tips.get(id, 0)) == 1 and Progress.tip_seen(id))
+	var ok := all and _tips_bad == "" and _tip_longest <= TIP_MOST
+	return " tips=%d/%s" % [_tips.size(), "ok" if ok else "bad(%s seen=%s longest=%.1f%s)" % [",".join(_tips.keys()), Progress.tips_seen(), _tip_longest, _tips_bad]]
+
+
 func _boss_standoff() -> bool:
 	if not _player.standoff:
 		return false
@@ -532,9 +590,9 @@ func _shoot() -> void:
 		want = false  # leave the EXIT's dog to bite or be dodged (shoot the rest)
 	if scenario == "halfway" and _gave_up():
 		want = false  # (halfway: from the WING on it stops shooting)
-	if scenario in ["cover", "camper"] and not _player.in_cover and not _took_cover:
+	if _plays in ["cover", "camper"] and not _player.in_cover and not _took_cover:
 		want = false  # prove the cover works: only shoot once we're behind it...
-	if scenario == "cover" and _player.in_cover and _cover_frames < 90:
+	if _plays == "cover" and _player.in_cover and _cover_frames < 90:
 		want = false  # ...and only after he's had a shot at us (1.5 s)
 	_level.set_fire_held(want)
 
@@ -559,7 +617,7 @@ func _charging_dog(d: float) -> RusherDog:
 func _blocked_ahead(obstacles: Array, lane: int, d: float) -> bool:
 	var x := _player.lane_x(lane)
 	for o: Dictionary in obstacles:
-		var seeking_cover := (scenario in ["cover", "camper"] and not _took_cover) or (scenario == "squad_caught" and GameState.alert_level >= 3)
+		var seeking_cover := (_plays in ["cover", "camper"] and not _took_cover) or (scenario == "squad_caught" and GameState.alert_level >= 3)
 		var blocks: bool = o["pass"] == "cover" and not seeking_cover
 		if blocks and absf(o["x"] - x) < 0.1 and o["at"] + o["depth"] > d - 0.5 and o["at"] - d < LOOK_AHEAD:
 			return true
@@ -968,7 +1026,7 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved]
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + _tips_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved]
 			+ _score_report() + _board_report)
 	# The run's raw tally for the cast's board entries (tests/house/make_house.sh collects these).
 	var st: Dictionary = _level.last_stats

@@ -19,7 +19,7 @@ Thumbs.db
 # Written by CI at export time (the build number on the main menu)
 game/build_info.json
 
-# CROSS source art: the 46 MB Meshy model and the pipeline's working files stay out of git (they're
+# CROSS source art: the 46 MB high-poly source model and the pipeline's working files stay out of git (they're
 # rebuilt by art_source/operative/tools/build_cross.sh); the scripts, README and reference sheet go in.
 art_source/operative/ernest-cross.glb
 art_source/operative/work/
@@ -27,7 +27,7 @@ art_source/operative/work/
 *.blend1
 __pycache__/
 # The guard's source art, the same way (rebuilt by art_source/operative/tools/build_guard.sh).
-art_source/guard/guard-meshy.glb
+art_source/guard/guard-source.glb
 art_source/guard/work/
 # The scout's, boss's and dog's source art, the same way (rebuilt by build_character.sh /
 # build_dog.sh in art_source/operative/tools).

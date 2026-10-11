@@ -28,7 +28,8 @@ float bayer4(vec2 frag) {
 // Whether the cutout drops this pixel: the surface at `at` (world space), drawn for the camera at
 // `eye` (CAMERA_POSITION_WORLD), at `frag` on screen (FRAGCOORD.xy). `keep_floor`: nothing of it
 // lower than the floor height dissolves (the level's surfaces: the floor under him); false for what
-// stands on the floor and moves (the guards, the dogs), which dissolves to the ground. Called last in
+// stands on the floor and moves (the guards, the dogs: the figures), which dissolves to the ground,
+// and wholly inside the hole (no dithered rim or depth fade on a figure). Called last in
 // fragment(), after any texture read, so a dropped pixel never upsets its neighbours' mip.
 bool cutout_drops(vec3 at, vec3 eye, vec2 frag, bool keep_floor) {
 	if (cutout_cam.w <= 0.0 || (keep_floor && at.y <= cutout_misc.x) || distance(eye, cutout_cam.xyz) >= 0.05) {
@@ -42,6 +43,12 @@ bool cutout_drops(vec3 at, vec3 eye, vec2 frag, bool keep_floor) {
 	}
 	// Where this pixel's line of sight meets his depth, how far that is off his chest, in radii.
 	float d = length(v / along - cutout_fwd.xyz) * cutout_fwd.w;
+	if (!keep_floor) {
+		// A figure (a guard, a dog: no floor rule) goes all at once inside the hole, its dithered rim
+		// and the fade near his depth included, so no faint dithered legs are left at the rim near the
+		// lens; outside the hole it's whole. The level's surfaces keep the dithered edge.
+		return d < 1.0;
+	}
 	float cover = clamp((1.0 - d) * cutout_misc.w, 0.0, 1.0) * min(near, 1.0);
 	return cover > bayer4(frag);
 }

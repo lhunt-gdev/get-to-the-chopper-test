@@ -3,7 +3,7 @@
 The boss's source files (the user's design: heavy armour, a skull on his chest). He replaces the
 Heavy Trooper (user), and will hold a minigun, to be modelled for him. Godot ignores this folder.
 
-- `boss.glb`: the Meshy model (about 601,000 triangles, 26 MB, in a T-pose). It isn't committed
+- `boss.glb`: the high-poly source model (about 601,000 triangles, 26 MB, in a T-pose). It isn't committed
   (see `.gitignore`), so keep your own copy.
 - `work/`: what the build makes along the way (not committed).
 

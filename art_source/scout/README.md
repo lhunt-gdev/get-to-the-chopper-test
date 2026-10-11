@@ -3,7 +3,7 @@
 The scout's source files (the user's design: a balaclava, tan camo, a light plate carrier).
 Godot ignores this folder.
 
-- `scout.glb`: the Meshy model (about 423,000 triangles, 19 MB, in a T-pose). It isn't committed
+- `scout.glb`: the high-poly source model (about 423,000 triangles, 19 MB, in a T-pose). It isn't committed
   (see `.gitignore`), so keep your own copy.
 - `work/`: what the build makes along the way (not committed).
 

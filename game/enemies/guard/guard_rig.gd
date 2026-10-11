@@ -1,7 +1,7 @@
 class_name GuardRig
 extends SoldierRig
 ## The guard (the user's design: a black balaclava, tan pixel camo, an olive plate carrier, black
-## gloves and boots; made from their Meshy model like CROSS, see art_source/guard). The rifle
+## gloves and boots; made from their high-poly source model like CROSS, see art_source/guard). The rifle
 ## troopers, the pursuit squad and the sniper wear him (user), each with a rifle in both hands
 ## (GuardRifle).
 ##

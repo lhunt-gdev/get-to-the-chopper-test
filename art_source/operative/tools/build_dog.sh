@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the dog (the user's Meshy German Shepherd, art_source/dog/dog.glb) for the game: stages 1
+# Builds the dog (the German Shepherd model, art_source/dog/dog.glb) for the game: stages 1
 # and 3 as for the humans (build_character.sh), then his own four-legged rig (stage4_rig_dog.py),
 # scaled to WITHERS metres at the shoulder.
 #   art_source/operative/tools/build_dog.sh [tris=3000] [tex=512] [withers=0.72]

@@ -29,6 +29,8 @@ var _flash: ColorRect
 var _fire: TriggerButton
 var _clock: ClockDial
 var _pause: PauseButton
+## The first-time tip up now (FirstTips), if any.
+var _tip_card: FirstTips.Card
 
 
 ## An old-style analog timer, top centre. The hand sweeps clockwise from 12 as the chopper's
@@ -545,6 +547,8 @@ func _ready() -> void:
 	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_flash)
+	_tip_card = FirstTips.Card.new()
+	add_child(_tip_card)
 	GameState.alert_changed.connect(_on_alert_changed)
 
 
@@ -816,6 +820,21 @@ func fire_kick() -> void:
 		_fire.kick()
 
 
+## A first-time tip (FirstTips id; "" hides it).
+func show_tip(id: String) -> void:
+	if _tip_card:
+		if _fire and _fire.tuning:
+			_tip_card.fire_at = SwipeInput.fire_button(get_viewport().get_visible_rect().size, _fire.tuning)
+		_tip_card.show_tip(id)
+	# (the cover hint under the clock makes way for a tip's card while it's up)
+	_hint.visible = id == ""
+
+
+## The tip up now ("" for none).
+func tip_shown() -> String:
+	return _tip_card.id if _tip_card and _tip_card.visible else ""
+
+
 func show_cover_hint(on: bool, standoff: bool = false) -> void:
 	_hint.text = "IN COVER - SWIPE < > TO BREAK COVER" if on else ("SWIPE < > TO DODGE - HOLD FIRE" if standoff else "")
 	# Below the rear-view monitor while it's up (Alert 3), otherwise in its usual place.
@@ -858,6 +877,7 @@ func show_end(_reason: StringName, _route_summary: String) -> void:
 	show_boss(-1.0)
 	show_rear(null)
 	_hint.text = ""
+	show_tip("")
 	set_playing(false)
 
 

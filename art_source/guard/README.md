@@ -3,7 +3,7 @@
 The guard's source files (the user's design: a black balaclava, tan pixel camo, an olive plate
 carrier, black gloves and boots, no goggles). Godot ignores this folder.
 
-- `guard-meshy.glb`: the Meshy model made from the sheet (about 443,000 triangles, 19 MB, in a
+- `guard-source.glb`: the high-poly source model made from the sheet (about 443,000 triangles, 19 MB, in a
   T-pose). It isn't committed (see `.gitignore`), so keep your own copy.
 - `reference_sheet.png`: the sheet he was made from.
 - `work/`: what the build makes along the way (not committed).

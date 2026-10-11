@@ -326,6 +326,21 @@ static var route_path := ROUTE_PATH
 static var setting := RouteGraph.DEFAULT_SETTING
 ## Another mission was picked in the mission select: its level loads, and opens on its briefing.
 static var _brief_on_load := false
+## The first-time tips (FirstTips): null follows SETTINGS' TIPS; true or false sets it (the bots play
+## without them, so tips never touch their results, but for the one that checks them).
+var tips: Variant = null
+## A tip shown in this run (FirstTips id, for that bot).
+signal tip_shown(id: String)
+## The tip up now: its id, and the moment it showed (_tip_state()); "" for none.
+var _tip := ""
+var _tip_from: Dictionary = {}
+## The breather after one closes (game time, s); the game's speed for the tips (1 normal: eased);
+## whether the junction's own slowdown is on (the two multiply); and whether the tips' stretch (up to
+## mission 1's junction) is over.
+var _tip_cool := 0.0
+var _tip_scale := 1.0
+var _junction_slow := false
+var _tips_over := false
 
 var _started := false
 var _graph: RouteGraph
@@ -812,6 +827,8 @@ func _physics_process(delta: float) -> void:
 			_update_snipers(delta)
 		if GameState.run_active:
 			_update_boss(delta)
+		if GameState.run_active:
+			_update_tips(delta)
 		_despawn_behind()
 	_place_player()
 	_update_camera(delta)
@@ -10356,17 +10373,119 @@ func _make_guard() -> Node3D:
 
 
 func _on_junction_approaching(options: Array[Dictionary]) -> void:
-	Engine.time_scale = tuning.junction_time_scale
+	_junction_slow = true
+	_apply_time_scale()
 	_hud.show_junction(options)
 
 
 func _on_junction_cleared() -> void:
-	Engine.time_scale = 1.0
+	_junction_slow = false
+	_tips_over = true  # (the tips' stretch ends at the first junction)
+	_apply_time_scale()
 	_hud.clear_junction()
+
+
+## The game's speed: the junction's slowdown (LOCKED: a slowdown, never a pause) times the tips'
+## (FirstTips: eased; 1 with no tip up).
+func _apply_time_scale() -> void:
+	Engine.time_scale = (tuning.junction_time_scale if _junction_slow else 1.0) * _tip_scale
+
+
+# --- First-time tips ----------------------------------------------------------------
+
+## Whether this run shows the first-time tips: mission 1 only (the demo's), SETTINGS' TIPS on (or the
+## level's `tips` set), and not past its junction.
+func _tips_on() -> bool:
+	if _tips_over or Progress.mission_number(StringName(_graph.mission().get("mission", ""))) != 1:
+		return false
+	return bool(tips) if tips != null else bool(Settings.get_value("tips"))
+
+
+## The moment as FirstTips reads it (FirstTips.pick: see there).
+func _tip_state() -> Dictionary:
+	var d := _player.distance_run()
+	var lane_x := _player.lane_x(_player.lane)
+	var next := ""
+	var gap := INF
+	for o in _obstacles:
+		if o["done"] or float(o["at"]) <= d or absf(float(o["x"]) - lane_x) > 0.1:
+			continue
+		if float(o["at"]) - d < gap:
+			gap = float(o["at"]) - d
+			next = String(o["pass"])
+	var aimed := false
+	var target := false
+	for c in _combatants:
+		var n = c["node"]
+		if n is RifleTrooper and is_instance_valid(n) and n.state == RifleTrooper.State.AIMING:
+			aimed = true
+	if _tip == "fire" or (_tip == "" and not Progress.tip_seen("fire")):  # (the raycasts only while it matters)
+		target = fire_target() is RifleTrooper
+	# The junction's split ahead (a real choice), and whether anything's left in his lane before it.
+	var split := INF
+	if _runner.graph != null and _runner._committed == &"" and _graph.end_type(_runner.current) == "" \
+			and RouteGraph.is_choice(_graph.available_next(_runner.current, GameState.alert_level)):
+		split = _runner.segment_start + _graph.length_of(_runner.current) - tuning.decision_lead - d
+	return {"seen": _seen_tips(), "d": d, "lane": _player.lane, "in_cover": _player.in_cover, "airborne": _player.is_airborne(),
+			"sliding": _player.is_sliding(), "aimed_at": aimed, "next": next, "gap": gap, "target": target,
+			"firing": _fire_held, "split": split, "clear_to_split": gap > split}
+
+
+func _seen_tips() -> Dictionary:
+	var out := {}
+	for id in Progress.tips_seen():
+		out[id] = true
+	return out
+
+
+## Each frame of the run: a tip shows (once, ever: Progress) at the right moment, goes when he does
+## what it says (or a tap, or the moment's passed), and the game's speed eases for it (FirstTips).
+func _update_tips(delta: float) -> void:
+	var real := delta / maxf(Engine.time_scale, 0.01)
+	var want := 1.0
+	if _tip != "" or _tips_on():
+		var busy := not GameState.run_active or _ko >= 0 or _player.halted or _player.standoff or _player.dying \
+				or in_stairwell() or _player.distance_run() < 0.3
+		if busy:
+			_close_tip()
+		else:
+			var s := _tip_state()
+			if _tip != "":
+				if FirstTips.done(_tip, _tip_from, s) or (_tips_over and _tip != "doors"):
+					_close_tip()
+				else:
+					want = FirstTips.scale_for(_tip, float(s["gap"]))
+			else:
+				_tip_cool -= delta
+				# (no breather needed in cover: he's stopped there, and safe)
+				var id := FirstTips.pick(s) if _tip_cool <= 0.0 or _player.in_cover else ""
+				if id != "":
+					_tip = id
+					_tip_from = s
+					Progress.mark_tip(id)
+					_hud.show_tip(id)
+					tip_shown.emit(id)
+					want = FirstTips.scale_for(id, float(s["gap"]))
+	var eased := FirstTips.ease_scale(_tip_scale, want, real)
+	if eased != _tip_scale:
+		_tip_scale = eased
+		_apply_time_scale()
+
+
+## The tip up now goes (done, a tap, or the run's moved on); the game's speed eases back.
+func _close_tip() -> void:
+	if _tip == "":
+		return
+	_tip = ""
+	_tip_cool = FirstTips.COOLDOWN
+	_hud.show_tip("")
 
 
 func _on_run_ended(reason: StringName) -> void:
 	_set_rear_cctv(false)
+	_close_tip()
+	_tip_scale = 1.0
+	_junction_slow = false
 	if _ko >= 0:
 		_ko_end()
 	Engine.time_scale = 1.0
@@ -10447,6 +10566,9 @@ func _on_swipe(dir: Vector2i) -> void:
 
 func _on_tap(pos: Vector2) -> void:
 	if _menu_open or _frontend.is_open():
+		return
+	if _tip != "":
+		_close_tip()  # (a tap closes a tip, and does nothing else)
 		return
 	if _ko >= 0:
 		_ko_skip()

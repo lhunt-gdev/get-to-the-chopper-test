@@ -19,6 +19,7 @@ const DEFAULTS := {
 	"aim": "auto_tap",      # "auto" | "auto_tap" | "tap"
 	"fire_side": "right",   # "right" | "left"
 	"swipe": "medium",      # "low" | "medium" | "high"
+	"tips": true,           # the first-time tips in mission 1 (FirstTips; which were seen: Progress)
 }
 
 var _values: Dictionary = DEFAULTS.duplicate()
