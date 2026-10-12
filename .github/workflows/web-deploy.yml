@@ -1,10 +1,11 @@
-# Every push to main: run tests, export the Web build, publish to GitHub Pages.
-# Open the Pages URL on your iPhone in Safari to play the latest build.
+# Every push to main (the demo) or v2 (the next version): run the tests for what was pushed, then
+# export BOTH versions and publish them together on GitHub Pages: the demo at the site's root (the
+# link players have), V2 under /v2/ for testing. Open the Pages URL on your iPhone in Safari.
 name: Test & deploy web build
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
   pull_request:
   workflow_dispatch:
 
@@ -14,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: pages
   cancel-in-progress: true
 
 env:
@@ -48,28 +49,40 @@ jobs:
           unzip -jq templates.tpz 'templates/web*' 'templates/version.txt' -d "$dest"
           rm templates.tpz
 
-      - name: Tests (unit + bot playthroughs)
+      - name: Tests (unit + bot playthroughs) for what was pushed
         run: GODOT=~/godot/godot bash tests/run_all.sh
 
-      - name: Stamp the build number (shown on the main menu)
+      - name: Check out the demo (main) and V2 (v2)
+        if: github.event_name != 'pull_request'
+        run: |
+          git clone --quiet --depth 1 --branch main "https://github.com/${GITHUB_REPOSITORY}.git" demo_src
+          if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" v2 >/dev/null; then
+            git clone --quiet --depth 1 --branch v2 "https://github.com/${GITHUB_REPOSITORY}.git" v2_src
+          fi
+
+      - name: Export the demo to the site's root and V2 to /v2/
+        if: github.event_name != 'pull_request'
         run: |
           stamp="$(date -u '+%d %b %H:%M')"
-          printf '{"commit": "%s", "built": "%s"}\n' "${GITHUB_SHA::7}" "$stamp" > game/build_info.json
-          cat game/build_info.json
-
-      - name: Export web build
-        run: |
-          mkdir -p build/web
-          ~/godot/godot --headless --path . --export-release "Web" build/web/index.html
-          test -f build/web/index.wasm
+          export_one() {  # $1 source folder, $2 output folder
+            sha="$(git -C "$1" rev-parse --short=7 HEAD)"
+            printf '{"commit": "%s", "built": "%s"}\n' "$sha" "$stamp" > "$1/game/build_info.json"
+            cat "$1/game/build_info.json"
+            mkdir -p "$2"
+            ~/godot/godot --headless --path "$1" --import >/dev/null 2>&1 || true
+            ~/godot/godot --headless --path "$1" --export-release "Web" "$(pwd)/$2/index.html"
+            test -f "$2/index.wasm"
+          }
+          export_one demo_src build/web
+          if [ -d v2_src ]; then export_one v2_src build/web/v2; fi
 
       - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request'
         with:
           path: build/web
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
