@@ -1,6 +1,6 @@
 **Professional Game Design Handover**
 
-**Purpose:** Give Claude enough context to continue the design process
+**Purpose:** Give enough context to continue the design process
 without reopening decisions that are already locked or mistaking
 proposals for approved mechanics.
 
@@ -292,7 +292,7 @@ on a giant HUD countdown.
 
 # 13. PROPOSED — Enemy Roster v1 (Not Yet Approved)
 
-**Important for Claude:** Do not treat this section as locked. It was
+**Important:** Do not treat this section as locked. It was
 the assistant’s recommendation immediately before this handover request.
 The user has not approved or rejected it.
 
@@ -374,7 +374,7 @@ expanding content.
 - Start restrained. Add route metadata, enemy types, progression and
   information only when testing shows a need.
 
-# 17. Exact Continuation Instruction for Claude
+# 17. Exact Continuation Instruction
 
 Continue at Point 2 — Enemy Types. Present the proposed five-archetype
 roster as a recommendation, not a decision. Critically assess whether
