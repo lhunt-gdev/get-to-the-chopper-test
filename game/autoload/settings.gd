@@ -5,7 +5,7 @@ extends Node
 
 signal changed
 
-const PATH := "user://settings.cfg"
+const PATH := "user://v2_settings.cfg"  # (V2 keeps its own saves)
 const DEFAULTS := {
 	"sound_on": true,
 	"master_volume": 80,

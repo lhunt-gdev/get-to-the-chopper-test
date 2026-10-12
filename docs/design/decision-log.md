@@ -103,6 +103,10 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **When a trooper goes down** (shot or run into): a small pool of blood spreads out under him over a couple of seconds and stays. It's deep red, as bright as the area's light allows, so it reads as blood even in the dark (a first try that darkened the floor like the shadows read as a shadow on the roofs). It has a ragged, dithered edge and a wet glint.
 - Just for looks: no change to gameplay.
 
+### DECIDED — The demo and V2 kept apart (user, 2026-10-12)
+- **Why (user):** "once the demo pass is complete duplicate the game a call it V2 so i know that the demo and V2 are separate and in V2 we can work on the other missions."
+- The released demo is the git tag `demo-1.0` and the `main` branch, published at the site's root (the link players have); it only changes for fixes the user asks for. V2 is the `v2` branch, in its own folder on this PC (HOT-EXFIL-V2, a git worktree beside the demo's), published under `/v2/` for testing. Every push to either runs its own tests and republishes both. V2's menu says V2 IN DEVELOPMENT, its tab title HOT EXFIL V2, and it keeps its own saves (v2_progress.json, v2_discovery.json, v2_settings.cfg), since both share the one site's browser storage. Missions 2 to 9 are built in V2.
+
 ### PROPOSED — The demo pass (user, 2026-10-11)
 - **Why (user):** "i want to release a demo version of this game is what we have so far worthy of a demo or does more work need to be done to polish it?" Then: "Yes, start the demo pass." The demo is mission 1 (COLD CALL) on all three settings; mission 2 waits until it is out.
 - **First-time help:** one-time prompts in mission 1's opening stretch (EASY or the first run on any setting): swipe to change lane, swipe up to jump, down to slide, running into cover, holding FIRE, tripwires and alarm boxes, the junction's doors; each shown once, remembered on the device, never mid-danger, skippable, and a setting to show them again.

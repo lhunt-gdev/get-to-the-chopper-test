@@ -433,7 +433,7 @@ func _build_main() -> void:
 	credits.offset_left = -36
 	credits.offset_right = 36
 	credits.offset_bottom = 404 + 15
-	_place_wide(UiKit.label("DEMO", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
+	_place_wide(UiKit.label("V2 IN DEVELOPMENT", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
 	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
 	_ios_tip = null
 	if not Progress.ios_tip_seen and (force_ios_tip or ios_tip_here()):

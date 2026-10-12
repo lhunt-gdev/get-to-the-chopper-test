@@ -3,7 +3,7 @@ extends Node
 ## discovered across runs. Feeds the post-run route map (LOCKED: show the path
 ## taken and where the run ended; the map grows through discovery).
 
-const DISCOVERY_PATH := "user://discovery.json"
+const DISCOVERY_PATH := "user://v2_discovery.json"  # (V2 keeps its own saves)
 ## Each mission keeps its own map (the route map's discoveries kept per mission): mission 1's starts
 ## empty, and a save from before missions (one map for the old 19-area level, all of whose areas are
 ## the TEST RANGE's now) is filed under the test range, since those finds are of that layout.

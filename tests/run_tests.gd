@@ -5316,8 +5316,8 @@ func _test_credits() -> void:
 	for l in fe.find_children("*", "Label", true, false):
 		if not l.is_queued_for_deletion():
 			labels.append((l as Label).text)
-	_check("DEMO" in labels and not "PROOF OF CONCEPT BUILD" in labels and labels.any(func(t: String) -> bool: return t.begins_with("BUILD ")),
-			"credits: the main menu says DEMO (no PROOF OF CONCEPT BUILD), the build stamp under it")
+	_check("V2 IN DEVELOPMENT" in labels and not "PROOF OF CONCEPT BUILD" in labels and labels.any(func(t: String) -> bool: return t.begins_with("BUILD ")),
+			"credits: the main menu says V2 IN DEVELOPMENT (no PROOF OF CONCEPT BUILD), the build stamp under it")
 	var buttons: Array = fe.find_children("*", "Button", true, false).filter(func(b: Node) -> bool: return not b.is_queued_for_deletion() and b.visible)
 	var rects: Array = buttons.map(func(b: Node) -> Rect2: return (b as Control).get_global_rect())
 	var apart := true

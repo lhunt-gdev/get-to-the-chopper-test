@@ -29,7 +29,8 @@ extends Node
 ## the older entry stays above (the cast are older than anything of his). NEW BEST is against his own
 ## entries only.
 
-const PATH := "user://progress.json"
+## (V2 keeps its own saves: the demo and V2 share the browser storage of one site.)
+const PATH := "user://v2_progress.json"
 ## The nine missions, in order (the decision log's "The story"; act 1 the compound, act 2 the
 ## harbour, act 3 the city tower). Only those with a "route" are built; the rest show as COMING SOON.
 const MISSIONS := [
