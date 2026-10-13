@@ -120,6 +120,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Polish and fixes are made on the demo (`main`) first, tested and pushed, then merged into V2 (`v2`) straight after, so V2 is always the demo plus the new missions. Work only for V2 (missions 2 to 9, their art and story) is made on `v2` and never goes back to the demo. Where a demo fix touches something V2 has changed, V2 keeps its own version and gets the fix on top.
 - Polish is found by a sweep of the demo (bot playthroughs on every setting, phone-size screenshots of every screen, the web build's loading and speed, the menus and text) plus anything the user notices; each round is listed for the user to pick before it is built.
 
+### DECIDED — A slimmer web download (user, 2026-10-13)
+- **Why (user):** "work on the smaller download task."
+- The web builds (demo and V2) use a web export template built in CI from Godot 4.7.2's source with the parts the game doesn't use left out (.github/web_template/custom.py): the engine download goes from about 10.1 MB to 6.6 MB gzipped. It is cached and only rebuilt when Godot, Emscripten or custom.py change; if it is missing or its export fails, the stock template is used.
+- **Left out:** 2D physics, navigation, XR, ZIP, Jolt, the advanced text server, Ogg/Vorbis/MP3/Theora, the JPG/SVG/KTX/DDS/BMP/HDR/EXR loaders, glTF/FBX at run time, CSG, GridMap, noise, RegEx, networking (and mbedTLS), camera, interactive music, visual shaders. **Any new mission or feature that needs one of these** (e.g. navigation for guards, RegEx, an .ogg music file, a runtime-loaded JPG/SVG) must turn it back on in custom.py, or the export succeeds but the game breaks in the browser.
+
 ### DECIDED — CROSS's run, aim and standing stance (user, 2026-10-13)
 - **Why (user):** "Cross should lean forward a bit more to make it look more natural run/sprint posture"; "the elbow needs to be bent a bit more this arm looks too straight and unnatural"; "his pose needs to look more ready for action, this looks very stiff at the moment"; "his feet can be a bit further apart from eachother like at shoulder length apart."
 - **Run:** he leans about 21° into it (tipped from the feet, bent at the waist), eyes kept ahead. Running guards share the run and lean with him.
