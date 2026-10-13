@@ -26,7 +26,7 @@
 			]
 		},
 		"killed": {
-			"title": "AGENT DOWN",
+			"title": "KILLED IN ACTION",
 			"lines": [
 				{"who": "briefer", "text": "CROSS? CROSS, COME IN. ...HIS SIGNAL'S GONE, GENERAL."},
 				{"who": "general", "text": "KEEP THE METER RUNNING."},
@@ -43,7 +43,7 @@
 			]
 		},
 		"chopper_left": {
-			"title": "METER RAN OUT",
+			"title": "THE CHOPPER LEFT",
 			"lines": [
 				{"who": "briefer", "text": "THE CHOPPER'S GONE, GENERAL. YOUR MINUTES RAN OUT."},
 				{"who": "general", "text": "ALREADY? I PAID FOR MINUTES! PLURAL!"},
