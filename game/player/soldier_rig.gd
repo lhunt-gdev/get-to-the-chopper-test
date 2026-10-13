@@ -36,8 +36,8 @@ const SIZE := 1.08
 ## Aiming (FIRE held, user): the right arm straight out ahead, raised this far (rad) at the shoulder
 ## (level), the elbow turned this much (+ bends it; the model's arm is bent ~15° at rest, so this
 ## straightens it to a few degrees).
-const AIM_RAISE := 1.55
-const AIM_ELBOW := -0.2
+const AIM_RAISE := 1.38
+const AIM_ELBOW := 0.45
 ## ...and the gun hand turned so the gun points straight ahead and level (user: it pointed off to the
 ## side; the model's hand is bent in at the wrist). The wrist's turn in the rig's axes: the hand (and
 ## barrel, -y) forward, the top of the fist (-z) up.
@@ -512,6 +512,109 @@ func _pose_stand() -> void:
 	elbows[1].rotation.x = 0.3
 
 
+# --- Standing still, ready ------------------------------------------------------------------------
+# (user: "his pose needs to look more ready for action, this looks very stiff at the moment".)
+# Standing still out of cover ("stand": the boss standoff, the run's end) he's in a combat stance,
+# not bolt upright: feet planted apart and staggered, knees soft, a little forward, bladed with his
+# gun side back, his eyes level ahead; the pistol in both hands at the low ready (as in his ready
+# stance under the menu), and with FIRE held both hands on it up at eye level, the left cupping the
+# gun hand. At a wall ("wall") he still stands as _pose_stand has him.
+
+## His stance (rig units, radians; the sign rules are at animate): the hips dropped, tipped forward
+## and bladed (- turns his right, gun, side back), the spine and chest turning part of that back
+## toward the front and leaning him in; his feet (ankles, x and z) shoulder width apart (user: "at
+## shoulder length apart", under his shoulder joints), the
+## left ahead, each turned out (toe: + to his left).
+const STAND_DROP := 0.04
+const STAND_HIPS_TIP := -0.05
+const STAND_BLADE := -0.26
+const STAND_SPINE := Vector2(-0.07, 0.1)
+const STAND_CHEST := Vector2(-0.03, 0.08)
+const STAND_FEET := {-1: Vector2(-0.25, -0.08), 1: Vector2(0.25, 0.06)}
+const STAND_TOES := {-1: 0.05, 1: -0.28}
+## Aiming from it, his shoulders come square to the front and he stands a touch taller over the gun
+## (rad of chest turn, of lean taken off); the gun arm swung STAND_AIM_IN (rad) in toward his
+## middle, easing in and out over STAND_AIM_IN_TIME (s) as he comes into the stance and leaves it,
+## so his left hand reaches it (the wrist still keeps the gun ahead); the support hand's run canted
+## STAND_AIM_CANT up off the bore, its elbow toward STAND_AIM_ELBOW (his chest's axes: down, out to
+## his left).
+const STAND_AIM_SQUARE := 0.08
+const STAND_AIM_TALL := 0.04
+const STAND_AIM_IN := 0.3
+const STAND_AIM_IN_TIME := 0.25
+const STAND_AIM_CANT := -0.6
+const STAND_AIM_ELBOW := Vector3(-0.5, -1.0, -0.2)
+## A breath (his chest rising, rad, and his hips, rig units) on his stride's clock: standing, about
+## one every three seconds.
+const STAND_BREATH := Vector2(0.018, 0.004)
+## His ready stance's channels at rest (see IDLE_KEYS): the pistol at the low ready, both hands on it.
+const STAND_C := {"H": 0.0, "R": 0.0, "A": 0.0, "O": 0.0, "X": 0.0, "Y": 0.0, "J": 0.0, "set": 0.0, "L": 0.0,
+	"w": 0.0, "S": 0.0, "M": 0.0, "Kd": 0.0}
+## How far into standing ready he is (0..1, over STAND_AIM_IN_TIME): the aim's inward swing.
+var _stand_w := 0.0
+
+
+## Standing still, ready (see above): his body, feet planted, and both hands on the pistol at the low
+## ready. FIRE (_aim_and_recoil) brings the gun arm up on top; then _stand_support puts the left hand
+## back on the gun.
+func _pose_stand_ready() -> void:
+	var b := sin(_phase)  # (his stride's clock runs on slowly while he stands)
+	var a := _aim * _aim * (3.0 - 2.0 * _aim)
+	hips.position = Vector3(0.0, _hip_y - STAND_DROP + STAND_BREATH.y * b, 0.0)
+	hips.rotation = Vector3(STAND_HIPS_TIP, STAND_BLADE, 0.0)
+	spine.rotation = Vector3(STAND_SPINE.x + STAND_AIM_TALL * a, STAND_SPINE.y, 0.0)
+	chest.rotation = Vector3(STAND_CHEST.x + STAND_BREATH.x * b, STAND_CHEST.y + STAND_AIM_SQUARE * a, 0.0)
+	# (his head level and to the front, whatever his lean and blade)
+	neck.rotation = Vector3(0.0, -0.4 * (STAND_BLADE + STAND_SPINE.y + chest.rotation.y), 0.0)
+	head.rotation = Vector3(-(hips.rotation.x + spine.rotation.x + chest.rotation.x),
+			-0.6 * (STAND_BLADE + STAND_SPINE.y + chest.rotation.y), 0.0)
+	for side in [-1, 1]:
+		var f: Vector2 = STAND_FEET[side]
+		_plant_ball(side, Vector3(f.x, (_ankle_rest[side] as Vector3).y, f.y), STAND_TOES[side], 0.0)
+	_idle_arms(STAND_C)
+
+
+## Standing ready, after the aim and the shrug: his left hand on the pistol wherever the gun arm has
+## it now (at the low ready as the pose had it; up with FIRE, riding each shot's kick), its arm let up
+## as far as the aim needs. Into the stance it takes over as his arms' change goes (none of a jump);
+## what he showed is kept for the next change with the arm's collarbone lift put back into its
+## shoulder (the shrug lifts it again from there: the arm stays exactly where it was).
+func _stand_support() -> void:
+	var js := _change_list()
+	var w := 1.0 if float(_change_t[2]) < 0.0 else _change_ease(float(_change_t[2]) / _change_len[2])
+	var arm: Array[Node3D] = [clavicles[-1], shoulders[-1], elbows[-1], wrists[-1]]
+	var was: Array[Quaternion] = []
+	for j in arm:
+		was.append(j.quaternion)
+	var a := _aim * _aim * (3.0 - 2.0 * _aim)
+	if a > 0.0:
+		# The support hold as at the ready, its run canted up off the bore as the gun comes up (the
+		# forearm rising to the gun from under it), reached for straight (no search for the elbow: it
+		# would jump between ways round as the arm rises), the elbow going from where the low ready
+		# has it to down and out under the gun.
+		var pr := _in_rig(_pistol)
+		var pb := pr.basis.orthonormalized()
+		var cant := lerpf(IDLE_SUPPORT_CANT, STAND_AIM_CANT, a)
+		var run := pb * Vector3(0.0, -sin(cant), -cos(cant))
+		var palm := pb * Vector3(cos(IDLE_SUPPORT_TIP), sin(IDLE_SUPPORT_TIP), 0.0)
+		var hand := _frame(run, palm) * _frame(_hand_run[-1], _hand_palm[-1]).inverse()
+		# (from the hand as the low ready has it, its wrist kept straighter: see _left_arm)
+		var ready := _in_rig(wrists[-1]).basis.orthonormalized()
+		hand = Basis(ready.get_rotation_quaternion().slerp(hand.get_rotation_quaternion(), a))
+		var sh := _in_rig(shoulders[-1]).origin
+		var low := (_in_rig(elbows[-1]).origin - sh).normalized()
+		var up := (_in_rig(chest).basis.orthonormalized() * STAND_AIM_ELBOW).normalized()
+		_reach(-1, Transform3D(hand, pr * IDLE_SUPPORT_AT - hand * (_hand_mid[-1] as Vector3)), low.lerp(up, a).normalized())
+	if w < 1.0:
+		for i in arm.size():
+			arm[i].quaternion = was[i].slerp(arm[i].quaternion, w)
+	var k := js.find(clavicles[-1])
+	_shown[k + 1] = Quaternion.IDENTITY
+	_shown[k + 2] = (clavicles[-1].basis * shoulders[-1].basis).orthonormalized().get_rotation_quaternion()
+	_shown[k + 3] = elbows[-1].quaternion
+	_shown[k + 4] = wrists[-1].quaternion
+
+
 ## Every frame, from the player's state: `run` 0..1 (how fast, of full speed), `airborne` (and
 ## `rising`), `sliding`, `cover` ("", "crouch", "stand"), `stun` 0..1, `lean` (lane change, -1..1),
 ## `surrender`, `aim` (FIRE held: the gun up); before the run, `ready` (his ready stance under the
@@ -567,6 +670,7 @@ func animate(delta: float, s: Dictionary) -> void:
 	_run = move_toward(_run, target_run, delta * 4.0)
 	_phase = fmod(_phase + delta * TAU * 1.55 * maxf(target_run, 0.2), TAU)
 	var pose := _pose_pick(s)
+	_stand_w = move_toward(_stand_w, 1.0 if pose == "stand" else 0.0, delta / STAND_AIM_IN_TIME)
 	var change := pose != _pose_was and _pose_was not in ["", "ready", "surrender"]
 	# (his boots as he showed them, kept off the floor through a change on the ground: the aim doesn't
 	# move them)
@@ -575,8 +679,10 @@ func animate(delta: float, s: Dictionary) -> void:
 	match pose.trim_suffix("!"):
 		"crouch":
 			_pose_crouch()
-		"wall", "stand":
+		"wall":
 			_pose_stand()
+		"stand":
+			_pose_stand_ready()
 		"slide":
 			_pose_slide(float(s.get("lean", 0.0)))
 		"rise", "fall":
@@ -606,6 +712,8 @@ func animate(delta: float, s: Dictionary) -> void:
 		if _launch_t >= maxf(IDLE_LAUNCH_UPPER, IDLE_LAUNCH_MAG):
 			_launch_t = -1.0
 	_shrug()
+	if pose == "stand":
+		_stand_support()
 	_apply()
 
 # --- His pose changes eased ---------------------------------------------------------------------
@@ -1050,6 +1158,7 @@ func _animate_ready(delta: float, pan: float) -> void:
 	_phase = IDLE_LAUNCH_PHASE
 	_launch_t = -1.0
 	_idle_pan = pan
+	_stand_w = 0.0
 	if pan < 0.0:
 		_idle_go = -1.0
 		var was := _idle_t
@@ -1598,7 +1707,8 @@ func _aim_and_recoil(delta: float, aiming: bool) -> void:
 	_kick = maxf(0.0, _kick - delta / RECOIL_TIME)
 	if _aim > 0.0:
 		var a := _aim * _aim * (3.0 - 2.0 * _aim)  # eased in and out
-		shoulders[1].rotation = shoulders[1].rotation.lerp(Vector3(AIM_RAISE, 0.0, 0.0), a)
+		var inward := STAND_AIM_IN * smoothstep(0.0, 1.0, _stand_w)  # (standing ready: in toward his left hand)
+		shoulders[1].rotation = shoulders[1].rotation.lerp(Vector3(AIM_RAISE, inward, 0.0), a)
 		elbows[1].rotation = elbows[1].rotation.lerp(Vector3(AIM_ELBOW, 0.0, 0.0), a)
 		# The wrist turns the gun straight ahead and level, however the rest of him is turned (the
 		# stride, the lean into the run): before the kick, so the kick still flips it up.
@@ -1628,8 +1738,9 @@ func _pose_run() -> void:
 	var p := _phase
 	var r := _run
 	hips.position.y = _hip_y - 0.05 * r + 0.06 * r * absf(sin(p))  # the bob
-	spine.rotation.x = -0.2 * r  # leaning into it
-	head.rotation.x = 0.14 * r
+	hips.rotation.x = -0.07 * r  # the whole body tipped into it from the feet (user: leaning forward more, a natural sprint)
+	spine.rotation.x = -0.3 * r  # ...and leaning into it from the waist
+	head.rotation.x = 0.3 * r  # (his eyes kept ahead)
 	for side in [-1, 1]:
 		var q := p + (0.0 if side < 0 else PI)  # left and right in turn
 		leg_hips[side].rotation.x = 0.8 * r * sin(q)

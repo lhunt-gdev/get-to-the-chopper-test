@@ -1569,11 +1569,11 @@ func _test_cross_ready() -> void:
 	_check(launch < 0.25 and launch_ok and let_go < 0.001 and fire < 2.0,
 			"CROSS springs into the run from his stance, rear leg first, no joint jumping (user: %.3f rad, was 0.870 from standing), then exactly the run; FIRE level ahead (%.1f°)" % [launch, fire])
 
-	# His standing pose as before (wall cover, the boss standoff, after the run): a rig never in the
-	# stance stands exactly as it did.
+	# His standing pose at a wall as before (the open-floor stand is his ready stance now: user, "his
+	# pose needs to look more ready for action"): a rig never in the menu stance stands exactly as it did.
 	var sd := SoldierRig.new()
 	root.add_child(sd)
-	sd.animate(dt, {"run": 0.0})
+	sd.animate(dt, {"cover": "stand"})
 	var got := _rd_snap(sd)
 	sd._reset()
 	sd._pose_stand()
@@ -1582,7 +1582,7 @@ func _test_cross_ready() -> void:
 	var same := not sd._idle_on
 	for k in range(1, got.size()):
 		same = same and (got[k] as Quaternion).is_equal_approx(want[k])
-	_check(same and (got[0] as Vector3).is_equal_approx(want[0]), "CROSS ready: his standing pose (wall cover, the standoff, after the run) as before")
+	_check(same and (got[0] as Vector3).is_equal_approx(want[0]), "CROSS ready: his standing pose at a wall as before")
 	sd.queue_free()
 	base.queue_free()
 	r.queue_free()
