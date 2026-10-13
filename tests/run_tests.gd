@@ -5967,7 +5967,8 @@ func _test_demo_polish_board_floor() -> void:
 ## three notices), only in live play (not before the run, nor in the boss's KO replay); a tip's card
 ## goes under the pause menu and comes back on resume; the camera put out past the start room's door
 ## wall; and the MAIN FLOOR EXIT's hanging EXIT signs dissolve like the rest (their face lit in the PS1
-## shader, no glow), their lettering gone once the camera is near enough to be past it.
+## shader, no glow) and dither away near the lens (their board too), their lettering gone as the
+## board starts to dissolve.
 func _test_demo_polish_level() -> void:
 	var gs := root.get_node("GameState")
 	var was_alert: int = gs.alert_level
@@ -6025,13 +6026,16 @@ func _test_demo_polish_level() -> void:
 			"door camera: in the level, the camera inside the door wall goes out past it; in the room it stays (%.2f)" % put.z)
 	# On to the MAIN FLOOR EXIT, and its signs.
 	await _locked_doors_walk(level, gs, [&"building_main_floor", &"security_wing", &"staff_canteen", &"main_floor_exit"])
-	var lit: ShaderMaterial = level._lit_face(Color("1f9a4a"))
+	var lit: ShaderMaterial = level._sign_board(Color("1f9a4a"), true)
+	var board: ShaderMaterial = level._sign_board(Color("1a1e1c"), false)
+	var boards := 0
 	var faces := 0
 	var glows := 0
 	var letters := 0
 	var near_ok := true
 	for m: MeshInstance3D in level.find_children("*", "MeshInstance3D", true, false):
 		faces += int(m.material_override == lit)
+		boards += int(m.material_override == board)
 		glows += int(m.material_override == PsxMaterials.glow(Color("1f9a4a")))
 	for l: Label3D in level.find_children("*", "Label3D", true, false):
 		if l.text == "EXIT  >>":
@@ -6039,11 +6043,14 @@ func _test_demo_polish_level() -> void:
 			near_ok = near_ok and l.visibility_range_begin == level.SIGN_LETTERS_NEAR
 	var cam_y: float = 3.4 - (level.WIRE_LOW + 0.15)  # (the camera over the sign's middle, roughly)
 	var under := Vector2(5.5, cam_y).length()  # (him right under it)
-	var short := Vector2(6.5, cam_y).length()  # (him a metre short of it)
+	var short := Vector2(7.5, cam_y).length()  # (him two metres short of it)
 	var dissolves: bool = lit.shader == PsxMaterials.SHADER and lit.get_shader_parameter("unlit") == true and lit.get_shader_parameter("cutout") != false
-	_check(faces >= 1 and faces == letters and glows == 0 and dissolves and near_ok and under < level.SIGN_LETTERS_NEAR and short > level.SIGN_LETTERS_NEAR,
-			"exit sign: the MAIN FLOOR EXIT's %d hanging signs dissolve like the rest (lit in the PS1 shader, no glow), their lettering gone with the camera nearer than %.1f m (him under it at %.1f, a metre short at %.1f)"
-			% [faces, level.SIGN_LETTERS_NEAR, under, short])
+	var lens: bool = level.SIGN_LENS_FADE > PsxMaterials.LENS_FADE and board.shader == PsxMaterials.SHADER and board.get_shader_parameter("unlit") == false
+	for m: ShaderMaterial in [lit, board]:
+		lens = lens and is_equal_approx(float(m.get_shader_parameter("lens_fade")), level.SIGN_LENS_FADE)
+	_check(faces >= 1 and faces == letters and boards == faces and glows == 0 and dissolves and lens and near_ok and under < level.SIGN_LETTERS_NEAR and short > level.SIGN_LETTERS_NEAR,
+			"exit sign: the MAIN FLOOR EXIT's %d hanging signs dissolve like the rest (lit in the PS1 shader, no glow) and dither away within %.1f m of the lens (face and board), their lettering gone with the camera nearer than %.1f m (him under it at %.1f, two metres short at %.1f)"
+			% [faces, level.SIGN_LENS_FADE, level.SIGN_LETTERS_NEAR, under, short])
 	await _settle_audio(level)
 	level.queue_free()
 	await process_frame

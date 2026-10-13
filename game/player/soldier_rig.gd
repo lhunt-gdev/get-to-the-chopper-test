@@ -534,24 +534,37 @@ const STAND_FEET := {-1: Vector2(-0.25, -0.08), 1: Vector2(0.25, 0.06)}
 const STAND_TOES := {-1: 0.05, 1: -0.28}
 ## Aiming from it, his shoulders come square to the front and he stands a touch taller over the gun
 ## (rad of chest turn, of lean taken off); the gun arm swung STAND_AIM_IN (rad) in toward his
-## middle, easing in and out over STAND_AIM_IN_TIME (s) as he comes into the stance and leaves it,
-## so his left hand reaches it (the wrist still keeps the gun ahead); the support hand's run canted
-## STAND_AIM_CANT up off the bore, its elbow toward STAND_AIM_ELBOW (his chest's axes: down, out to
-## his left).
+## middle, easing in and out over STAND_AIM_IN_TIME (s) as he comes into the stance and leaves it
+## (the wrist still keeps the gun ahead; only that far, so the gun shows clear of his head from the
+## camera behind him), his left shoulder brought STAND_AIM_REACH (rad, about his collarbone) forward
+## so his left hand reaches it; the support hand's run canted STAND_AIM_CANT up off the bore, its
+## elbow toward STAND_AIM_ELBOW (his chest's axes: down, out to his left).
 const STAND_AIM_SQUARE := 0.08
 const STAND_AIM_TALL := 0.04
-const STAND_AIM_IN := 0.3
+const STAND_AIM_IN := 0.2
 const STAND_AIM_IN_TIME := 0.25
 const STAND_AIM_CANT := -0.6
 const STAND_AIM_ELBOW := Vector3(-0.5, -1.0, -0.2)
+const STAND_AIM_REACH := 0.4
 ## A breath (his chest rising, rad, and his hips, rig units) on his stride's clock: standing, about
 ## one every three seconds.
 const STAND_BREATH := Vector2(0.018, 0.004)
 ## His ready stance's channels at rest (see IDLE_KEYS): the pistol at the low ready, both hands on it.
 const STAND_C := {"H": 0.0, "R": 0.0, "A": 0.0, "O": 0.0, "X": 0.0, "Y": 0.0, "J": 0.0, "set": 0.0, "L": 0.0,
 	"w": 0.0, "S": 0.0, "M": 0.0, "Kd": 0.0}
+## Stopping into it (the boss standoff, the run's end) he steps into it, never slides: each foot
+## goes from where it was as he stopped to its place in the stance, lifted off the floor on the way
+## (STAND_STEP_LIFT, rig units, for a step of STAND_STEP_FULL or more; less for a shorter one), the
+## foot that was up (or has further to go) first, over the first STAND_STEP_LEAD of his legs' change,
+## the other over the rest from STAND_STEP_TRAIL; each foot turning onto its place as it goes.
+const STAND_STEP_LIFT := 0.07
+const STAND_STEP_FULL := 0.1
+const STAND_STEP_LEAD := 0.6
+const STAND_STEP_TRAIL := 0.4
 ## How far into standing ready he is (0..1, over STAND_AIM_IN_TIME): the aim's inward swing.
 var _stand_w := 0.0
+## Where his ankles were as he stopped (rig space, by side; empty: not stepping into the stance).
+var _step_from := {}
 
 
 ## Standing still, ready (see above): his body, feet planted, and both hands on the pistol at the low
@@ -572,6 +585,47 @@ func _pose_stand_ready() -> void:
 		var f: Vector2 = STAND_FEET[side]
 		_plant_ball(side, Vector3(f.x, (_ankle_rest[side] as Vector3).y, f.y), STAND_TOES[side], 0.0)
 	_idle_arms(STAND_C)
+
+
+## Stepping into the stance (see STAND_STEP_LIFT), after his pose's change is eased: each leg put
+## back onto its foot's step (the eased hips above it), the foot turned by its own step's progress,
+## its boot never lower than at either end (SOLE: `low`, the stance's boots this frame, not eased).
+## Done once his legs' change is.
+func _stand_step(low: float) -> void:
+	if _step_from.is_empty() or float(_change_t[0]) < 0.0:
+		_step_from = {}
+		return
+	var u := float(_change_t[0]) / _change_len.x
+	var a: Vector3 = _step_from[-1]
+	var b: Vector3 = _step_from[1]
+	var to := {}
+	for side in [-1, 1]:
+		var f: Vector2 = STAND_FEET[side]
+		to[side] = Vector3(f.x, (_ankle_rest[side] as Vector3).y, f.y)
+	var lead := -1
+	if absf(a.y - b.y) > 0.02:
+		lead = -1 if a.y > b.y else 1
+	elif b.distance_to(to[1]) > a.distance_to(to[-1]):
+		lead = 1
+	var js := _change_list()
+	var floor_y := minf(_change_low, low)
+	for side in [-1, 1]:
+		var span := Vector2(0.0, STAND_STEP_LEAD) if side == lead else Vector2(STAND_STEP_TRAIL, 1.0)
+		var e := _change_ease((u - span.x) / (span.y - span.x))
+		var from: Vector3 = _step_from[side]
+		var goal: Vector3 = to[side]
+		var at := from.lerp(goal, e)
+		var lift := STAND_STEP_LIFT * clampf(Vector2(goal.x - from.x, goal.z - from.z).length() / STAND_STEP_FULL, 0.0, 1.0)
+		at.y = maxf(at.y, goal.y + lift * 4.0 * e * (1.0 - e))
+		var toe: float = STAND_TOES[side]
+		var turn := Quaternion.IDENTITY.slerp(_change_off[js.find(ankles[side])], 1.0 - e)
+		_plant(side, at, Basis(Vector3.UP, toe) * Vector3.FORWARD, toe)
+		ankles[side].quaternion = turn * ankles[side].quaternion
+		var under := floor_y - _foot_low(side)
+		if under > 0.0:
+			# (the foot still turned as he stopped, its toe or heel down through the floor: up a little)
+			_plant(side, at + Vector3.UP * under, Basis(Vector3.UP, toe) * Vector3.FORWARD, toe)
+			ankles[side].quaternion = turn * ankles[side].quaternion
 
 
 ## Standing ready, after the aim and the shrug: his left hand on the pistol wherever the gun arm has
@@ -604,7 +658,11 @@ func _stand_support() -> void:
 		var sh := _in_rig(shoulders[-1]).origin
 		var low := (_in_rig(elbows[-1]).origin - sh).normalized()
 		var up := (_in_rig(chest).basis.orthonormalized() * STAND_AIM_ELBOW).normalized()
-		_reach(-1, Transform3D(hand, pr * IDLE_SUPPORT_AT - hand * (_hand_mid[-1] as Vector3)), low.lerp(up, a).normalized())
+		var grip := Transform3D(hand, pr * IDLE_SUPPORT_AT - hand * (_hand_mid[-1] as Vector3))
+		_reach(-1, grip, low.lerp(up, a).normalized())
+		# (his left shoulder brought forward, the arm reaching across to the gun out to his right)
+		clavicles[-1].basis = Basis(Vector3.UP, -STAND_AIM_REACH * a) * clavicles[-1].basis
+		_reach_from_shoulder(-1, grip, low.lerp(up, a).normalized())
 	if w < 1.0:
 		for i in arm.size():
 			arm[i].quaternion = was[i].slerp(arm[i].quaternion, w)
@@ -675,6 +733,11 @@ func animate(delta: float, s: Dictionary) -> void:
 	# (his boots as he showed them, kept off the floor through a change on the ground: the aim doesn't
 	# move them)
 	var low := _sole_low() if change and _grounded(pose) and _grounded(_pose_was) else -INF
+	# (stepping into the stance: where his ankles were as he stopped)
+	var step_from := {}
+	if change and pose == "stand" and _grounded(_pose_was):
+		for side in [-1, 1]:
+			step_from[side] = _in_rig(ankles[side]).origin
 	_reset()
 	match pose.trim_suffix("!"):
 		"crouch":
@@ -701,9 +764,13 @@ func animate(delta: float, s: Dictionary) -> void:
 		_pose_blend(_launch_from, smoothstep(0.0, IDLE_LAUNCH_LEGS, _launch_t), up)
 	if change:
 		_change_begin(_shown, _change_time(_pose_was, pose), low)
+		_step_from = step_from
 	_pose_was = pose
+	var stance_low := _sole_low() if pose == "stand" and not _step_from.is_empty() else -INF
 	# Eased before the aim, so FIRE still brings the gun up level and ahead on top.
 	_change_step(delta)
+	if pose == "stand":
+		_stand_step(stance_low)
 	_change_keep()
 	_aim_and_recoil(delta, s.get("aim", false))
 	if _launch_t >= 0.0:
@@ -743,6 +810,7 @@ const POSE_CHANGE := {
 	"crouch": Vector3(0.15, 0.17, 0.22),  # down on a knee behind a box
 	"wall": Vector3(0.15, 0.17, 0.22),  # up against a wall
 	"stand": Vector3(0.22, 0.26, 0.3),  # pulling up (the boss standoff, the run's end)
+	"run>stand": Vector3(0.3, 0.24, 0.28),  # stopped dead: a step into the stance (see _stand_step)
 	"stun": Vector3(0.0, 0.07, 0.09),  # the hit: almost at once
 	"unstun": Vector3(0.0, 0.14, 0.16),  # back into his stride
 	"surrender": Vector3(0.18, 0.22, 0.3),  # down on his knees, hands up
@@ -788,8 +856,8 @@ func _pose_pick(s: Dictionary) -> String:
 				pose = "slide"
 			elif s.get("airborne", false):
 				pose = "rise" if s.get("rising", true) else "fall"
-			elif _run < 0.05 and float(s.get("run", 0.0)) <= 0.0:
-				pose = "stand"  # (not while he's told to run: out of cover he's straight into it, at any frame rate)
+			elif float(s.get("run", 0.0)) <= 0.0:
+				pose = "stand"  # (as soon as he's stopped, not once his stride has run down; never while he's told to run)
 	return pose + ("!" if float(s.get("stun", 0.0)) > 0.0 else "")
 
 
@@ -888,12 +956,16 @@ static func _grounded(p: String) -> bool:
 
 ## The lowest point of his boot soles (rig units, y; see SOLE).
 func _sole_low() -> float:
+	return minf(_foot_low(-1), _foot_low(1))
+
+
+## ...and of one boot's (`side`).
+func _foot_low(side: int) -> float:
 	var low := INF
-	for side in [-1, 1]:
-		var an: Node3D = ankles[side]
-		var flat := _in_rig(an.get_node(String(an.name) + "Flat") as Node3D)
-		for p: Vector3 in SOLE:
-			low = minf(low, (flat * p).y)
+	var an: Node3D = ankles[side]
+	var flat := _in_rig(an.get_node(String(an.name) + "Flat") as Node3D)
+	for p: Vector3 in SOLE:
+		low = minf(low, (flat * p).y)
 	return low
 
 
