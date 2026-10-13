@@ -30,6 +30,8 @@ extends Node
 ## entries only.
 
 const PATH := "user://progress.json"
+## The save's version (to_data's "version": 4, the demo pass's).
+const VERSION := 4
 ## The nine missions, in order (the decision log's "The story"; act 1 the compound, act 2 the
 ## harbour, act 3 the city tower). Only those with a "route" are built; the rest show as COMING SOON.
 const MISSIONS := [
@@ -70,6 +72,9 @@ var _house_cache := {}
 var _tips_seen := {}
 var demo_end_seen := false
 var ios_tip_seen := false
+## The save loaded is from a newer version of the game (its "version" above VERSION): it's played
+## from as far as this version can read it, but never saved over (save() leaves it as it is).
+var newer_save := false
 
 ## A board's size, the name the first entry is filled in with, the longest name, and the letters a
 ## name can have (the name entry's keys: A-Z, 0-9, space, full stop, hyphen).
@@ -422,7 +427,7 @@ func to_data() -> Dictionary:
 	for k in _boards:
 		if not _boards[k].is_empty():
 			boards[k] = _boards[k].duplicate(true)
-	return {"version": 4, "unlocked": u, "cleared": c, "best": b, "last": last, "boards": boards, "name": last_name, "seq": _seq,
+	return {"version": VERSION, "unlocked": u, "cleared": c, "best": b, "last": last, "boards": boards, "name": last_name, "seq": _seq,
 			"tips": tips_seen(), "demo_end": demo_end_seen, "ios_tip": ios_tip_seen}
 
 
@@ -458,13 +463,13 @@ func from_data(data: Variant) -> void:
 				for k in keys:
 					if _valid_key(k):
 						list[1][String(k)] = true
-			var best = data.get("best")
-			if best is Dictionary:
-				for k in best:
-					var t = best[k]
-					if _valid_key(k) and (t is float or t is int) and is_finite(float(t)) and float(t) > 0.0:
-						_best[String(k)] = float(t)
-						_cleared[String(k)] = true  # (a best time is an extraction)
+		var best = data.get("best")
+		if best is Dictionary:
+			for k in best:
+				var t = best[k]
+				if _valid_key(k) and (t is float or t is int) and is_finite(float(t)) and float(t) > 0.0:
+					_best[String(k)] = float(t)
+					_cleared[String(k)] = true  # (a best time is an extraction)
 		if _valid_key(data.get("last")) and _unlocked.has(String(data["last"])):
 			last = String(data["last"])
 		var top := 0
@@ -499,22 +504,33 @@ static func _valid_key(k: Variant) -> bool:
 			and parts[1] in RouteGraph.SETTINGS
 
 
-## Loads the save at `path` (a fresh start if there's none, or it's broken).
+## Loads the save at `path` (a fresh start if there's none, or it's broken). A broken one is kept
+## first, as it was, beside it ("<path>.bad": SaveFile.keep_bad), so the next save can't destroy it.
+## One from a newer version of the game than this one (an old copy of the game still in the
+## browser's cache, say) is read as far as this version can, and never saved over (newer_save).
 func load_from(path: String) -> void:
 	save_path = path
+	newer_save = false
 	var data: Variant = null
 	if SaveFile.exists(path):
 		var json := JSON.new()  # (read quietly: a broken file is a fresh start, not an error)
 		if json.parse(SaveFile.read_text(path)) == OK:
 			data = json.data
 		if not data is Dictionary:
-			push_warning("Progress: %s couldn't be read; starting fresh (it's replaced at the next save)" % path)
+			var kept := SaveFile.keep_bad(path)
+			push_warning("Progress: %s couldn't be read; starting fresh (%s)" % [path, "kept as " + path + SaveFile.BAD if kept else "it couldn't be kept"])
+		else:
+			var v = data.get("version")
+			newer_save = (v is int or v is float) and int(v) > VERSION
+			if newer_save:
+				push_warning("Progress: %s is from a newer version of the game (%d); it won't be saved over" % [path, int(v)])
 	from_data(data)
 
 
 ## Writes the save now (SaveFile: safely). True if it's on the device; false when it's kept in
-## memory only (the bots) or the write failed (a warning: the game goes on, the old save stays).
+## memory only (the bots, or a save from a newer version: newer_save) or the write failed (a
+## warning: the game goes on, the old save stays).
 func save() -> bool:
-	if save_path == "":
+	if save_path == "" or newer_save:
 		return false
 	return SaveFile.write_text(save_path, JSON.stringify(to_data()))

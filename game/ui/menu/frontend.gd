@@ -37,7 +37,7 @@ signal score_stamped(kind: String)
 ## top 10; BOARD: a mission's scoreboard (from the debrief, the mission's screen, HIGH SCORES).
 ## CREDITS: from the main menu (the maker, the engine, how it was made); LICENCES: the Godot Engine's
 ## licence and its third parties' notices, scrolling (from CREDITS); DEMO_END: the end-of-demo screen
-## (once, after his first escape, between the debrief and RETRY or MAIN MENU; from CREDITS after that).
+## (once, after his first escape's debrief, between it and RETRY or MAIN MENU; from CREDITS after that).
 enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION, NAME, BOARD, CREDITS, LICENCES, DEMO_END }
 
 ## Where to follow the game, for the end-of-demo screen (user: fill it in, e.g. "ITCH.IO/HOT-EXFIL" or a
@@ -48,12 +48,14 @@ const MADE_BY := "LUKE HUNT"
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
+## Each ending's debrief title (its name: the scoreboard names it the same, BoardRow), the line under
+## it, and its colour.
 const END_TITLES := {
-	&"extracted": ["MISSION COMPLETE", "EXTRACTED BY CHOPPER", UiKit.GREEN],
+	&"extracted": ["EXFIL COMPLETE", "EXTRACTED BY CHOPPER", UiKit.GREEN],
 	&"killed": ["KILLED IN ACTION", "AGENT DOWN", UiKit.RED],
-	&"captured": ["CAPTURED", "TAKEN BY THE ENEMY", UiKit.AMBER],
-	&"chopper_left": ["MISSION FAILED", "THE CHOPPER LEFT", UiKit.RED],
-	&"dead_end": ["MISSION FAILED", "NO WAY THROUGH", UiKit.RED],
+	&"captured": ["AGENT CAPTURED", "TAKEN BY THE ENEMY", UiKit.AMBER],
+	&"chopper_left": ["THE CHOPPER LEFT", "MISSION FAILED", UiKit.RED],
+	&"dead_end": ["NO WAY THROUGH", "MISSION FAILED", UiKit.RED],
 }
 
 var mission_title := "MISSION 1"
@@ -213,11 +215,14 @@ func in_debrief() -> bool:
 
 ## The debrief's lines for what an extraction opened ([n, setting] pairs: Progress.record_extraction)
 ## from mission `from`: this mission's next setting up ("MEDIUM UNLOCKED"), then the next mission's
-## ("MISSION 2: EASY + MEDIUM UNLOCKED").
+## ("MISSION 2: EASY + MEDIUM UNLOCKED"); never one for a mission that isn't built yet (COMING SOON:
+## Progress.is_built), so the demo promises no mission 2.
 static func unlock_lines(news: Array, from: int) -> PackedStringArray:
 	var same := PackedStringArray()
 	var next := {}  # mission -> its settings opened
 	for pair in news:
+		if not Progress.is_built(int(pair[0])):
+			continue
 		if int(pair[0]) == from:
 			same.append("%s UNLOCKED" % String(pair[1]).to_upper())
 		else:
@@ -384,6 +389,7 @@ func _show(s: Screen) -> void:
 			_build_licences()
 		Screen.DEMO_END:
 			_build_demo_end()
+	_fit_hits()
 
 
 # --- Screens --------------------------------------------------------------------------
@@ -420,19 +426,20 @@ func _build_main() -> void:
 	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_line())
 	Reticle.rule_bottom = title_rule()
 	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
+	# (30 px apart, CREDITS a little further: each one's tap area 30 px tall, clear of the next: MIN_TAP)
 	var first := _button("MISSION SELECT", 290, func() -> void: _open(Screen.MISSIONS))
 	# HIGH SCORES: the scoreboard of the mission and setting last picked.
-	_button("HIGH SCORES", 318, func() -> void:
+	_button("HIGH SCORES", 320, func() -> void:
 		var n := int(Progress.last.get_slice(":", 0))
 		open_board(n if Progress.is_built(n) else 1, Progress.last.get_slice(":", 1), Screen.MAIN))
-	_button("SETTINGS", 346, func() -> void: _open(Screen.SETTINGS))
-	_button("CONTROLS", 374, func() -> void: _open(Screen.CONTROLS))
+	_button("SETTINGS", 350, func() -> void: _open(Screen.SETTINGS))
+	_button("CONTROLS", 380, func() -> void: _open(Screen.CONTROLS))
 	# CREDITS: a small text button under the four (user: keep the menu uncrowded).
-	var credits := _button("CREDITS", 404, func() -> void: _open(Screen.CREDITS))
+	var credits := _button("CREDITS", 415, func() -> void: _open(Screen.CREDITS))
 	credits.theme_type_variation = "CompactButton"
 	credits.offset_left = -36
 	credits.offset_right = 36
-	credits.offset_bottom = 404 + 15
+	credits.offset_bottom = 415 + 15
 	_place_wide(UiKit.label("DEMO", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
 	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
 	_ios_tip = null
@@ -481,38 +488,47 @@ func _build_pause() -> void:
 	_back_to = Screen.PAUSE
 	_header("PAUSED", "MISSION ON HOLD")
 	var first := _button("RESUME", 170, func() -> void: resume_requested.emit())
-	_button("SETTINGS", 198, func() -> void: _open(Screen.SETTINGS))
-	_button("CONTROLS", 226, func() -> void: _open(Screen.CONTROLS))
-	_button("QUIT TO MENU", 268, func() -> void: menu_requested.emit())
+	_button("SETTINGS", 200, func() -> void: _open(Screen.SETTINGS))
+	_button("CONTROLS", 230, func() -> void: _open(Screen.CONTROLS))
+	_button("QUIT TO MENU", 272, func() -> void: menu_requested.emit())
 	first.grab_focus()
 
 
 func _build_controls() -> void:
 	_header("CONTROLS", "FIELD MANUAL")
-	var lines := [
-		["SWIPE < >", "DODGE A LANE"],
-		["SWIPE UP", "JUMP"],
-		["SWIPE DOWN", "SLIDE"],
-		["HOLD FIRE", "SHOOT (AUTO-AIM)"],
-		["TAP ENEMY", "TARGET IT"],
+	var col := _column()
+	var y := 104.0
+	for row in controls_lines(String(Settings.get_value("aim"))):
+		var a := UiKit.label(row[0], 8, UiKit.TEAL)
+		a.position = Vector2(26, y)
+		col.add_child(a)
+		var b := UiKit.label(row[1], 8, UiKit.PAPER)
+		b.position = Vector2(132, y)
+		col.add_child(b)
+		y += 18.0
+	_button("BACK", 430, func() -> void: _open(_back_to)).grab_focus()
+
+
+## CONTROLS' lines ([what you do, what it does]) for the AIM setting `aim` (Settings: "auto",
+## "auto_tap" or "tap"): FIRE aims itself unless it's TAP ONLY (then it shoots the enemy tapped), and a
+## tap on an enemy targets it unless it's AUTO. (No dogs line: the demo's mission has none.)
+static func controls_lines(aim: String) -> Array:
+	var lines := [["SWIPE < >", "DODGE A LANE"], ["SWIPE UP", "JUMP"], ["SWIPE DOWN", "SLIDE"]]
+	if aim == "tap":
+		lines.append_array([["TAP ENEMY", "TARGET IT"], ["HOLD FIRE", "SHOOT THE TARGET"]])
+	else:
+		lines.append(["HOLD FIRE", "SHOOT (AUTO-AIM)"])
+		if aim != "auto":
+			lines.append(["TAP ENEMY", "TARGET IT"])
+	lines.append_array([
 		["RUN INTO COVER", "HIDE BEHIND IT"],
 		["  SWIPE < >", "LEAVE COVER"],
 		["OUTER LANES", "TAKE SIDE EXITS"],
 		["TRIPWIRES", "RAISE THE ALERT"],
 		["ALARM BOXES", "SHOOT: ALERT DOWN"],
-		["DOGS", "DODGE OR SHOOT"],
 		["THE CHOPPER", "REACH IT IN TIME"],
-	]
-	var y := 104.0
-	for row in lines:
-		var a := UiKit.label(row[0], 8, UiKit.TEAL)
-		a.position = Vector2(26, y)
-		_root.add_child(a)
-		var b := UiKit.label(row[1], 8, UiKit.PAPER)
-		b.position = Vector2(132, y)
-		_root.add_child(b)
-		y += 18.0
-	_button("BACK", 430, func() -> void: _open(_back_to)).grab_focus()
+	])
+	return lines
 
 
 ## Where the mission select's rows start, and the least and most room each takes (px): 9 rows fit a
@@ -588,7 +604,7 @@ static func setting_top(height: float) -> float:
 ## mission select.
 func _build_mission() -> void:
 	var n := _mission
-	_header(String(Progress.MISSIONS[n - 1]["name"]), "MISSION %02d: PICK YOUR SETTING" % n)
+	_header(String(Progress.MISSIONS[n - 1]["name"]), "MISSION %02d: PICK YOUR DIFFICULTY" % n)
 	var size := _root.get_viewport_rect().size
 	var top := setting_top(size.y)
 	var focus: SettingChip = null
@@ -625,6 +641,7 @@ func _build_mission() -> void:
 
 func _build_settings() -> void:
 	_header("SETTINGS", "AGENT PREFERENCES")
+	_column()
 	var y := 90.0
 	y = _section("AUDIO", y)
 	y = _toggle_row("SOUND", "sound_on", y)
@@ -954,10 +971,12 @@ func board_rows() -> Array:
 
 # --- The demo: the end-of-demo screen, CREDITS, LICENCES, the iPhone's saves tip ----------
 
-## RETRY or MAIN MENU on the debrief: after his first escape (on any setting), the end-of-demo screen
-## first, once (its CONTINUE then does what was pressed); otherwise straight on.
+## RETRY or MAIN MENU on the debrief: on an escape's debrief (on any setting), the end-of-demo screen
+## first, once (its CONTINUE then does what was pressed); otherwise straight on. Only from an escape's
+## debrief: a death's or a capture's never opens it, even when the game was closed on his first
+## escape's debrief before it showed (it waits for his next escape).
 func _leave_debrief(then: Callable) -> void:
-	if demo_end and Progress.demo_end_due():
+	if demo_end and _end_reason == &"extracted" and Progress.demo_end_due():
 		Progress.mark_demo_end()
 		open_demo_end(then)
 		return
@@ -1052,8 +1071,8 @@ static func follow_lines(at: String = FOLLOW_AT) -> PackedStringArray:
 
 
 ## CREDITS (from the main menu): who made it, the engine it's made with (its licence under
-## LICENCES, as the Godot licence asks), how its art and sound were made; LICENCES, THE DEMO (the
-## end-of-demo screen again) and BACK.
+## LICENCES, as the Godot licence asks), how its art and sound were made; LICENCES, ABOUT THE DEMO
+## (the end-of-demo screen again) and BACK.
 func _build_credits() -> void:
 	_header("CREDITS", "HOT EXFIL DEMO")
 	var top := tall_shift(_root.get_viewport_rect().size.y, 40.0)
@@ -1066,9 +1085,10 @@ func _build_credits() -> void:
 			_place_wide(UiKit.label(String(extra), 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), y)
 			y += 12.0
 		y += 10.0
+	# (30 px apart: each button's tap area is 30 px tall, clear of the next one's)
 	_button("LICENCES", y + 6.0, func() -> void: _open(Screen.LICENCES))
-	_button("THE DEMO", y + 34.0, func() -> void: open_demo_end())
-	_button("BACK", y + 62.0, func() -> void: _open(Screen.MAIN)).grab_focus()
+	_button("ABOUT THE DEMO", y + 36.0, func() -> void: open_demo_end())
+	_button("BACK", y + 66.0, func() -> void: _open(Screen.MAIN)).grab_focus()
 
 
 ## What CREDITS says, a block at a time: [its label, its headline, any lines under it].
@@ -1206,8 +1226,64 @@ func _place_wide(c: Control, y: float) -> void:
 	_root.add_child(c)
 
 
+## A COLUMN_W-wide column for a screen's rows (SETTINGS, CONTROLS), centred on the screen however wide
+## it is (Column), so the rows sit under the centred header and buttons. The rows go in it at their
+## places on a 270-wide screen.
+const COLUMN_W := 270.0
+## The rows' column on the screen up now (SETTINGS, CONTROLS).
+var _col: Control
+
+
+func _column() -> Control:
+	_col = Column.new()
+	_root.add_child(_col)
+	return _col
+
+
+## The least height of a button's tap area (px; user: "tap areas of at least 30 px ... with the same
+## look"): a button or slider drawn smaller takes taps above and below it too (TapButton, TapSlider,
+## BoardTab: its `hit`), but only up to halfway to the next one above or below it, so two never share
+## a spot (SETTINGS' rows are 22 px apart to fit a 480-high screen: theirs are 20 to 28 px).
+const MIN_TAP := 30.0
+
+
+## Sets every growable control's tap area on the screen up now (see MIN_TAP). Called once a screen's
+## built; the areas are each control's own (they move with it as the screen's resized).
+func _fit_hits() -> void:
+	var all: Array[Control] = []
+	for top in _root.get_children():
+		if top.is_queued_for_deletion():
+			continue
+		for c in [top] + top.find_children("*", "Control", true, false):
+			if (c is BaseButton or c is Slider) and (c as Control).is_visible_in_tree():
+				all.append(c)
+	for c in all:
+		if not "hit" in c:
+			continue
+		var r := c.get_global_rect()
+		var grow := maxf(0.0, (MIN_TAP - r.size.y) / 2.0)
+		var top := r.position.y - grow
+		var bottom := r.end.y + grow
+		for o in all:
+			var q := o.get_global_rect()
+			if o == c or q.end.x <= r.position.x or q.position.x >= r.end.x:
+				continue  # (itself, or beside it: never in its way)
+			# (the line between them: halfway between their middles, never into either one as drawn)
+			var halfway := (q.get_center().y + r.get_center().y) / 2.0
+			if q.end.y <= r.position.y:
+				top = maxf(top, clampf(halfway, q.end.y, r.position.y))
+			elif q.position.y >= r.end.y:
+				bottom = minf(bottom, clampf(halfway, r.end.y, q.position.y))
+		c.set("hit", Rect2(0.0, top - r.position.y, r.size.x, bottom - top))
+
+
+## Whether `p` (in `c`'s own pixels) is in its tap area `hit` (its own rect while that's unset).
+static func in_hit(c: Control, hit: Rect2, p: Vector2) -> bool:
+	return (hit if hit.has_area() else Rect2(Vector2.ZERO, c.size)).has_point(p)
+
+
 func _button(text: String, y: float, action: Callable) -> Button:
-	var b := Button.new()
+	var b := TapButton.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_ALL
 	b.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -1225,29 +1301,29 @@ func _button(text: String, y: float, action: Callable) -> Button:
 func _section(title: String, y: float) -> float:
 	var l := UiKit.label(title, 8, UiKit.RED)
 	l.position = Vector2(20, y)
-	_root.add_child(l)
+	_col.add_child(l)
 	var line := ColorRect.new()
 	line.color = Color(UiKit.RED, 0.5)
 	line.position = Vector2(20 + title.length() * 6 + 4, y + 4)
 	line.size = Vector2(230 - title.length() * 6 - 4, 1)
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(line)
+	_col.add_child(line)
 	return y + 17.0
 
 
 func _row_label(text: String, y: float) -> void:
 	var l := UiKit.label(text, 8, UiKit.PAPER)
 	l.position = Vector2(26, y + 3)
-	_root.add_child(l)
+	_col.add_child(l)
 
 
 func _toggle_row(text: String, key: String, y: float) -> float:
 	_row_label(text, y)
-	var b := Button.new()
+	var b := TapButton.new()
 	var on: bool = Settings.get_value(key)
 	b.text = "ON" if on else "OFF"
 	b.theme_type_variation = "CompactButton"
-	_root.add_child(b)  # in the menu first, so its theme (and small size) applies
+	_col.add_child(b)  # in the menu first, so its theme (and small size) applies
 	b.position = Vector2(192, y - 1)  # level with the label
 	b.size = Vector2(48, 15)
 	b.pressed.connect(func() -> void:
@@ -1261,20 +1337,20 @@ func _toggle_row(text: String, key: String, y: float) -> float:
 ## tip back for the next run (and turns them on).
 func _tips_row(y: float) -> float:
 	_row_label("TIPS", y)
-	var toggle := Button.new()
+	var toggle := TapButton.new()
 	toggle.text = "ON" if Settings.get_value("tips") else "OFF"
 	toggle.theme_type_variation = "CompactButton"
-	_root.add_child(toggle)
+	_col.add_child(toggle)
 	toggle.position = Vector2(192, y - 1)
 	toggle.size = Vector2(48, 15)
 	toggle.pressed.connect(func() -> void:
 		clicked.emit()
 		Settings.set_value("tips", not bool(Settings.get_value("tips")))
 		toggle.text = "ON" if Settings.get_value("tips") else "OFF")
-	var again := Button.new()
+	var again := TapButton.new()
 	again.text = "SHOW AGAIN"
 	again.theme_type_variation = "CompactButton"
-	_root.add_child(again)
+	_col.add_child(again)
 	again.position = Vector2(104, y - 1)
 	again.size = Vector2(80, 15)
 	again.pressed.connect(func() -> void:
@@ -1288,17 +1364,17 @@ func _tips_row(y: float) -> float:
 
 func _slider_row(text: String, key: String, y: float, lo: float = 0, hi: float = 100) -> float:
 	_row_label(text, y)
-	var s := HSlider.new()
+	var s := TapSlider.new()
 	s.min_value = lo
 	s.max_value = hi
 	s.step = 5
 	s.value = float(Settings.get_value(key))
 	s.position = Vector2(140, y + 2)
 	s.size = Vector2(80, 10)
-	_root.add_child(s)
+	_col.add_child(s)
 	var v := UiKit.label(str(int(s.value)), 8, UiKit.TEAL)
 	v.position = Vector2(226, y + 3)
-	_root.add_child(v)
+	_col.add_child(v)
 	s.value_changed.connect(func(val: float) -> void:
 		v.text = str(int(val))
 		Settings.set_value(key, int(val)))
@@ -1307,10 +1383,10 @@ func _slider_row(text: String, key: String, y: float, lo: float = 0, hi: float =
 
 func _choice_row(text: String, key: String, names: Dictionary, y: float) -> float:
 	_row_label(text, y)
-	var b := Button.new()
+	var b := TapButton.new()
 	b.text = "< %s >" % names.get(Settings.get_value(key), "?")
 	b.theme_type_variation = "CompactButton"
-	_root.add_child(b)
+	_col.add_child(b)
 	b.position = Vector2(146, y - 1)
 	b.size = Vector2(94, 15)
 	b.pressed.connect(func() -> void:
@@ -1766,6 +1842,11 @@ class NameKeys extends Node:
 class BoardTab extends Button:
 	var setting := "easy"
 	var on := false
+	## Its tap area (taller than it's drawn: Frontend's _fit_hits).
+	var hit := Rect2()
+
+	func _has_point(p: Vector2) -> bool:
+		return Frontend.in_hit(self, hit, p)
 
 	func _ready() -> void:
 		flat = true
@@ -1803,9 +1884,11 @@ class BoardTab extends Button:
 ## the run ended and its highest alert (in its colour). His own entries are teal; the one just
 ## entered blinks. Never the route (LOCKED).
 class BoardRow extends Control:
-	## How each ending reads (the end conversations' tags).
-	const ENDINGS := {"extracted": ["EXFIL COMPLETE", UiKit.GREEN], "killed": ["AGENT DOWN", UiKit.RED],
-			"captured": ["AGENT CAPTURED", UiKit.AMBER], "chopper_left": ["METER RAN OUT", UiKit.RED], "dead_end": ["NO WAY THROUGH", UiKit.RED]}
+	## How an ending reads, [its name, its colour]: as the debrief names it (Frontend.END_TITLES).
+	static func ending(id: String) -> Array:
+		var info: Array = Frontend.END_TITLES.get(StringName(id), [id.to_upper(), "", UiKit.DIM])
+		return [info[0], info[2]]
+
 	var rank := 1
 	var entry := {}
 	var mine := false
@@ -1834,10 +1917,41 @@ class BoardRow extends Control:
 			draw_string(f, Vector2(40.0, mid - 2.0), String(entry.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
 			var score := Score.format(int(entry.get("score", 0)))
 			draw_string(f, Vector2(0, mid - 2.0), score, HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, UiKit.AMBER)
-		var end: Array = ENDINGS.get(String(entry.get("ending", "")), [String(entry.get("ending", "")).to_upper(), UiKit.DIM])
+		var end: Array = ending(String(entry.get("ending", "")))
 		draw_string(f, Vector2(40.0, mid + 9.0), end[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(end[1], 0.8))
 		var alert := clampi(int(entry.get("alert", 1)), 1, 3)
 		draw_string(f, Vector2(0, mid + 9.0), Tally.ALERT_NAMES[alert], HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, Tally.ALERT_COLORS[alert])
+
+
+## A menu button whose tap area can be taller than it's drawn (`hit`, in its own pixels: Frontend's
+## _fit_hits), so a small one still takes a thumb.
+class TapButton extends Button:
+	var hit := Rect2()
+
+	func _has_point(p: Vector2) -> bool:
+		return Frontend.in_hit(self, hit, p)
+
+
+## SETTINGS' sliders, the same (a tap or a drag anywhere in `hit` moves it: only across counts).
+class TapSlider extends HSlider:
+	var hit := Rect2()
+
+	func _has_point(p: Vector2) -> bool:
+		return Frontend.in_hit(self, hit, p)
+
+
+## The rows' column (Frontend.COLUMN_W wide, as tall as the screen), centred across the screen to the
+## pixel, and again whenever the screen's resized (a phone turned, Safari's bars).
+class Column extends Control:
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		get_viewport().size_changed.connect(_place)
+		_place()
+
+	func _place() -> void:
+		var v := get_viewport_rect().size
+		position = Vector2(maxf(0.0, floorf((v.x - Frontend.COLUMN_W) / 2.0)), 0.0)
+		size = Vector2(Frontend.COLUMN_W, v.y)
 
 
 ## A plain codec panel (the end-of-demo screen's list of the jobs to come).

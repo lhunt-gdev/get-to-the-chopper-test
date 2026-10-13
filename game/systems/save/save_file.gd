@@ -50,6 +50,29 @@ static func read_text(path: String) -> String:
 	return ""
 
 
+## The copy a broken save is kept as ("<path>.bad": keep_bad).
+const BAD := ".bad"
+
+
+## Keeps the save at `path` as it is (the file read_text reads: the save, or its .tmp), byte for
+## byte, in "<path>.bad" (replacing an older one), before a broken save is replaced by a fresh start,
+## so what was in it isn't lost. True if it's kept.
+static func keep_bad(path: String) -> bool:
+	if path == "":
+		return false
+	for p in [path, path + TMP]:
+		if FileAccess.file_exists(p):
+			var bytes := FileAccess.get_file_as_bytes(p)
+			var f := FileAccess.open(path + BAD, FileAccess.WRITE)
+			if f == null:
+				push_warning("SaveFile: could not keep %s as %s (%s)" % [p, path + BAD, error_string(FileAccess.get_open_error())])
+				return false
+			var stored := f.store_buffer(bytes)
+			f.close()
+			return stored
+	return false
+
+
 ## Whether there's a save at `path` (or its .tmp: see read_text).
 static func exists(path: String) -> bool:
 	return path != "" and (FileAccess.file_exists(path) or FileAccess.file_exists(path + TMP))

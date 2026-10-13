@@ -65,6 +65,8 @@ func _run() -> void:
 	await _test_demo_end()
 	await _test_credits()
 	await _test_ios_tip()
+	await _test_polish_menus()  # (demo polish, round 1)
+	_test_polish_saves()
 	_test_end_typing()
 	_test_briefing()
 	_test_end_talk()
@@ -4699,8 +4701,10 @@ func _test_mission_select() -> void:
 	_check(status_end + 6.0 <= right - 15.0 and name_end + 6.0 <= time_x and nc_end + 6.0 <= time_x,
 			"mission screen: the setting's name and status clear its best time and padlock")
 	# The debrief says what opened.
-	_check(FE.unlock_lines([[1, "medium"], [2, "easy"]], 1) == PackedStringArray(["MEDIUM UNLOCKED", "MISSION 2: EASY UNLOCKED"])
-			and FE.unlock_lines([[2, "easy"], [2, "medium"], [2, "hard"]], 1) == PackedStringArray(["MISSION 2: EASY + MEDIUM + HARD UNLOCKED"])
+	# (a mission not built yet, the demo's mission 2, is left out: demo polish, round 1)
+	var m2: bool = prog.is_built(2)
+	_check(FE.unlock_lines([[1, "medium"], [2, "easy"]], 1) == PackedStringArray(["MEDIUM UNLOCKED", "MISSION 2: EASY UNLOCKED"] if m2 else ["MEDIUM UNLOCKED"])
+			and FE.unlock_lines([[2, "easy"], [2, "medium"], [2, "hard"]], 1) == PackedStringArray(["MISSION 2: EASY + MEDIUM + HARD UNLOCKED"] if m2 else [])
 			and FE.unlock_lines([], 1).is_empty(), "debrief: what an extraction opened, in words")
 	_check(FE.best_line(true, -1.0) == "NEW BEST TIME" and FE.best_line(true, 90.0) == "NEW BEST TIME - WAS 1:30.0" and FE.best_line(false, 90.0) == "",
 			"debrief: a new best time, in words")
@@ -4710,7 +4714,7 @@ func _test_mission_select() -> void:
 	var fits := true
 	for l in said:
 		fits = fits and f.get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= 242.0
-	_check(said == PackedStringArray(["NEW BEST TIME - WAS 1:30.0", "MEDIUM UNLOCKED", "MISSION 2: EASY UNLOCKED"]) and fits,
+	_check(said == PackedStringArray(["NEW BEST TIME - WAS 1:30.0", "MEDIUM UNLOCKED"] + (["MISSION 2: EASY UNLOCKED"] if m2 else [])) and fits,
 			"debrief: after a faster extraction it says NEW BEST, then what unlocked (%s)" % said)
 	fe.show_end(&"extracted", {"time": 95.0, "mission": 1, "setting": "easy", "unlocked": [], "new_best": false, "was_best": 90.0})
 	await process_frame
@@ -5017,7 +5021,7 @@ func _test_score_screens() -> void:
 	var f := UiKit.font()
 	var name_end := 40.0 + f.get_string_size("WWWWWWWW", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 	var score_x := 242.0 - 10.0 - f.get_string_size("9,999,990", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
-	var end_end := 40.0 + f.get_string_size("AGENT CAPTURED", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	var end_end := 40.0 + f.get_string_size("THE CHOPPER LEFT", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 	var alert_x := 242.0 - 10.0 - f.get_string_size("SNEAKING", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 	_check(name_end + 6.0 <= score_x and end_end + 6.0 <= alert_x, "board: an 8-letter name clears the score, the longest ending clears the alert word")
 	# The switch: HARD's board, then BACK to the debrief, shown at once (nothing typed again).
@@ -5235,7 +5239,7 @@ func _test_tips_setting() -> void:
 
 ## The end-of-demo screen (the decision log's "The demo pass"): not before his first escape; after
 ## it, on any setting, RETRY or MAIN MENU on the debrief opens it first, once (CONTINUE then does what
-## was pressed), and never again; CREDITS' THE DEMO opens it again (BACK to CREDITS). It says THANKS FOR
+## was pressed), and never again; CREDITS' ABOUT THE DEMO opens it again (BACK to CREDITS). It says THANKS FOR
 ## PLAYING THE HOT EXFIL DEMO, that more missions are coming (eight more jobs for CONDOR, the eight not
 ## built yet), and where to follow the game only when that's filled in; it fits 480 and 585 high.
 func _test_demo_end() -> void:
@@ -5289,12 +5293,12 @@ func _test_demo_end() -> void:
 	await process_frame
 	press.call("CREDITS")
 	await process_frame
-	press.call("THE DEMO")
+	press.call("ABOUT THE DEMO")
 	await process_frame
 	var again: bool = fe.in_demo_end() and _menu_button(fe, "BACK") != null and _menu_button(fe, "CONTINUE") == null
 	press.call("BACK")
 	await process_frame
-	_check(again and fe.in_credits() and asked["menu"] == 1 and asked["retry"] == 2, "demo end: CREDITS' THE DEMO opens it again; BACK to CREDITS")
+	_check(again and fe.in_credits() and asked["menu"] == 1 and asked["retry"] == 2, "demo end: CREDITS' ABOUT THE DEMO opens it again; BACK to CREDITS")
 	fe.free()
 	prog.from_data(saved)
 	prog.save_path = saved_path
@@ -5434,5 +5438,266 @@ func _test_ios_tip() -> void:
 	_check(none_unforced and up and clear and closed and once and lines[0] + " " + lines[1] == "ADD TO HOME SCREEN TO KEEP YOUR PROGRESS",
 			"ios tip: on the main menu once (ADD TO HOME SCREEN TO KEEP YOUR PROGRESS, the share icon), over the camera above the title, a tap closes it, never again")
 	fe.free()
+	prog.from_data(saved)
+	prog.save_path = saved_path
+
+
+# ==== Demo polish, round 1 (the decision log's "Demo polish, round 1"): the menus and the saves ====
+
+## The debrief promises no mission that isn't built (the demo's COMING SOON); the end-of-demo screen
+## only from an escape's debrief (a death's or a capture's goes straight on, even when it's due);
+## one name for each ending, the debrief's and the board's the same; PICK YOUR DIFFICULTY and ABOUT
+## THE DEMO; CONTROLS without the dogs, its FIRE lines following AIM; SETTINGS and CONTROLS centred on
+## a wider screen (328 wide) and again as it's resized; every menu's buttons, switches and sliders a
+## tap area of 30 px (SETTINGS' rows: as much as their 22 px apart allows), none sharing a spot, a tap
+## just outside a drawn button still pressing it.
+func _test_polish_menus() -> void:
+	var prog: Node = root.get_node("Progress")
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	var saved_settings: Dictionary = settings._values.duplicate()
+	prog.load_from("")
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	# The debrief's unlocks: none for a mission not built.
+	var got: PackedStringArray = FE.unlock_lines([[1, "medium"], [2, "easy"], [2, "medium"]], 1)
+	var want := PackedStringArray(["MEDIUM UNLOCKED"])
+	if prog.is_built(2):
+		want.append("MISSION 2: EASY + MEDIUM UNLOCKED")
+	_check(got == want and (prog.is_built(2) or not ", ".join(got).contains("MISSION 2")), "polish: the debrief lists unlocks only for built missions (%s)" % ", ".join(got))
+	# One name for each ending: the debrief's title is the board's, fitting both.
+	var titles: Dictionary = FE.get_script_constant_map()["END_TITLES"]
+	var same := true
+	var f := UiKit.font()
+	var alert_x := 242.0 - 10.0 - f.get_string_size("SNEAKING", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	for id: String in Progress.ENDINGS:
+		var t: String = titles[StringName(id)][0] if titles.has(StringName(id)) else ""
+		same = same and t != "" and FE.BoardRow.ending(id)[0] == t and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x <= 242.0 \
+				and 40.0 + f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x + 6.0 <= alert_x
+	_check(same and titles[&"extracted"][0] == "EXFIL COMPLETE" and titles[&"captured"][0] == "AGENT CAPTURED" and titles[&"chopper_left"][0] == "THE CHOPPER LEFT"
+			and titles[&"killed"][0] == "KILLED IN ACTION", "polish: one name per ending on the debrief and the board, fitting both")
+	# CONTROLS' lines follow AIM; no dogs.
+	var said := func(aim: String) -> String:
+		return " / ".join(FE.controls_lines(aim).map(func(r: Array) -> String: return r[0] + ": " + r[1]))
+	_check(not said.call("auto_tap").contains("DOG") and said.call("auto").contains("HOLD FIRE: SHOOT (AUTO-AIM)") and not said.call("auto").contains("TAP ENEMY")
+			and said.call("auto_tap").contains("HOLD FIRE: SHOOT (AUTO-AIM)") and said.call("auto_tap").contains("TAP ENEMY: TARGET IT")
+			and said.call("tap").contains("TAP ENEMY: TARGET IT") and said.call("tap").contains("HOLD FIRE: SHOOT THE TARGET") and not said.call("tap").contains("AUTO"),
+			"polish: CONTROLS has no dogs line, and its FIRE lines follow AIM (TAP ONLY: %s)" % said.call("tap"))
+	var fe = FE.new()
+	root.add_child(fe)
+	var asked := {"retry": 0, "menu": 0}
+	fe.retry_requested.connect(func() -> void: asked["retry"] += 1)
+	fe.menu_requested.connect(func() -> void: asked["menu"] += 1)
+	# The end-of-demo screen: due after his first escape, but only from an escape's debrief.
+	prog.record_run(1, "easy", &"extracted", 80.0)
+	fe.show_end(&"killed", {})
+	_menu_button(fe, "RETRY").pressed.emit()
+	fe.show_end(&"captured", {})
+	_menu_button(fe, "MAIN MENU").pressed.emit()
+	var not_yet: bool = not fe.in_demo_end() and asked["retry"] == 1 and asked["menu"] == 1 and prog.demo_end_due()
+	fe.show_end(&"extracted", {})
+	_menu_button(fe, "RETRY").pressed.emit()
+	_check(not_yet and fe.in_demo_end() and asked["retry"] == 1, "polish: the end-of-demo screen only from an escape's debrief, never a death's or a capture's")
+	# PICK YOUR DIFFICULTY; ABOUT THE DEMO, fitting its button.
+	fe.show_main()
+	await process_frame
+	_menu_button(fe, "MISSION SELECT").pressed.emit()
+	fe.open_mission(1)
+	var pick: bool = _has_label(fe, "// MISSION 01: PICK YOUR DIFFICULTY")
+	fe.show_main()
+	await process_frame
+	_menu_button(fe, "CREDITS").pressed.emit()
+	await process_frame
+	var about := _menu_button(fe, "ABOUT THE DEMO")
+	_check(pick and about != null and _menu_button(fe, "THE DEMO") == null
+			and f.get_string_size(about.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x + 16.0 <= about.size.x,
+			"polish: the mission's screen says PICK YOUR DIFFICULTY; CREDITS' ABOUT THE DEMO fits its button")
+	# SETTINGS and CONTROLS centred, 270 and 328 wide, and again when resized; every screen's tap areas.
+	var window: Vector2i = root.size
+	for w: int in [270, 328]:
+		root.size = Vector2i(roundi(w * 1.5), 720)
+		await process_frame
+		var vw: float = fe._root.get_viewport_rect().size.x
+		var off := floorf((vw - 270.0) / 2.0)
+		for s in [FE.Screen.SETTINGS, FE.Screen.CONTROLS]:
+			fe._open(s)
+			await process_frame
+			var lefts := _polish_row_lefts(fe)
+			# (the rows' column, 270 wide, in the middle, as the header and the buttons are)
+			var centred: bool = not lefts.is_empty() and lefts.all(func(x: float) -> bool: return is_equal_approx(x, 26.0 + off)) \
+					and absf(off + 135.0 - vw / 2.0) <= 0.5
+			_check(centred and absf(vw - w) < 1.0, "polish: %s's rows centred on a %d-wide screen (left edge at %d)" % ["SETTINGS" if s == FE.Screen.SETTINGS else "CONTROLS", vw, 26.0 + off])
+		# Resized while SETTINGS is up: centred again.
+		fe._open(FE.Screen.SETTINGS)
+		await process_frame
+		root.size = Vector2i(roundi((598 - w) * 1.5), 720)
+		await process_frame
+		await process_frame
+		var vw2: float = fe._root.get_viewport_rect().size.x
+		var again := _polish_row_lefts(fe)
+		_check(not again.is_empty() and again.all(func(x: float) -> bool: return is_equal_approx(x, 26.0 + floorf((vw2 - 270.0) / 2.0))),
+				"polish: SETTINGS' rows centred again when it's resized (%d to %d wide)" % [vw, vw2])
+		root.size = Vector2i(roundi(w * 1.5), 720)
+		await process_frame
+		await process_frame
+		var open_mission := func() -> void:
+			fe._open(FE.Screen.MISSIONS)
+			fe.open_mission(1)
+		var screens := {"main": func() -> void: fe.show_main(), "pause": func() -> void: fe.show_pause(),
+				"settings": func() -> void: fe._open(FE.Screen.SETTINGS), "controls": func() -> void: fe._open(FE.Screen.CONTROLS),
+				"credits": func() -> void: fe._open(FE.Screen.CREDITS), "board": func() -> void: fe.open_board(1, "easy"),
+				"missions": func() -> void: fe._open(FE.Screen.MISSIONS), "mission": open_mission,
+				"debrief": func() -> void: fe.show_end(&"killed", {"mission": 1, "setting": "easy"}), "demo end": func() -> void: fe.open_demo_end()}
+		for name: String in screens:
+			(screens[name] as Callable).call()
+			await process_frame
+			var hits := _polish_hits(fe)
+			var least := INF
+			var apart := true
+			var covers := true
+			for i in hits.size():
+				var h: Rect2 = hits[i][1]
+				least = minf(least, h.size.y)
+				covers = covers and h.grow(0.01).encloses((hits[i][0] as Control).get_global_rect())
+				for j in range(i + 1, hits.size()):
+					apart = apart and not h.grow(-0.01).intersects(hits[j][1])
+			var floor_px := 20.0 if name == "settings" else 30.0
+			_check(not hits.is_empty() and apart and covers and least >= floor_px - 0.01,
+					"polish %d wide: %s's tap areas at least %d px tall (%.1f), round what's drawn, none overlapping" % [w, name, floor_px, least])
+		# A tap just above a small switch's drawn edge presses it (SETTINGS' BLOOD); just under the
+		# board's HARD tab, it opens HARD.
+		fe._open(FE.Screen.SETTINGS)
+		await process_frame
+		var blood: Button = null
+		for b in fe.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion() and (b as Button).text in ["ON", "OFF"] and _polish_row_of(fe, b) == "BLOOD":
+				blood = b
+		var was: bool = settings.get_value("blood")
+		if blood != null:
+			var r := blood.get_global_rect()
+			_tap_at(Vector2(r.get_center().x, r.position.y - 3.0))
+			await process_frame
+		_check(blood != null and settings.get_value("blood") != was, "polish %d wide: a tap 3 px above BLOOD's switch switches it" % w)
+		fe.open_board(1, "easy")
+		await process_frame
+		var hard: Button = fe.board_tab("hard")
+		var hr := hard.get_global_rect()
+		_tap_at(Vector2(hr.get_center().x, hr.end.y + 5.0))
+		await process_frame
+		_check(fe.board_shown() == [1, "hard"], "polish %d wide: a tap 5 px under the board's HARD tab opens HARD" % w)
+	root.size = window
+	await process_frame
+	fe.free()
+	settings._values = saved_settings
+	prog.from_data(saved)
+	prog.save_path = saved_path
+
+
+## Whether `c` is on the menu's screen up now (it and every parent up to the menu not being freed).
+func _polish_up(fe: Node, c: Node) -> bool:
+	var p: Node = c
+	while p != null and p != fe:
+		if p.is_queued_for_deletion():
+			return false
+		p = p.get_parent()
+	return true
+
+
+## The screen's rows' left edges on the screen (the labels at 26 in the rows' column).
+func _polish_row_lefts(fe: Node) -> Array:
+	var out := []
+	for l in fe.find_children("*", "Label", true, false):
+		if _polish_up(fe, l) and (l as Label).position.x == 26.0 and l.get_parent() != fe._root:
+			out.append((l as Label).get_global_rect().position.x)
+	return out
+
+
+## Every tap control on the menu's screen up now: [the control, its tap area on the screen].
+func _polish_hits(fe: Node) -> Array:
+	var out := []
+	for c in fe.find_children("*", "Control", true, false):
+		if not _polish_up(fe, c) or not (c is BaseButton or c is Slider) or not (c as Control).is_visible_in_tree():
+			continue
+		var r: Rect2 = (c as Control).get_global_rect()
+		var hit = c.get("hit")
+		if hit is Rect2 and (hit as Rect2).has_area():
+			r = Rect2(r.position + (hit as Rect2).position, (hit as Rect2).size)
+		out.append([c, r])
+	return out
+
+
+## The SETTINGS row a control is on: the row label level with it.
+func _polish_row_of(fe: Node, c: Control) -> String:
+	for l in fe.find_children("*", "Label", true, false):
+		if _polish_up(fe, l) and (l as Label).position.x == 26.0 and absf((l as Label).position.y - 3.0 - (c.position.y + 1.0)) < 1.0:
+			return (l as Label).text
+	return ""
+
+
+## Saves: a broken one is kept as "<path>.bad" before the fresh start, and stays when the next save
+## is written; one from a newer version of the game is read but never saved over; a save's best times
+## read as saved; SETTINGS' values only of the kind their defaults are (a broken settings file kept as
+## .bad too).
+func _test_polish_saves() -> void:
+	var prog: Node = root.get_node("Progress")
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	var saved_settings: Dictionary = settings._values.duplicate()
+	var path := "user://test_polish_progress.json"
+	var wipe := func(p: String) -> void:
+		for s in ["", SaveFile.TMP, SaveFile.BAD]:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p + s))
+	wipe.call(path)
+	var broken := "{\"version\": 4, \"unlocked\": [\"1:medium\""
+	var fw := FileAccess.open(path, FileAccess.WRITE)
+	fw.store_string(broken)
+	fw.close()
+	prog.load_from(path)
+	var fresh: bool = not prog.is_unlocked(1, "medium") and FileAccess.get_file_as_string(path + SaveFile.BAD) == broken
+	prog.record_run(1, "easy", &"extracted", 80.0)
+	_check(fresh and FileAccess.get_file_as_string(path + SaveFile.BAD) == broken and prog.is_unlocked(1, "medium") and Progress.PATH + SaveFile.BAD == "user://progress.json.bad",
+			"polish: a broken save is kept as progress.json.bad before the fresh start, and the next save leaves it be")
+	# From a newer version: read as far as it can be, never saved over.
+	wipe.call(path)
+	var newer := JSON.stringify({"version": Progress.VERSION + 1, "unlocked": ["1:medium"], "cleared": ["1:easy"], "best": {"1:easy": 70.5}, "future": {"x": 1}})
+	fw = FileAccess.open(path, FileAccess.WRITE)
+	fw.store_string(newer)
+	fw.close()
+	prog.load_from(path)
+	var read: bool = prog.newer_save and prog.is_unlocked(1, "medium") and is_equal_approx(prog.best_time(1, "easy"), 70.5)
+	var r: Dictionary = prog.record_run(1, "easy", &"extracted", 60.0)
+	_check(read and not r["saved"] and FileAccess.get_file_as_string(path) == newer and not FileAccess.file_exists(path + SaveFile.BAD),
+			"polish: a save from a newer version is read as far as it can be and never saved over")
+	prog.load_from("")
+	_check(not prog.newer_save, "polish: another load isn't a newer save")
+	# Best times: as saved (and cleared, from a best time alone).
+	prog.from_data({"version": 4, "best": {"1:medium": 81.25, "2:bogus": 3.0}})
+	_check(is_equal_approx(prog.best_time(1, "medium"), 81.25) and prog.is_cleared(1, "medium") and prog._best.size() == 1, "polish: a save's best times read as saved")
+	wipe.call(path)
+	# Settings: only values of their defaults' kind; a broken file kept as .bad, the defaults used.
+	var spath := "user://test_polish_settings.cfg"
+	wipe.call(spath)
+	var cfg := ConfigFile.new()
+	cfg.set_value("settings", "sound_on", "yes")
+	cfg.set_value("settings", "master_volume", 55)
+	cfg.set_value("settings", "music_volume", "loud")
+	cfg.set_value("settings", "aim", 3)
+	cfg.set_value("settings", "swipe", "high")
+	cfg.set_value("settings", "blood", false)
+	fw = FileAccess.open(spath, FileAccess.WRITE)
+	fw.store_string(cfg.encode_to_text())
+	fw.close()
+	settings.load_from(spath)
+	var typed: bool = settings.get_value("sound_on") == true and settings.get_value("master_volume") == 55 and settings.get_value("music_volume") == settings.DEFAULTS["music_volume"] \
+			and settings.get_value("aim") == settings.DEFAULTS["aim"] and settings.get_value("swipe") == "high" and settings.get_value("blood") == false
+	fw = FileAccess.open(spath, FileAccess.WRITE)
+	fw.store_string("[settings\nsound_on = = =")
+	fw.close()
+	settings.load_from(spath)
+	var kept: bool = FileAccess.file_exists(spath + SaveFile.BAD) and settings.get_value("blood") == settings.DEFAULTS["blood"]
+	_check(typed and kept, "polish: settings take only values of their defaults' kind; a broken settings file is kept as .bad, the defaults used")
+	wipe.call(spath)
+	settings._values = saved_settings
 	prog.from_data(saved)
 	prog.save_path = saved_path
