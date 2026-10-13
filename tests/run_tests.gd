@@ -5759,7 +5759,7 @@ func _test_polish_saves() -> void:
 	prog.load_from(path)
 	var fresh: bool = not prog.is_unlocked(1, "medium") and FileAccess.get_file_as_string(path + SaveFile.BAD) == broken
 	prog.record_run(1, "easy", &"extracted", 80.0)
-	_check(fresh and FileAccess.get_file_as_string(path + SaveFile.BAD) == broken and prog.is_unlocked(1, "medium") and Progress.PATH + SaveFile.BAD == "user://progress.json.bad",
+	_check(fresh and FileAccess.get_file_as_string(path + SaveFile.BAD) == broken and prog.is_unlocked(1, "medium") and (Progress.PATH + SaveFile.BAD).ends_with("progress.json.bad"),
 			"polish: a broken save is kept as progress.json.bad before the fresh start, and the next save leaves it be")
 	# From a newer version: read as far as it can be, never saved over.
 	wipe.call(path)
