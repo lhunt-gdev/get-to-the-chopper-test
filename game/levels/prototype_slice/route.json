@@ -18,7 +18,7 @@
       {"name":"VORHALT","score":10090,"ending":"captured","alert":2,"from":"miss_ladder","v":1,"raw":{"distance":709,"downed":14,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":-1.0,"time":66.8,"run_into":0,"top_alert":2}},
       {"name":"CONDOR","score":9290,"ending":"chopper_left","alert":1,"from":"boss_hold_fire","v":1,"raw":{"distance":804,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":118.0,"run_into":0,"top_alert":1}},
       {"name":"BISHOP","score":4620,"ending":"killed","alert":1,"from":"halfway","v":1,"raw":{"distance":387,"downed":3,"hits":3,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":36.9,"run_into":3,"top_alert":1}},
-      {"name":"ARDBALLS","score":300,"ending":"killed","alert":3,"from":"derived: the pad's length, nothing else","v":1,"raw":{"distance":30,"downed":0,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
+      {"name":"ARDBALLS","score":2550,"ending":"killed","alert":3,"from":"derived: the floor, over any death in the first area","v":1,"raw":{"distance":180,"downed":3,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
     ],
     "medium": [
       {"name":"VESPER","score":184500,"ending":"extracted","alert":2,"from":"fire_escape (0.3 s less to spare)","v":1,"raw":{"distance":740,"downed":15,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":31.6,"time":74.4,"run_into":0,"top_alert":2}},
@@ -30,7 +30,7 @@
       {"name":"VORHALT","score":20180,"ending":"captured","alert":2,"from":"miss_ladder","v":1,"raw":{"distance":709,"downed":14,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":-1.0,"time":66.8,"run_into":0,"top_alert":2}},
       {"name":"CONDOR","score":18580,"ending":"chopper_left","alert":1,"from":"boss_hold_fire","v":1,"raw":{"distance":804,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":106.0,"run_into":0,"top_alert":1}},
       {"name":"BISHOP","score":9240,"ending":"killed","alert":1,"from":"halfway","v":1,"raw":{"distance":387,"downed":3,"hits":3,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":36.9,"run_into":3,"top_alert":1}},
-      {"name":"ARDBALLS","score":600,"ending":"killed","alert":3,"from":"derived: the pad's length, nothing else","v":1,"raw":{"distance":30,"downed":0,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
+      {"name":"ARDBALLS","score":5100,"ending":"killed","alert":3,"from":"derived: the floor, over any death in the first area","v":1,"raw":{"distance":180,"downed":3,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
     ],
     "hard": [
       {"name":"VESPER","score":240150,"ending":"extracted","alert":2,"from":"fire_escape (0.3 s less to spare)","v":1,"raw":{"distance":740,"downed":15,"hits":0,"alarms_set_off":1,"alarms_stopped":0,"spare":19.4,"time":76.6,"run_into":0,"top_alert":2}},
@@ -42,7 +42,7 @@
       {"name":"VORHALT","score":32520,"ending":"captured","alert":3,"from":"fire_closes","v":1,"raw":{"distance":709,"downed":17,"hits":0,"alarms_set_off":2,"alarms_stopped":1,"spare":-1.0,"time":66.8,"run_into":0,"top_alert":3}},
       {"name":"CONDOR","score":27870,"ending":"chopper_left","alert":1,"from":"boss_hold_fire","v":1,"raw":{"distance":804,"downed":5,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":96.0,"run_into":0,"top_alert":1}},
       {"name":"BISHOP","score":13860,"ending":"killed","alert":1,"from":"halfway","v":1,"raw":{"distance":387,"downed":3,"hits":3,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":36.9,"run_into":3,"top_alert":1}},
-      {"name":"ARDBALLS","score":900,"ending":"killed","alert":3,"from":"derived: the pad's length, nothing else","v":1,"raw":{"distance":30,"downed":0,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
+      {"name":"ARDBALLS","score":7650,"ending":"killed","alert":3,"from":"derived: the floor, over any death in the first area","v":1,"raw":{"distance":180,"downed":3,"hits":0,"alarms_set_off":0,"alarms_stopped":0,"spare":-1.0,"time":0.0,"run_into":0,"top_alert":3}}
     ]
   },
   "squad": false,
@@ -244,8 +244,8 @@
         {"kind": "barrier", "lanes": [0,1,2], "at": 124}
       ],
       "enemies": [
-        {"kind": "rifle_trooper", "lane": 2, "at": 34},
-        {"kind": "rifle_trooper", "lane": 3, "at": 40},
+        {"kind": "rifle_trooper", "lane": 2, "at": 46},
+        {"kind": "rifle_trooper", "lane": 3, "at": 50},
         {"kind": "rifle_trooper", "lane": 1, "at": 50},
         {"kind": "rifle_trooper", "lane": 3, "at": 104},
         {"kind": "rifle_trooper", "lane": 0, "at": 70, "min_alert": 2},

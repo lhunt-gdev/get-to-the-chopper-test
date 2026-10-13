@@ -435,6 +435,11 @@ var _ambience: Ambience
 ## The start room's own lamps (the cold light at its open window, the desk lamp, the computer's
 ## glow), shown only while the camera is in the room (_light_start_room).
 var _room_lamps: Node3D
+## The start room, while it's there, and its door wall's frame in the room's space (its room face at
+## z 0, the lobby's start; z + back into the room): the play camera cuts through it
+## (_through_door_wall).
+var _door_wall := Transform3D.IDENTITY
+var _start_room: Node3D
 ## All the sound (see AudioDirector).
 var _audio: AudioDirector
 ## The menus (main menu, settings, pause, end screens).
@@ -692,12 +697,27 @@ func _pause() -> void:
 		return  # (caught: his capture, its conversation and the debrief follow)
 	set_fire_held(false)
 	get_tree().paused = true
+	_hud.set_paused(true)  # (a tip's card goes under the pause menu, and comes back on resume)
 	_frontend.show_pause()
 
 
 func _resume() -> void:
 	_frontend.hide_all()
+	_hud.set_paused(false)
 	get_tree().paused = false
+
+
+## The page or the app loses focus (another tab, the Home Screen, a call, another window): the run
+## pauses itself, as the pause button does (only in live play: _pause says when). Not headless, nor
+## recording a movie (the bots have no window to lose, and a recording runs on unwatched; a test turns
+## it on).
+var pause_on_focus_loss := DisplayServer.get_name() != "headless" and Engine.get_write_movie_path() == ""
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED] \
+			and pause_on_focus_loss and is_node_ready():
+		_pause()
 
 
 ## The player's settings (see the Settings autoload), applied now and whenever they change.
@@ -4415,10 +4435,13 @@ func _build_exit_sign(parent: Node3D, seg: Dictionary, at: float, ends: Array) -
 	sign.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h / 2.0, 0))
 	var face := _box(parent, Vector3(w - 0.1, h - 0.1, 0.02), Vector3.ZERO, Color.WHITE)
 	face.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h / 2.0, 0.08))
-	face.material_override = PsxMaterials.glow(Color("1f9a4a"))
+	# Lit, but in the PS1 shader (a glow's is never cut): the cutout dissolves it with the rest as the
+	# camera passes under it (it hid him whole there). Its lettering goes once the camera's that near.
+	face.material_override = _lit_face(Color("1f9a4a"))
 	var label := _sign_label("EXIT  >>", Color("e8fff0"), w * 0.7, Vector3(0, 0, 0.1))
 	sign.add_child(label)
 	label.modulate = Color("f4fff8")
+	label.visibility_range_begin = SIGN_LETTERS_NEAR
 	var top := _ceil(seg["id"])
 	for rx in [e0 + 0.3, e1 - 0.3]:
 		var rod := top - (bottom + h)
@@ -4430,6 +4453,23 @@ func _build_exit_sign(parent: Node3D, seg: Dictionary, at: float, ends: Array) -
 	glow.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom - 0.4, 0.6))
 	_ambience.add_lamp(glow, Color(0.4, 1.0, 0.6) * 0.8, 3.5, {"alert": false})
 	return sign
+
+
+## Nearer the camera than this (m), the hanging EXIT sign's lettering isn't drawn: the camera, 5.5 m
+## behind him, is that near only once he's under it or past it, where it would stand across him.
+const SIGN_LETTERS_NEAR := 6.0
+static var _lit_faces := {}
+
+
+## A sign's lit face: full brightness, as PsxMaterials.glow, but in the PS1 shader (unlit), so the
+## cutout dissolves it like the rest of the level. One per colour.
+static func _lit_face(color: Color) -> ShaderMaterial:
+	var key := color.to_html()
+	if not _lit_faces.has(key):
+		var m := PsxMaterials.flat(color).duplicate() as ShaderMaterial
+		m.set_shader_parameter("unlit", true)
+		_lit_faces[key] = m
+	return _lit_faces[key]
 
 
 ## The MAIN FLOOR EXIT's way out (user reference): a glass front across the end of the hall, granite
@@ -7521,6 +7561,8 @@ func _build_start_room(seg: Dictionary) -> void:
 	var room := Node3D.new()
 	room.name = "StartRoom"
 	seg["node"].add_child(room)
+	_start_room = room
+	_door_wall = _frame_at(seg, 0.0)
 	var L := tuning.start_room_length
 	var road_w := tuning.lane_count * tuning.lane_width
 	var half := START_ROOM_HALF
@@ -10451,25 +10493,35 @@ func _update_tips(delta: float) -> void:
 		else:
 			var s := _tip_state()
 			if _tip != "":
-				if FirstTips.done(_tip, _tip_from, s) or (_tips_over and _tip != "doors"):
+				# (a hold's or cover's moment comes while a softer tip is up: that one's cut short for it)
+				var bump := "" if _tips_over else FirstTips.preempt(_tip, s)
+				if FirstTips.done(_tip, _tip_from, s) or (_tips_over and _tip != "doors") or bump != "":
 					_close_tip()
 				else:
 					want = FirstTips.scale_for(_tip, float(s["gap"]))
+				if bump != "":
+					want = _open_tip(bump, s)
 			else:
 				_tip_cool -= delta
-				# (no breather needed in cover: he's stopped there, and safe)
-				var id := FirstTips.pick(s) if _tip_cool <= 0.0 or _player.in_cover else ""
+				# (no breather needed in cover: he's stopped there, and safe; nor before a hold or
+				# cover's: each must show before the barrier, pipe, wire or cover it's for)
+				var id := FirstTips.pick(s) if _tip_cool <= 0.0 or _player.in_cover else FirstTips.pick_moment(s)
 				if id != "":
-					_tip = id
-					_tip_from = s
-					Progress.mark_tip(id)
-					_hud.show_tip(id)
-					tip_shown.emit(id)
-					want = FirstTips.scale_for(id, float(s["gap"]))
+					want = _open_tip(id, s)
 	var eased := FirstTips.ease_scale(_tip_scale, want, real)
 	if eased != _tip_scale:
 		_tip_scale = eased
 		_apply_time_scale()
+
+
+## Tip `id` shows at the moment `s` (once, ever: Progress); says how fast the game goes for it.
+func _open_tip(id: String, s: Dictionary) -> float:
+	_tip = id
+	_tip_from = s
+	Progress.mark_tip(id)
+	_hud.show_tip(id)
+	tip_shown.emit(id)
+	return FirstTips.scale_for(id, float(s["gap"]))
 
 
 ## The tip up now goes (done, a tap, or the run's moved on); the game's speed eases back.
@@ -10638,7 +10690,7 @@ func _update_camera(delta: float) -> void:
 	var shot := _place_camera(delta)
 	_cut_slide = Cutout.slide_toward(_cut_slide, _player.is_sliding(), delta)
 	Cutout.apply(_camera.global_position, _player.global_position, Cutout.on_for(shot),
-			Cutout.lift(_player.jump_y, _cut_slide))
+			Cutout.lift(_player.shown_y(), _cut_slide))  # (his jump as it shows: eased down into cover)
 
 
 ## Behind and above the player, in the frame of the leg they're on, eased so turns and
@@ -10748,6 +10800,7 @@ func _place_camera(delta: float) -> Cutout.Shot:
 	var target := Transform3D(Basis.IDENTITY, eye).looking_at(look, Vector3.UP)
 	# The smoothed camera, kept apart from the shake so the smoothing can't swallow it.
 	_cam_base = target if snap else _cam_base.interpolate_with(target, clampf(delta * 8.0, 0.0, 1.0))
+	_cam_base.origin = _through_door_wall(_cam_base.origin)
 	_camera.global_transform = _cam_base
 	# The play camera's view (a tap that skipped the pan as the menu's wider view eased out on a tall
 	# phone: eased back with the rest of the camera).
@@ -10766,6 +10819,31 @@ func _place_camera(delta: float) -> Cutout.Shot:
 				_cam_base.origin + punch + jitter)
 	# Just out of a stairwell, the stairwell left out of the picture shows him (no cutout there).
 	return Cutout.Shot.JUST_OUT if just_out else Cutout.Shot.PLAY
+
+
+## The play camera at `at` (world space), kept out of the start room's door wall: following him out
+## of the room (3.4 m up, over the door), it came up to the wall's room face and went inside it as
+## the lobby's first bend swung it round (the wall over the door smeared across the top of the
+## screen for 5 frames, then filled it for 2). From DOOR_CAM_CUT m short of its room face to
+## DOOR_CAM_CLEAR m out past its lobby face, it's put out there: one cut through the wall. Only the
+## camera: the wall, the door and the bend stay where they are.
+const DOOR_CAM_CUT := 1.2
+const DOOR_CAM_CLEAR := 0.35
+const DOOR_WALL_THICK := 0.3
+
+
+func _through_door_wall(at: Vector3) -> Vector3:
+	if not is_instance_valid(_start_room):
+		return at
+	var wall: Transform3D = _start_room.global_transform * _door_wall
+	return wall * _door_wall_clear(wall.affine_inverse() * at)
+
+
+## The same, in the wall's own space (`p`: z + back into the room from its room face).
+static func _door_wall_clear(p: Vector3) -> Vector3:
+	if p.z < DOOR_CAM_CUT and p.z > -DOOR_WALL_THICK - DOOR_CAM_CLEAR:
+		p.z = -DOOR_WALL_THICK - DOOR_CAM_CLEAR
+	return p
 
 
 ## True while the play camera is still back over the flight at the start of `seg`, short of

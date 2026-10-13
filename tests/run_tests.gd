@@ -78,6 +78,13 @@ func _run() -> void:
 	_test_hanging()
 	await _test_locked_doors()
 	await _test_targeting_priority()
+	# --- Demo polish, round 1 ---
+	_test_demo_polish_tips()
+	_test_demo_polish_cover_ease()
+	_test_demo_polish_door_camera()
+	_test_demo_polish_rooftops()
+	_test_demo_polish_board_floor()
+	await _test_demo_polish_level()
 	print("%d checks, %d failed" % [_checks, _failures])
 	await _settle_audio(root)
 	quit(1 if _failures > 0 else 0)
@@ -5084,7 +5091,8 @@ func _font_has(text: String) -> bool:
 ## order (change lane just through the door with room ahead; jump, slide and the tripwire's once it's
 ## the next thing in his lane and close, never too close to act; cover; FIRE with a guard to shoot;
 ## the doors near the junction with nothing left before it), never while a guard's aiming at him (but
-## FIRE's) or in cover (but leaving it); each gone when he does what it says, or the moment's passed;
+## FIRE's, and the holds': _test_demo_polish_tips) or in cover (but leaving it); each gone when he does
+## what it says, or the moment's passed;
 ## the game slowed for it, never stopped (the hold down to MIN_SCALE right where a swipe clears it,
 ## the rest gently, the doors' gently on top of the junction's slowdown); each shown once, ever,
 ## remembered in the save (SHOW AGAIN clears them; an old save has none seen); TIPS on by default, a
@@ -5119,15 +5127,17 @@ func _test_first_tips() -> void:
 	for id: String in picks:
 		var cases: Array = picks[id]
 		var seen: Dictionary = all_but.call(id)
+		if id == "cover":
+			seen.erase("cover_out")  # (cover's never comes once leaving cover's has: see _test_demo_polish_tips)
 		_check(FirstTips.pick(at.call(cases[0].merged({"seen": seen}))) == id and FirstTips.pick(at.call(cases[1].merged({"seen": seen}))) == ""
 				and FirstTips.pick(at.call(cases[2].merged({"seen": seen}))) == "",
 				"tips: %s at its moment, not too early nor too late (too close to act on) or for something else" % id.to_upper())
 	var seen_all_but_jump: Dictionary = all_but.call("jump")
-	_check(FirstTips.pick(at.call({"seen": seen_all_but_jump, "next": "jump", "gap": 10.0, "aimed_at": true})) == ""
+	_check(FirstTips.pick(at.call({"seen": all_but.call("lane"), "d": 1.0, "gap": 30.0, "aimed_at": true})) == ""
 			and FirstTips.pick(at.call({"seen": all_but.call("fire"), "target": true, "gap": 20.0, "aimed_at": true})) == "fire"
 			and FirstTips.pick(at.call({"seen": seen_all_but_jump, "next": "jump", "gap": 10.0, "airborne": true})) == ""
 			and FirstTips.pick(at.call({"seen": all_but.call("doors"), "split": 20.0, "clear_to_split": true, "in_cover": true})) == "",
-			"tips: never mid-danger: none while a guard's aiming at him (but FIRE's: a guard's what it's about), mid-jump, or in cover (but leaving it)")
+			"tips: never mid-danger: none while a guard's aiming at him (but FIRE's: a guard's what it's about; and the holds'), mid-jump, or in cover (but leaving it)")
 	var every := {}
 	for k in FirstTips.ORDER:
 		every[k] = true
@@ -5436,3 +5446,249 @@ func _test_ios_tip() -> void:
 	fe.free()
 	prog.from_data(saved)
 	prog.save_path = saved_path
+
+
+# --- Demo polish, round 1 (the decision log's "Demo polish, round 1") ----------------------------
+
+## The tips (FirstTips): the holds (JUMP, SLIDE, the tripwire's) show while a guard aims; they and
+## cover's skip the breather (pick_moment) and cut a softer tip short (preempt), never one another;
+## a softer one that would only just come up before one's moment waits for it; cover's never after
+## leaving cover's; and the order reads as they're taught.
+func _test_demo_polish_tips() -> void:
+	var at := func(more: Dictionary) -> Dictionary:
+		var s := {"seen": {}, "d": 20.0, "lane": 2, "gap": INF, "next": "", "in_cover": false, "airborne": false, "sliding": false,
+				"aimed_at": false, "target": false, "firing": false, "split": INF, "clear_to_split": false}
+		s.merge(more, true)
+		return s
+	var all_but := func(ids: Array) -> Dictionary:
+		var seen := {}
+		for k in FirstTips.ORDER:
+			if not k in ids:
+				seen[k] = true
+		return seen
+	var aimed := true
+	for id: String in FirstTips.HOLDS:
+		aimed = aimed and FirstTips.pick(at.call({"seen": all_but.call([id]), "next": FirstTips.PASS_FOR[id], "gap": 10.0, "aimed_at": true})) == id
+	_check(aimed, "demo polish tips: JUMP, SLIDE and the tripwire's show while a guard aims (the LOBBY's first barrier, the MAIN FLOOR's wire)")
+	_check(FirstTips.pick(at.call({"seen": all_but.call(["alert"]), "next": "jump_or_alert", "gap": 9.0, "sliding": true})) == "alert"
+			and FirstTips.pick(at.call({"seen": all_but.call(["jump"]), "next": "jump", "gap": 9.0, "sliding": true})) == "jump"
+			and FirstTips.pick(at.call({"seen": all_but.call(["alert"]), "next": "jump_or_alert", "gap": 9.0, "airborne": true})) == "",
+			"demo polish tips: the tripwire's and JUMP's show mid-slide (the MAIN FLOOR's wire, 9 m past its pipe), never mid-jump")
+	_check(FirstTips.pick_moment(at.call({"next": "jump", "gap": 10.0})) == "jump" and FirstTips.pick_moment(at.call({"next": "cover", "gap": 10.0})) == "cover"
+			and FirstTips.pick_moment(at.call({"d": 1.0, "gap": 30.0})) == "" and FirstTips.pick_moment(at.call({"target": true, "gap": 30.0})) == ""
+			and FirstTips.pick_moment(at.call({"seen": {"jump": true}, "next": "jump", "gap": 10.0})) == "",
+			"demo polish tips: in the breather after a tip, only a hold or cover's can show (once)")
+	var moment: Dictionary = at.call({"seen": {"lane": true, "fire": true}, "next": "jump", "gap": 12.0, "aimed_at": true})
+	var cover: Dictionary = at.call({"seen": {"lane": true, "fire": true}, "next": "cover", "gap": 12.0, "target": true})
+	_check(FirstTips.preempt("lane", moment) == "jump" and FirstTips.preempt("fire", moment) == "jump" and FirstTips.preempt("doors", moment) == "jump"
+			and FirstTips.preempt("fire", cover) == "cover" and FirstTips.preempt("slide", moment) == "" and FirstTips.preempt("cover", moment) == ""
+			and FirstTips.preempt("lane", at.call({"seen": {"lane": true, "jump": true}, "next": "jump", "gap": 12.0})) == "",
+			"demo polish tips: a hold's or cover's moment cuts a softer tip short (change lane, FIRE, the doors), never one of them")
+	_check(FirstTips.pick(at.call({"d": 1.0, "next": "jump", "gap": 16.0})) == "" and FirstTips.pick(at.call({"seen": {"jump": true}, "d": 1.0, "next": "jump", "gap": 16.0})) == "lane"
+			and FirstTips.pick(at.call({"d": 1.0, "next": "jump", "gap": 25.0})) == "lane" and FirstTips.pick(at.call({"target": true, "next": "cover", "gap": 18.0})) == "",
+			"demo polish tips: a softer tip waits when a hold's or cover's moment is just ahead (and doesn't once it's been shown)")
+	_check(FirstTips.pick(at.call({"seen": all_but.call(["cover"]), "next": "cover", "gap": 12.0})) == ""
+			and FirstTips.pick(at.call({"seen": all_but.call(["cover", "cover_out"]), "next": "cover", "gap": 12.0})) == "cover",
+			"demo polish tips: RUN INTO COVER TO HIDE never shows once TO LEAVE COVER has")
+	# FIRE's wording follows SETTINGS' AIM (as CONTROLS has it), and fits its card.
+	var f := UiKit.font()
+	var fits := true
+	for aim: String in ["auto", "auto_tap", "tap"]:
+		for line: String in FirstTips.lines_of("fire", aim):
+			fits = fits and _font_has(line) and f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= FirstTips.Card.W - 16.0
+	var tap: Array = FirstTips.lines_of("fire", "tap")
+	var both: Array = FirstTips.lines_of("fire", "auto_tap")
+	var auto: Array = FirstTips.lines_of("fire", "auto")
+	_check(fits and String(tap[0]).contains("TAP AN ENEMY") and not " ".join(tap).contains("AIMS FOR YOU") and " ".join(both).contains("AIMS")
+			and " ".join(both).contains("TAP AN ENEMY") and " ".join(auto).contains("AIMS FOR YOU") and not " ".join(auto).contains("TAP")
+			and FirstTips.lines_of("jump", "tap") == FirstTips.TIPS["jump"]["lines"],
+			"demo polish tips: HOLD FIRE's card says what AIM does (AUTO: it aims for you; TAP ONLY: tap an enemy to target it; AUTO + TAP: either), and fits")
+	var o := FirstTips.ORDER
+	_check(o.find("lane") < o.find("jump") and o.find("jump") < o.find("slide") and o.find("slide") < o.find("alert") and o.find("cover") < o.find("cover_out")
+			and o.find("fire") < o.find("cover_out") and o.size() == FirstTips.TIPS.size(),
+			"demo polish tips: in the order they're taught (%s)" % [o])
+
+
+## CROSS into cover (Player.enter_cover): in the game down at once and stopped, as ever; on screen he
+## eases down out of a jump over COVER_SETTLE (about 0.12-0.15 s), and out of a slide skids on a
+## little and settles back, from about his running speed, never further than COVER_SKID.
+func _test_demo_polish_cover_ease() -> void:
+	var gs := root.get_node("GameState")
+	var was: bool = gs.run_active
+	var p: Node3D = (load("res://game/player/player.tscn") as PackedScene).instantiate()
+	root.add_child(p)
+	p.set_physics_process(false)
+	gs.run_active = true
+	var dt := 1.0 / 60.0
+	p.jump_y = 1.2
+	p._y_velocity = -2.0
+	p.enter_cover(0.0, true)
+	var at_once: bool = p.jump_y == 0.0 and not p.is_airborne() and p.in_cover and is_equal_approx(p.shown_y(), 1.2)
+	var last := 1.2
+	var eased := true
+	var frames := 0
+	for f in 20:
+		p._physics_process(dt)
+		var y: float = p._rig.position.y
+		eased = eased and y <= last + 1e-5
+		last = y
+		if y > 0.0:
+			frames += 1
+	_check(at_once and eased and last == 0.0 and frames >= 6 and frames <= 9 and p.COVER_SETTLE >= 0.12 and p.COVER_SETTLE <= 0.15,
+			"cover ease: jumping into cover, he's down at once in the game, and eases down on screen over %d frames (%.2f s), never back up" % [frames, p.COVER_SETTLE])
+	p.in_cover = false
+	p._slide_left = p.tuning.slide_duration
+	var was_at: float = p.distance
+	p.enter_cover(was_at, true)
+	var on: Array[float] = []
+	for f in 20:
+		p._physics_process(dt)
+		on.append(-p._rig.position.z)
+	var furthest: float = on.max()
+	var first_step: float = on[0] / dt
+	_check(p.in_cover and p.distance == was_at and not p.is_sliding() and furthest <= p.COVER_SKID + 1e-4 and furthest > 0.1
+			and first_step > p.tuning.run_speed * 0.6 and on[-1] == 0.0 and on.min() >= 0.0,
+			"cover ease: sliding into cover, he skids on %.2f m on screen (from %.1f m/s) and settles back; in the game stopped where he was" % [furthest, first_step])
+	gs.run_active = was
+	p.free()
+
+
+## The play camera at the start room's door wall (_door_wall_clear: in the wall's space, z + back
+## into the room from its room face): never inside it nor just short of its room face, put out past
+## its lobby face instead; anywhere else (the room, the lobby) left where it is.
+func _test_demo_polish_door_camera() -> void:
+	var S: GDScript = load("res://game/levels/prototype_slice/prototype_slice.gd")
+	var k: Dictionary = S.get_script_constant_map()
+	var out: float = -float(k["DOOR_WALL_THICK"]) - float(k["DOOR_CAM_CLEAR"])
+	var ok := true
+	var bad := ""
+	for i in range(-300, 1300):
+		var p := Vector3(0.4, 3.4, i / 100.0)
+		var q: Vector3 = S.call("_door_wall_clear", p)
+		var kept := p.z >= float(k["DOOR_CAM_CUT"]) or p.z <= out
+		var fine: bool = (q == p) if kept else (is_equal_approx(q.z, out) and q.x == p.x and q.y == p.y)
+		if not fine or (q.z > -float(k["DOOR_WALL_THICK"]) - 0.3 and q.z < 1.0):
+			ok = false
+			bad = "(%.2f -> %.2f)" % [p.z, q.z]
+	var start := Vector3(0.0, 3.4, Tuning.new().start_offset + 5.5)  # (the play camera at the run's start, and on Retry)
+	_check(ok and S.call("_door_wall_clear", start) == start, "door camera: never inside the start room's door wall or within 1 m of its room face, out past it in one cut %s" % bad)
+
+
+## The ROOFTOPS (mission 1, every setting): the guards nearest the fire escape's exit sit about 10 m
+## further on than they did (34 and 40 m: now 46 and 50), every route rule still passing.
+func _test_demo_polish_rooftops() -> void:
+	var ok := true
+	var ats := []
+	for s: String in RouteGraph.SETTINGS:
+		var g := RouteGraph.from_json_file(MISSION_1, s)
+		ats = []
+		for e in g.node_data(&"rooftops").get("enemies", []):
+			ats.append(float(e["at"]))
+		ok = ok and ats.min() >= 44.0 and g.validate(Tuning.new(), RouteGraph.reaction_for(s)).is_empty()
+	_check(ok, "rooftops: no guard nearer the fire escape's exit than 44 m into the ROOFTOPS, the route rules passing (%s)" % [ats])
+
+
+## The boards' bottom (route.json "house": ARDBALLS, derived): over any run that dies in the first
+## area (all of it run, every guard in it down), on every setting; an 8 s death doesn't make the top 10.
+func _test_demo_polish_board_floor() -> void:
+	var P: GDScript = load("res://game/autoload/progress.gd")
+	var p: Node = P.new()
+	p.load_from("")
+	var g := RouteGraph.from_json_file(MISSION_1)
+	var first := g.node_data(g.start_id)
+	var worst := {"distance": float(first["length"]), "downed": (first.get("enemies", []) as Array).size(), "spare": -1.0}
+	for s: String in RouteGraph.SETTINGS:
+		var top: Array = p.board(1, s)
+		var quick: Dictionary = p.record_run(1, s, &"killed", 8.0, {"distance": 88.0, "downed": 1, "spare": -1.0})
+		_check(top.size() == 10 and int(top[9]["score"]) > Score.total(worst, s) and quick["rank"] == 0 and String(top[9]["name"]) == "ARDBALLS",
+				"board floor (%s): the tenth (%s %d) is over any death in the first area (%d at most), an 8 s death (%d) isn't on it" % [
+				s, top[9]["name"], top[9]["score"], Score.total(worst, s), quick["score"]])
+	p.free()
+
+
+## In the real level (mission 1): the run pauses itself when the page or app loses focus (each of the
+## three notices), only in live play (not before the run, nor in the boss's KO replay); a tip's card
+## goes under the pause menu and comes back on resume; the camera put out past the start room's door
+## wall; and the MAIN FLOOR EXIT's hanging EXIT signs dissolve like the rest (their face lit in the PS1
+## shader, no glow), their lettering gone once the camera is near enough to be past it.
+func _test_demo_polish_level() -> void:
+	var gs := root.get_node("GameState")
+	var was_alert: int = gs.alert_level
+	var was_active: bool = gs.run_active
+	var level_script: GDScript = load("res://game/levels/prototype_slice/prototype_slice.gd")
+	level_script.route_path = MISSION_1
+	var level := await _locked_doors_level(gs, false)
+	level.pause_on_focus_loss = true
+	gs.run_active = false
+	level._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	var not_before: bool = not paused
+	gs.run_active = true
+	level._hud.show_tip("jump")
+	var each := true
+	var card := true
+	for what in [Node.NOTIFICATION_APPLICATION_FOCUS_OUT, Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT, Node.NOTIFICATION_APPLICATION_PAUSED]:
+		level._notification(what)
+		# (focus back, or the phone turned upright again: still paused, until RESUME)
+		level._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+		level._notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_IN)
+		level._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+		each = each and paused and level._frontend.is_open()
+		card = card and level._hud.tip_shown() == "" and level._hud._tip_card.id == "jump"
+		level._resume()
+		each = each and not paused
+		card = card and level._hud.tip_shown() == "jump"
+	level._ko = 0
+	level._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	var not_ko: bool = not paused
+	level._ko = -1
+	paused = false
+	level._hud.show_tip("")
+	gs.run_active = false
+	_check(not_before and each and not_ko, "focus pause: losing focus pauses the run (as the pause button does), only in live play")
+	_check(card, "pause: a tip's card goes under the pause menu, and comes back on resume")
+	# The pause button: a tap area of at least 36x30 round all it draws, up to the screen's top edge
+	# (and its right one), with nothing else of the HUD's to tap there.
+	var btn: Button = level._hud._pause
+	var area := Rect2(Vector2(-10, -4), Vector2(maxf(36.0, btn.size.x + 10.0), 30))
+	var area_ok: bool = area.size.x >= 36.0 and btn._has_point(area.position) and btn._has_point(area.end - Vector2(0.1, 0.1)) \
+			and btn._has_point(btn.size - Vector2(0.1, 0.1)) and not btn._has_point(Vector2(-10.5, 10)) and not btn._has_point(Vector2(10, 26.5))
+	var vw: float = level.get_viewport().get_visible_rect().size.x
+	area_ok = area_ok and is_equal_approx(btn.global_position.y + area.position.y, 0.0) and btn.global_position.x + area.end.x >= vw - 4.0
+	var tap_area := Rect2(btn.global_position + area.position, area.size)
+	for c: Control in level._hud.find_children("*", "BaseButton", true, false):
+		if c != btn and c.is_visible_in_tree() and c.get_global_rect().intersects(tap_area):
+			area_ok = false
+	_check(area_ok, "pause button: a tap area of %.0fx%.0f (36x30 at least) round the %.0fx%.0f it draws, from the screen's top, clear of the HUD's other buttons"
+			% [area.size.x, area.size.y, btn.size.x, btn.size.y])
+	# The camera inside the door wall is put out past it.
+	var wall: Transform3D = level._start_room.global_transform * level._door_wall
+	var put: Vector3 = wall.affine_inverse() * level._through_door_wall(wall * Vector3(0.0, 3.4, -0.15))
+	var room: Vector3 = wall * Vector3(0.0, 3.4, 4.0)
+	_check(is_equal_approx(put.z, -level.DOOR_WALL_THICK - level.DOOR_CAM_CLEAR) and level._through_door_wall(room).is_equal_approx(room),
+			"door camera: in the level, the camera inside the door wall goes out past it; in the room it stays (%.2f)" % put.z)
+	# On to the MAIN FLOOR EXIT, and its signs.
+	await _locked_doors_walk(level, gs, [&"building_main_floor", &"security_wing", &"staff_canteen", &"main_floor_exit"])
+	var lit: ShaderMaterial = level._lit_face(Color("1f9a4a"))
+	var faces := 0
+	var glows := 0
+	var letters := 0
+	var near_ok := true
+	for m: MeshInstance3D in level.find_children("*", "MeshInstance3D", true, false):
+		faces += int(m.material_override == lit)
+		glows += int(m.material_override == PsxMaterials.glow(Color("1f9a4a")))
+	for l: Label3D in level.find_children("*", "Label3D", true, false):
+		if l.text == "EXIT  >>":
+			letters += 1
+			near_ok = near_ok and l.visibility_range_begin == level.SIGN_LETTERS_NEAR
+	var cam_y: float = 3.4 - (level.WIRE_LOW + 0.15)  # (the camera over the sign's middle, roughly)
+	var under := Vector2(5.5, cam_y).length()  # (him right under it)
+	var short := Vector2(6.5, cam_y).length()  # (him a metre short of it)
+	var dissolves: bool = lit.shader == PsxMaterials.SHADER and lit.get_shader_parameter("unlit") == true and lit.get_shader_parameter("cutout") != false
+	_check(faces >= 1 and faces == letters and glows == 0 and dissolves and near_ok and under < level.SIGN_LETTERS_NEAR and short > level.SIGN_LETTERS_NEAR,
+			"exit sign: the MAIN FLOOR EXIT's %d hanging signs dissolve like the rest (lit in the PS1 shader, no glow), their lettering gone with the camera nearer than %.1f m (him under it at %.1f, a metre short at %.1f)"
+			% [faces, level.SIGN_LETTERS_NEAR, under, short])
+	await _settle_audio(level)
+	level.queue_free()
+	await process_frame
+	gs.alert_level = was_alert
+	gs.run_active = was_active

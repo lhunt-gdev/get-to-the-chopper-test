@@ -13,8 +13,9 @@ OUT="${HOUSE_RUNS:-$(mktemp)}"
 : > "$OUT"
 # The bots it draws on: escapes quiet and loud, by the ground, the tunnels and the roofs, with alarms
 # set off and stopped, from cover, with a hit (the boss, a barrier); and the failures: a capture, the
-# chopper leaving with ARDBALLS standing, killed halfway, killed at once.
-SCENARIOS="ground tunnel_quiet fire_escape ground_loud ground_alarms tunnel_alarm fire_closes roof_calm cover stumble_once boss_hit miss_ladder tunnel_miss_ladder boss_hold_fire halfway naive"
+# chopper leaving with ARDBALLS standing, killed halfway (not killed at once: the board's floor, ARDBALLS',
+# is over any death in the first area: write_house.gd).
+SCENARIOS="ground tunnel_quiet fire_escape ground_loud ground_alarms tunnel_alarm fire_closes roof_calm cover stumble_once boss_hit miss_ladder tunnel_miss_ladder boss_hold_fire halfway"
 "$GODOT" --headless --path . --import >/dev/null 2>&1 || true
 jobs_run=0
 for setting in easy medium hard; do

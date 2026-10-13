@@ -57,6 +57,13 @@ var _death_from := {}
 var _death_down := false
 var _death_over := false
 var _pool: MeshInstance3D
+## Into cover on screen (enter_cover): how long he takes to come down out of a jump (s), and how far
+## (m) he skids on out of a slide before settling back; how far up and on he was as he went in (x
+## up, y on), and how long since (s; -1: settled).
+const COVER_SETTLE := 0.14
+const COVER_SKID := 0.22
+var _settle_from := Vector2.ZERO
+var _settle_t := -1.0
 
 
 func _ready() -> void:
@@ -97,6 +104,8 @@ func _physics_process(delta: float) -> void:
 
 	if _slide_left > 0.0:
 		_slide_left -= delta
+	if _settle_t >= 0.0:
+		_settle_t = -1.0 if _settle_t >= COVER_SETTLE else _settle_t + delta
 	_update_visuals()
 
 
@@ -175,11 +184,15 @@ func end_standoff() -> void:
 	standoff = false
 
 
-## Ran into cover: stop just in front of it, and crouch if it's low (a box).
+## Ran into cover: stop just in front of it, and crouch if it's low (a box). In the game he's down
+## at once (jump_y), as ever; on screen he eases down out of a jump (COVER_SETTLE), and out of a
+## slide skids on into it a little and settles back (COVER_SKID), so he never stops in one frame.
 func enter_cover(stop_at: float, crouch: bool) -> void:
 	in_cover = true
 	cover_crouch = crouch
 	distance = minf(distance, stop_at)
+	_settle_from = Vector2(jump_y, COVER_SKID if is_sliding() else 0.0)
+	_settle_t = 0.0 if _settle_from != Vector2.ZERO else -1.0
 	jump_y = 0.0
 	_y_velocity = 0.0
 	_slide_left = 0.0
@@ -217,7 +230,8 @@ func die(free_ahead: float) -> void:
 	jump_y = 0.0
 	_y_velocity = 0.0
 	_slide_left = 0.0
-	_rig.position.y = 0.0
+	_settle_t = -1.0
+	_rig.position = Vector3.ZERO
 	_death_from = _rig.death_start({"travel": travel / SoldierRig.SIZE, "lift": lift / SoldierRig.SIZE, "room": free_ahead / SoldierRig.SIZE,
 			"back": back, "slide": fall["slide"], "lean": _rig.rotation.z})
 	_shadow.scale = Vector3.ONE
@@ -247,6 +261,7 @@ func surrender() -> void:
 	_y_velocity = 0.0
 	_slide_left = 0.0
 	_surrendered = true
+	_settle_t = -1.0
 	_update_visuals()
 
 
@@ -320,8 +335,24 @@ func distance_run() -> float:
 	return distance
 
 
+## How high his body shows (m): his jump, and into cover his way down out of one (enter_cover).
+func shown_y() -> float:
+	return jump_y + _settle().x
+
+
+## The rest of his way into cover still to show (x up, y on: enter_cover), over COVER_SETTLE: down
+## as if still falling, the skid on and back.
+func _settle() -> Vector2:
+	if _settle_t < 0.0:
+		return Vector2.ZERO
+	var u := clampf(_settle_t / COVER_SETTLE, 0.0, 1.0)
+	return Vector2(_settle_from.x * (1.0 - u * u), _settle_from.y * 6.75 * u * (1.0 - u) * (1.0 - u))
+
+
 ## The body rises with the jump; the shadow stays on the ground and shrinks, so jump height is readable.
 func _update_visuals() -> void:
-	_rig.position.y = jump_y
-	var t := clampf(jump_y / tuning.player_shadow_fade_height, 0.0, 1.0)
+	var settle := _settle()
+	_rig.position.y = jump_y + settle.x
+	_rig.position.z = -settle.y
+	var t := clampf(_rig.position.y / tuning.player_shadow_fade_height, 0.0, 1.0)
 	_shadow.scale = Vector3.ONE * lerpf(1.0, tuning.player_shadow_min_scale, t)
