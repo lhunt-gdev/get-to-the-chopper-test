@@ -113,6 +113,9 @@ enum TargetingMode {
 @export_range(0.06, 0.25) var fire_button_fraction: float = 0.13
 ## The FIRE trigger's side (the TRIGGER setting, not tuning): true puts it bottom left.
 var fire_on_left := false
+## The on-screen move buttons (SETTINGS' MOVE: BUTTONS, not tuning): JUMP, SLIDE and the lane changes as
+## four round buttons on the side away from FIRE (SwipeInput.move_buttons). Swipes work either way.
+var move_buttons := false
 ## Seconds between shots while FIRE is held. Placeholder weapon: unlimited ammo.
 @export var fire_interval: float = 0.2
 ## A tap within this many screen pixels of an enemy targets it (HYBRID / TAP_TO_TARGET).

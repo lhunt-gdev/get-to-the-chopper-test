@@ -19,6 +19,7 @@ const DEFAULTS := {
 	"aim": "auto_tap",      # "auto" | "auto_tap" | "tap"
 	"fire_side": "right",   # "right" | "left"
 	"swipe": "medium",      # "low" | "medium" | "high"
+	"controls": "swipe",    # "swipe" | "buttons" (MOVE: the on-screen move buttons too; swipes work either way)
 	"tips": true,           # the first-time tips in mission 1 (FirstTips; which were seen: Progress)
 }
 
@@ -66,12 +67,12 @@ func reset() -> void:
 
 
 ## Saved the moment one changes (in the pause menu mid-run too), not only at a run's end; safely
-## (SaveFile: a temp file, then a rename; a failed write is a warning).
-func _save() -> void:
+## (SaveFile: a temp file, then a rename; a failed write is a warning). (`path`: the tests' own file.)
+func _save(path: String = PATH) -> void:
 	var cfg := ConfigFile.new()
 	for k in _values:
 		cfg.set_value("settings", k, _values[k])
-	SaveFile.write_text(PATH, cfg.encode_to_text())
+	SaveFile.write_text(path, cfg.encode_to_text())
 
 
 ## A 0-100 volume as dB (0 is silent).

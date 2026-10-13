@@ -3,16 +3,24 @@ extends Node
 ## Turns touches into swipes, taps and FIRE. A swipe fires as soon as the finger has
 ## moved far enough, not on release, so dodges feel instant.
 ## A touch that starts on the FIRE button (bottom right) holds FIRE and is never a swipe.
+## With SETTINGS' MOVE on BUTTONS, a touch that starts on one of the four move buttons (the HUD's
+## ButtonPad, while it shows) is that button's swipe, once, as it goes down, and nothing else: never a
+## swipe or a tap as it moves or lifts, never FIRE. Each finger is its own touch, so a thumb can hold
+## FIRE while the other taps the buttons. Swipes work as ever round them.
 ## Arrow keys do the swipes on desktop; Space/Enter holds FIRE (and starts / retries).
 
 signal swiped(direction: Vector2i)  ## (-1,0) left, (1,0) right, (0,-1) up, (0,1) down
 signal tapped(screen_position: Vector2)
 signal fire_pressed
 signal fire_released
+## A move button held down by touch `index` (or, ZERO, let go): the HUD lights it (Hud.ButtonPad).
+signal button_held(index: int, direction: Vector2i)
 
 @export var tuning: Tuning
+## The HUD's move buttons (set by the level): pressed only while they show (live play, MOVE on BUTTONS).
+var pad: Control
 
-## Touch index -> {start: Vector2, t: int, consumed: bool, fire: bool}
+## Touch index -> {start: Vector2, t: int, consumed: bool, fire: bool, button: Vector2i (ZERO: none)}
 var _touches: Dictionary = {}
 
 
@@ -21,6 +29,16 @@ const TOUCH_REACH := 1.15
 ## The bottom of the screen kept clear of FIRE's touch area in Home Screen mode (px): an iPhone's
 ## home swipe starts there, and a thumb held on FIRE that low could send you to the Home Screen.
 const HOME_SWIPE_CLEAR := 24.0
+## The move buttons (MOVE: BUTTONS): each BUTTON_R px round (30 across, about 44 pt on a phone; its touch
+## area TOUCH_REACH past that, like FIRE's), BUTTON_SPACING px from the diamond's middle to each one's
+## (about 12 px between two neighbours, corner to corner), and the middle PAD_INSET px in from its side of the screen
+## and PAD_LIFT px up from the bottom: low, under the thumb.
+const BUTTON_R := 15.0
+const BUTTON_SPACING := 30.0
+const PAD_INSET := 68.0
+const PAD_LIFT := 68.0
+## The four, top to bottom: up JUMP, left and right change lane, down SLIDE.
+const BUTTON_DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.LEFT, Vector2i.RIGHT, Vector2i.DOWN]
 
 ## Home Screen mode: -1 not asked yet, else 0 / 1. Asked of the browser once (web only).
 static var _standalone := -1
@@ -36,6 +54,31 @@ static func fire_button(screen: Vector2, t: Tuning) -> Vector3:
 	if standalone():
 		y = minf(y, screen.y - HOME_SWIPE_CLEAR - r * TOUCH_REACH)
 	return Vector3(x, y, r)
+
+
+## The move buttons (MOVE: BUTTONS) for a screen of this size: direction -> (centre x, centre y,
+## radius), a diamond on the side away from FIRE (TRIGGER), the same size on any screen (a wider one
+## just has more room between it and FIRE). The HUD draws them here. From the Home Screen it sits
+## higher, like FIRE, the bottom one's touch area clear of the bottom HOME_SWIPE_CLEAR px.
+static func move_buttons(screen: Vector2, t: Tuning) -> Dictionary:
+	var x := screen.x - PAD_INSET if t.fire_on_left else PAD_INSET
+	var y := screen.y - PAD_LIFT
+	if standalone():
+		y = minf(y, screen.y - HOME_SWIPE_CLEAR - BUTTON_SPACING - BUTTON_R * TOUCH_REACH)
+	var out := {}
+	for d: Vector2i in BUTTON_DIRS:
+		out[d] = Vector3(x + d.x * BUTTON_SPACING, y + d.y * BUTTON_SPACING, BUTTON_R)
+	return out
+
+
+## The move button at `p` (its direction), or ZERO for none: within TOUCH_REACH of its edge.
+static func on_move_button(p: Vector2, screen: Vector2, t: Tuning) -> Vector2i:
+	var all := move_buttons(screen, t)
+	for d: Vector2i in all:
+		var b: Vector3 = all[d]
+		if p.distance_to(Vector2(b.x, b.y)) <= b.z * TOUCH_REACH:
+			return d
+	return Vector2i.ZERO
 
 
 ## Whether the game runs from the Home Screen (iOS's navigator.standalone, or the display-mode:
@@ -80,15 +123,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		fire_released.emit()
 
 
+## Whether the move buttons take touches now: MOVE on BUTTONS and the pad showing (live play).
+func buttons_live() -> bool:
+	return tuning.move_buttons and pad != null and pad.is_visible_in_tree()
+
+
 func _on_touch(e: InputEventScreenTouch) -> void:
 	if e.pressed:
 		var fire := on_fire_button(e.position, _screen(), tuning)
-		_touches[e.index] = {"start": e.position, "t": Time.get_ticks_msec(), "consumed": fire, "fire": fire}
+		var button := Vector2i.ZERO if fire or not buttons_live() else on_move_button(e.position, _screen(), tuning)
+		_touches[e.index] = {"start": e.position, "t": Time.get_ticks_msec(), "consumed": fire or button != Vector2i.ZERO,
+				"fire": fire, "button": button}
 		if fire:
 			fire_pressed.emit()
+		elif button != Vector2i.ZERO:
+			button_held.emit(e.index, button)
+			swiped.emit(button)  # (the swipe's own way in: whatever a swipe does, it does)
 		return
 	var tr: Dictionary = _touches.get(e.index, {})
 	_touches.erase(e.index)
+	if pad != null:
+		button_held.emit(e.index, Vector2i.ZERO)
 	if tr.get("fire", false):
 		fire_released.emit()
 		return
