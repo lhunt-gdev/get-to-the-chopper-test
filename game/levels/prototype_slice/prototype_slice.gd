@@ -4433,11 +4433,13 @@ func _build_exit_sign(parent: Node3D, seg: Dictionary, at: float, ends: Array) -
 	var cx := (e0 + e1) / 2.0
 	var sign := _box(parent, Vector3(w, h, 0.14), Vector3.ZERO, Color("1a1e1c"))
 	sign.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h / 2.0, 0))
+	sign.material_override = _sign_board(Color("1a1e1c"), false)
 	var face := _box(parent, Vector3(w - 0.1, h - 0.1, 0.02), Vector3.ZERO, Color.WHITE)
 	face.transform = frame * Transform3D(Basis.IDENTITY, Vector3(cx, bottom + h / 2.0, 0.08))
 	# Lit, but in the PS1 shader (a glow's is never cut): the cutout dissolves it with the rest as the
-	# camera passes under it (it hid him whole there). Its lettering goes once the camera's that near.
-	face.material_override = _lit_face(Color("1f9a4a"))
+	# camera passes under it (it hid him whole there), and what's left of it dithers away as the lens
+	# nears (it swept across the bottom of the screen). Its lettering goes as the board starts to.
+	face.material_override = _sign_board(Color("1f9a4a"), true)
 	var label := _sign_label("EXIT  >>", Color("e8fff0"), w * 0.7, Vector3(0, 0, 0.1))
 	sign.add_child(label)
 	label.modulate = Color("f4fff8")
@@ -4455,21 +4457,29 @@ func _build_exit_sign(parent: Node3D, seg: Dictionary, at: float, ends: Array) -
 	return sign
 
 
-## Nearer the camera than this (m), the hanging EXIT sign's lettering isn't drawn: the camera, 5.5 m
-## behind him, is that near only once he's under it or past it, where it would stand across him.
-const SIGN_LETTERS_NEAR := 6.0
-static var _lit_faces := {}
+## Nearer the camera than this (m), the hanging EXIT sign's lettering isn't drawn: the board starts to
+## dissolve about then (the cutout's hole round him reaches its middle at about 6.5 m; nearer than
+## that the lettering stood on alone over the dissolved board), and the camera, 5.5 m behind him, is
+## that near only as he comes under it.
+const SIGN_LETTERS_NEAR := 7.0
+## How near the lens the hanging EXIT sign's board dithers away (m; gone at half of it), as
+## PsxMaterials.lens_faded does the rods it hangs from, but further out: it's lanes wide, and the
+## camera passes right under it (what the cutout left of it swept across the screen's bottom corners).
+const SIGN_LENS_FADE := 6.0
+static var _sign_boards := {}
 
 
-## A sign's lit face: full brightness, as PsxMaterials.glow, but in the PS1 shader (unlit), so the
-## cutout dissolves it like the rest of the level. One per colour.
-static func _lit_face(color: Color) -> ShaderMaterial:
-	var key := color.to_html()
-	if not _lit_faces.has(key):
+## The hanging EXIT sign's board: in the PS1 shader, so the cutout dissolves it like the rest of the
+## level, and dithered away near the lens (SIGN_LENS_FADE); `lit`, its face, full brightness (unlit,
+## as PsxMaterials.glow, but cut). One per colour.
+static func _sign_board(color: Color, lit: bool) -> ShaderMaterial:
+	var key := color.to_html() + ("_lit" if lit else "")
+	if not _sign_boards.has(key):
 		var m := PsxMaterials.flat(color).duplicate() as ShaderMaterial
-		m.set_shader_parameter("unlit", true)
-		_lit_faces[key] = m
-	return _lit_faces[key]
+		m.set_shader_parameter("unlit", lit)
+		m.set_shader_parameter("lens_fade", SIGN_LENS_FADE)
+		_sign_boards[key] = m
+	return _sign_boards[key]
 
 
 ## The MAIN FLOOR EXIT's way out (user reference): a glass front across the end of the hall, granite
