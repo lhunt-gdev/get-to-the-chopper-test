@@ -1,6 +1,9 @@
 # Every push to main (the demo) or v2 (the next version): run the tests for what was pushed, then
 # export BOTH versions and publish them together on GitHub Pages: the demo at the site's root (the
 # link players have), V2 under /v2/ for testing. Open the Pages URL on your iPhone in Safari.
+# Both are exported with a slim web template (.github/web_template/custom.py: the engine without
+# the parts the game never uses, a smaller download), built from Godot's source once and kept in
+# the cache; if it can't be built, the stock template is used, as before.
 name: Test & deploy web build
 
 on:
@@ -20,9 +23,70 @@ concurrency:
 
 env:
   GODOT_VERSION: 4.7.2
+  # The Emscripten version the official 4.7.2 web templates were built with (their console says so).
+  EM_VERSION: 4.0.20
 
 jobs:
+  # The slim template: from the cache, or built (about 15 minutes) when Godot's version or
+  # custom.py changes. Allowed to fail: the export then falls back to the stock template.
+  web-template:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the slim template
+        id: cache-template
+        uses: actions/cache@v4
+        with:
+          path: ~/slim_template
+          key: slim-web-template-${{ env.GODOT_VERSION }}-${{ env.EM_VERSION }}-${{ hashFiles('.github/web_template/**') }}
+
+      - name: Check out Godot's source
+        if: steps.cache-template.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ env.GODOT_VERSION }}-stable
+          path: godot_src
+
+      - name: Set up Emscripten
+        if: steps.cache-template.outputs.cache-hit != 'true'
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EM_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Cache compiled engine parts
+        if: steps.cache-template.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/scons_cache
+          key: slim-web-scons-${{ env.GODOT_VERSION }}-${{ env.EM_VERSION }}-${{ hashFiles('.github/web_template/**') }}
+          restore-keys: slim-web-scons-${{ env.GODOT_VERSION }}-${{ env.EM_VERSION }}-
+
+      - name: Build the slim template
+        if: steps.cache-template.outputs.cache-hit != 'true'
+        run: |
+          python3 -m pip install --quiet scons
+          cd godot_src
+          scons target=template_release profile="$GITHUB_WORKSPACE/.github/web_template/custom.py" -j"$(nproc)" \
+            cache_path="$HOME/scons_cache" cache_limit=4 progress=no warnings=no
+          mkdir -p ~/slim_template
+          cp bin/godot.web.template_release.wasm32*.zip ~/slim_template/web_nothreads_release.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slim-web-template
+          path: ~/slim_template/web_nothreads_release.zip
+          retention-days: 1
+
   build:
+    needs: web-template
+    # Runs whether the slim template was made or not (and on pull requests, which skip it).
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,18 +124,45 @@ jobs:
             git clone --quiet --depth 1 --branch v2 "https://github.com/${GITHUB_REPOSITORY}.git" v2_src
           fi
 
+      - name: Fetch the slim template
+        if: github.event_name != 'pull_request' && needs.web-template.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: slim-web-template
+          path: ~/slim_template
+
       - name: Export the demo to the site's root and V2 to /v2/
         if: github.event_name != 'pull_request'
         run: |
           stamp="$(date -u '+%d %b %H:%M')"
+          slim="$HOME/slim_template/web_nothreads_release.zip"
           export_one() {  # $1 source folder, $2 output folder
             sha="$(git -C "$1" rev-parse --short=7 HEAD)"
             printf '{"commit": "%s", "built": "%s"}\n' "$sha" "$stamp" > "$1/game/build_info.json"
             cat "$1/game/build_info.json"
             mkdir -p "$2"
             ~/godot/godot --headless --path "$1" --import >/dev/null 2>&1 || true
-            ~/godot/godot --headless --path "$1" --export-release "Web" "$(pwd)/$2/index.html"
+            # The slim template, for this export only (the repo's export_presets.cfg keeps the stock
+            # one, so exports on the PC are unchanged). If it fails to export, the stock one.
+            if [ -f "$slim" ]; then
+              cp "$1/export_presets.cfg" "$1/export_presets.stock"
+              sed -i "s|^custom_template/release=.*|custom_template/release=\"$slim\"|" "$1/export_presets.cfg"
+              if ~/godot/godot --headless --path "$1" --export-release "Web" "$(pwd)/$2/index.html" && test -f "$2/index.wasm"; then
+                echo "::notice title=$2::exported with the slim template"
+              else
+                echo "::warning title=$2::the slim template failed; exporting with the stock one"
+                mv "$1/export_presets.stock" "$1/export_presets.cfg"
+                ~/godot/godot --headless --path "$1" --export-release "Web" "$(pwd)/$2/index.html"
+              fi
+            else
+              echo "::warning title=$2::no slim template; exporting with the stock one"
+              ~/godot/godot --headless --path "$1" --export-release "Web" "$(pwd)/$2/index.html"
+            fi
             test -f "$2/index.wasm"
+            for f in index.wasm index.pck; do
+              echo "::notice title=$2/$f::raw $(stat -c %s "$2/$f") B, gzip $(gzip -9 -c "$2/$f" | wc -c) B"
+            done
           }
           export_one demo_src build/web
           if [ -d v2_src ]; then export_one v2_src build/web/v2; fi
@@ -82,7 +173,7 @@ jobs:
           path: build/web
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.build.result == 'success' }}
     needs: build
     runs-on: ubuntu-latest
     environment:
