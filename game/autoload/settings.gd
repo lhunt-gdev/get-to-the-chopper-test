@@ -26,10 +26,25 @@ var _values: Dictionary = DEFAULTS.duplicate()
 
 
 func _ready() -> void:
+	load_from(PATH)
+
+
+## Reads the settings saved at `path`: each one only if it's the kind of value its default is (a
+## number for a volume, ON / OFF for a switch, a word for a choice); anything else, and anything
+## missing, its default. A file that can't be read at all is kept as it was ("<path>.bad":
+## SaveFile.keep_bad) and every setting is its default.
+func load_from(path: String) -> void:
+	_values = DEFAULTS.duplicate()
+	if not SaveFile.exists(path):
+		return
 	var cfg := ConfigFile.new()
-	if SaveFile.exists(PATH) and cfg.parse(SaveFile.read_text(PATH)) == OK:
-		for k in DEFAULTS:
-			_values[k] = cfg.get_value("settings", k, DEFAULTS[k])
+	if cfg.parse(SaveFile.read_text(path)) != OK:
+		SaveFile.keep_bad(path)
+		push_warning("Settings: %s couldn't be read; the defaults" % path)
+		return
+	for k in DEFAULTS:
+		var v: Variant = cfg.get_value("settings", k, DEFAULTS[k])
+		_values[k] = v if typeof(v) == typeof(DEFAULTS[k]) else DEFAULTS[k]
 
 
 func get_value(key: String) -> Variant:

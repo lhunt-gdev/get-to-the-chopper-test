@@ -8,6 +8,11 @@ extends RefCounted
 ## just before the thing it teaches and never mid-danger: only while no guard is aiming at him (FIRE's
 ## own excepted: a guard ahead is what it's about; it comes first behind cover, the calmest place to
 ## learn it), one at a time, with a breather between (none in cover: he's stopped there, and safe).
+## The holds (JUMP, SLIDE, the tripwire's) and cover's are the ones that must come before the first
+## barrier, pipe, wire or cover they're for (MOMENTS): they skip the breather, and cut a softer tip
+## short if one's still up (one that would only just have come up waits for them instead); the holds
+## show while a guard aims too (the hold slows him with the rest). Leaving cover's tip is never
+## followed by cover's own (he knows it then).
 ##
 ## How the game slows for one (Controls v1 stays as LOCKED: nothing here pauses the game):
 ## - The swipes that must land at the right moment (JUMP, SLIDE, the tripwire's) use a slow-motion
@@ -27,7 +32,7 @@ extends RefCounted
 ## (Card). The bots play without them unless a scenario asks (the level's `tips`).
 
 ## The tips, in the order they're picked when two could show at once.
-const ORDER := ["fire", "cover_out", "lane", "jump", "alert", "slide", "cover", "doors"]
+const ORDER := ["fire", "lane", "jump", "slide", "alert", "cover", "cover_out", "doors"]
 ## Each one's lines (the first is its headline) and its gesture icon.
 const TIPS := {
 	"lane": {"lines": ["SWIPE LEFT OR RIGHT", "TO CHANGE LANE"], "icon": "swipe_side"},
@@ -38,6 +43,12 @@ const TIPS := {
 	"fire": {"lines": ["HOLD FIRE TO SHOOT", "IT AIMS FOR YOU", "SETTINGS: TRIGGER LEFT OR RIGHT"], "icon": "hold"},
 	"alert": {"lines": ["TRIPWIRES RAISE THE ALERT", "JUMP THEM TO STAY QUIET", "SHOOT ALARM BOXES TO LOWER IT"], "icon": "wire"},
 	"doors": {"lines": ["ARROWS: THE DOOR IS OPEN", "PADLOCK: IT'S LOCKED", "OUTER LANES TAKE THE SIDE DOORS"], "icon": "doors"},
+}
+
+## FIRE's lines by SETTINGS' AIM ("auto", "auto_tap", "tap"), as CONTROLS words it: TIPS' own are AUTO's.
+const FIRE_BY_AIM := {
+	"tap": ["TAP AN ENEMY TO TARGET IT", "HOLD FIRE TO SHOOT IT", "SETTINGS: TRIGGER LEFT OR RIGHT"],
+	"auto_tap": ["HOLD FIRE TO SHOOT", "IT AIMS, OR TAP AN ENEMY", "SETTINGS: TRIGGER LEFT OR RIGHT"],
 }
 
 ## The breather after one goes before the next can show (game time, s).
@@ -69,6 +80,11 @@ const DOORS_AHEAD := 28.0
 ## it).
 const HOLDS := ["jump", "slide", "alert"]
 const PASS_FOR := {"jump": "jump", "slide": "slide", "alert": "jump_or_alert", "cover": "cover"}
+## The tips with a moment of their own, the next thing in his lane (the holds, and cover's): each must
+## show before the first one it's for, so it skips the breather and cuts a softer tip short. A softer
+## tip doesn't start this many m short of one's moment (MOMENT_SOON): it would only be cut short.
+const MOMENTS := ["jump", "slide", "alert", "cover"]
+const MOMENT_SOON := 3.0
 
 
 ## The tip to show now, or "": `s` is the moment (the level's _tip_state()): "seen" (ids already shown),
@@ -85,27 +101,68 @@ static func pick(s: Dictionary) -> String:
 	return ""
 
 
+## Tip `id`'s lines (the first its headline), with SETTINGS' AIM `aim` (FIRE's follows it).
+static func lines_of(id: String, aim: String = "auto") -> Array:
+	if id == "fire" and FIRE_BY_AIM.has(aim):
+		return FIRE_BY_AIM[aim]
+	return TIPS.get(id, {}).get("lines", [])
+
+
+## The hold or cover's tip to show now (MOMENTS), or "": as pick(), but only those (they skip the
+## breather after the last tip).
+static func pick_moment(s: Dictionary) -> String:
+	var seen: Dictionary = s.get("seen", {})
+	for id: String in ORDER:
+		if id in MOMENTS and not seen.has(id) and wants(id, s):
+			return id
+	return ""
+
+
+## The hold or cover's tip that cuts tip `up` short at the moment `s`, or "": a softer tip still up
+## as its moment comes (one of them is never cut short).
+static func preempt(up: String, s: Dictionary) -> String:
+	return "" if up in MOMENTS else pick_moment(s)
+
+
 ## Whether tip `id` would show at the moment `s` (see pick()).
 static func wants(id: String, s: Dictionary) -> bool:
 	var gap := float(s.get("gap", INF))
 	var next := String(s.get("next", ""))
 	var busy := bool(s.get("airborne", false)) or bool(s.get("sliding", false))
+	var in_cover := bool(s.get("in_cover", false))
 	if id == "cover_out":
-		return bool(s.get("in_cover", false))
+		return in_cover
+	if not in_cover and not id in MOMENTS and _moment_soon(s):
+		return false  # (a hold's or cover's moment is just ahead: it would cut this one short)
 	if id == "fire":
 		# (behind cover is the calmest place to learn it: there it comes first)
-		return bool(s.get("target", false)) and not busy and (bool(s.get("in_cover", false)) or gap > CALM_AHEAD)
-	if bool(s.get("in_cover", false)) or (bool(s.get("aimed_at", false)) and id != "fire"):
+		return bool(s.get("target", false)) and not busy and (in_cover or gap > CALM_AHEAD)
+	if in_cover or (bool(s.get("aimed_at", false)) and not id in HOLDS):
 		return false
 	match id:
 		"lane":
 			return float(s.get("d", 0.0)) >= LANE_FROM and gap > LANE_ROOM and not busy
-		"jump", "slide", "alert":
+		"jump", "alert":
+			# (mid-slide too: a swipe up jumps out of it, and a wire just past a pipe has no other moment)
+			return next == PASS_FOR[id] and gap > HOLD_GAP + 0.5 and gap <= SHOW_AHEAD and not bool(s.get("airborne", false))
+		"slide":
 			return next == PASS_FOR[id] and gap > HOLD_GAP + 0.5 and gap <= SHOW_AHEAD and not busy
 		"cover":
-			return next == "cover" and gap > 3.0 and gap <= COVER_AHEAD
+			# (never once leaving cover's has shown: he's been in cover by then)
+			return next == "cover" and gap > 3.0 and gap <= COVER_AHEAD and not (s.get("seen", {}) as Dictionary).has("cover_out")
 		"doors":
 			return float(s.get("split", INF)) <= DOORS_AHEAD and bool(s.get("clear_to_split", false))
+	return false
+
+
+## Whether a hold or cover's tip not shown yet has its moment, for the next thing in his lane, within
+## MOMENT_SOON m.
+static func _moment_soon(s: Dictionary) -> bool:
+	var seen: Dictionary = s.get("seen", {})
+	var next := String(s.get("next", ""))
+	for id: String in MOMENTS:
+		if next == PASS_FOR[id] and not seen.has(id) and not (id == "cover" and seen.has("cover_out")):
+			return float(s.get("gap", INF)) <= (COVER_AHEAD if id == "cover" else SHOW_AHEAD) + MOMENT_SOON
 	return false
 
 
@@ -162,6 +219,8 @@ class Card extends Control:
 	var id := ""
 	## Where the FIRE trigger is (x, y, radius: SwipeInput.fire_button), for FIRE's tip to ring it.
 	var fire_at := Vector3.ZERO
+	## SETTINGS' AIM (set by the HUD), for FIRE's wording (lines_of).
+	var aim := "auto_tap"
 	var _t := 0.0
 	var _in := 0.0
 
@@ -178,7 +237,7 @@ class Card extends Control:
 		queue_redraw()
 
 	func lines() -> Array:
-		return TIPS.get(id, {}).get("lines", [])
+		return FirstTips.lines_of(id, aim)
 
 	## The card's box on a screen `size` big.
 	func box(size: Vector2) -> Rect2:

@@ -497,6 +497,12 @@ class PauseButton extends Button:
 		offset_right = -4
 		offset_bottom = 22
 
+	## Its tap area: at least 36x30 (a fingertip's size on a phone), up to the screen's top edge and
+	## out 10 px left and 8 px down round what it draws (26x18 asked; the theme's least width can make
+	## it wider, out to the right edge); it looks the same.
+	func _has_point(point: Vector2) -> bool:
+		return Rect2(Vector2(-10, -4), Vector2(maxf(36.0, size.x + 10.0), 30)).has_point(point)
+
 
 static func side_color(side: String) -> Color:
 	return SIDE_COLORS.get(side, Color.WHITE)
@@ -825,6 +831,7 @@ func show_tip(id: String) -> void:
 	if _tip_card:
 		if _fire and _fire.tuning:
 			_tip_card.fire_at = SwipeInput.fire_button(get_viewport().get_visible_rect().size, _fire.tuning)
+		_tip_card.aim = String(Settings.get_value("aim"))  # (FIRE's wording follows SETTINGS' AIM)
 		_tip_card.show_tip(id)
 	# (the cover hint under the clock makes way for a tip's card while it's up)
 	_hint.visible = id == ""
@@ -833,6 +840,13 @@ func show_tip(id: String) -> void:
 ## The tip up now ("" for none).
 func tip_shown() -> String:
 	return _tip_card.id if _tip_card and _tip_card.visible else ""
+
+
+## The pause menu up (or gone): a tip's card goes under it while it's up, and comes back as the run
+## goes on (the tip itself stays up: it's only hidden).
+func set_paused(on: bool) -> void:
+	if _tip_card:
+		_tip_card.visible = _tip_card.id != "" and not on
 
 
 func show_cover_hint(on: bool, standoff: bool = false) -> void:

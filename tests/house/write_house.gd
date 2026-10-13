@@ -15,8 +15,9 @@ extends SceneTree
 ##   VORHALT  a capture (the company puts its name on everything)
 ##   CONDOR   the chopper leaving with ARDBALLS still standing
 ##   BISHOP   killed half way
-##   ARDBALLS derived, not a run: a token score, because he never leaves the pad (the pad's length
-##            run, nothing else; killed, at ALERT)
+##   ARDBALLS derived, not a run: the board's floor, just over any run that dies in the first area
+##            (its length and the pad's run, every guard in it down; killed, at ALERT), so a quick
+##            death never makes the top 10. No failed run under it is used.
 ## A slot whose kind of run didn't happen on a setting takes the best run not used yet. No entry may
 ## score as much as VESPER: one that would has its spare time cut by tenths until it's under her
 ## (said in its "from"). Each entry keeps its bot's name and the raw tally ("raw"), so the game scores
@@ -41,13 +42,19 @@ func _initialize() -> void:
 			runs.append(r)
 	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ROUTE))
 	var pad := 30.0
+	var first := {}
 	for n in data["nodes"]:
 		if String(n.get("end", "")) != "":
 			pad = float(n.get("length", pad))
+		if String(n.get("id", "")) == String(data.get("start", "")):
+			first = n
+	# The floor (ARDBALLS'): the first area run to its end and the pad's length on, every guard in it
+	# down (the first area is the same on every setting: a route rule).
+	var floor_raw := {"distance": float(first.get("length", 0.0)) + pad, "downed": (first.get("enemies", []) as Array).size()}
 	var house := {}
 	for setting: String in RouteGraph.SETTINGS:
 		var mine := runs.filter(func(r: Dictionary) -> bool: return String(r["setting"]) == setting)
-		house[setting] = pick(mine, setting, pad)
+		house[setting] = pick(mine, setting, floor_raw)
 		print("%s (%d runs):" % [setting.to_upper(), mine.size()])
 		for e in house[setting]:
 			print("  %-8s %9s  %-12s alert %d  from %s" % [e["name"], Score.format(e["score"]), e["ending"], e["alert"], e["from"]])
@@ -91,11 +98,18 @@ func _initialize() -> void:
 
 
 ## The ten for one setting (see the top), best first.
-static func pick(runs: Array, setting: String, pad: float) -> Array:
+static func pick(runs: Array, setting: String, floor_raw: Dictionary) -> Array:
+	# ARDBALLS (derived, not a run): the floor. No failed run under it is used.
+	var ard := {"distance": float(floor_raw["distance"]), "downed": int(floor_raw["downed"]), "hits": 0, "alarms_set_off": 0, "alarms_stopped": 0,
+			"spare": -1.0, "time": 0.0, "run_into": 0, "top_alert": 3}
+	var ard_score := Score.total(ard, setting)
 	var all: Array = []
 	for r in runs:
 		var raw := Score.raw_of(r["raw"])
-		all.append({"scenario": String(r["scenario"]), "ending": String(r["ending"]), "raw": raw, "score": Score.total(raw, setting)})
+		var score := Score.total(raw, setting)
+		if String(r["ending"]) != "extracted" and score <= ard_score:
+			continue
+		all.append({"scenario": String(r["scenario"]), "ending": String(r["ending"]), "raw": raw, "score": score})
 	all.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["score"] > b["score"])
 	var used := {}
 	var take := func(want: Callable, lowest := false) -> Variant:
@@ -144,9 +158,7 @@ static func pick(runs: Array, setting: String, pad: float) -> Array:
 			var tenths := int(e["score"]) - int(vesper["score"])
 			_cut_spare(e, setting, (floorf(tenths / float(Score.PER_TENTH * Score.multiplier(setting))) + 1.0) / 10.0, "under VESPER")
 		out.append(e)
-	# ARDBALLS: never leaves the pad (derived, not a run).
-	var ard := {"distance": pad, "downed": 0, "hits": 0, "alarms_set_off": 0, "alarms_stopped": 0, "spare": -1.0, "time": 0.0, "run_into": 0, "top_alert": 3}
-	out.append({"name": "ARDBALLS", "score": Score.total(ard, setting), "ending": "killed", "alert": 3, "from": "derived: the pad's length, nothing else",
+	out.append({"name": "ARDBALLS", "score": ard_score, "ending": "killed", "alert": 3, "from": "derived: the floor, over any death in the first area",
 			"v": Score.VERSION, "raw": Score.raw_of(ard)})
 	var last: Dictionary = out.pop_back()
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["score"] > b["score"])

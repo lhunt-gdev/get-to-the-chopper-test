@@ -16,17 +16,49 @@ signal fire_released
 var _touches: Dictionary = {}
 
 
+## How far past the drawn radius a touch still holds FIRE (a little forgiving at the edge).
+const TOUCH_REACH := 1.15
+## The bottom of the screen kept clear of FIRE's touch area in Home Screen mode (px): an iPhone's
+## home swipe starts there, and a thumb held on FIRE that low could send you to the Home Screen.
+const HOME_SWIPE_CLEAR := 24.0
+
+## Home Screen mode: -1 not asked yet, else 0 / 1. Asked of the browser once (web only).
+static var _standalone := -1
+
+
 ## The FIRE button as (centre x, centre y, radius) for a screen of this size. The HUD draws it here.
+## From the Home Screen it sits higher, its touch area clear of the bottom HOME_SWIPE_CLEAR px.
 static func fire_button(screen: Vector2, t: Tuning) -> Vector3:
 	var r := screen.x * t.fire_button_fraction
 	var margin := screen.x * 0.04
 	var x := r + margin if t.fire_on_left else screen.x - r - margin
-	return Vector3(x, screen.y - r - margin, r)
+	var y := screen.y - r - margin
+	if standalone():
+		y = minf(y, screen.y - HOME_SWIPE_CLEAR - r * TOUCH_REACH)
+	return Vector3(x, y, r)
+
+
+## Whether the game runs from the Home Screen (iOS's navigator.standalone, or the display-mode:
+## standalone media query): what the browser says, read once through JavaScriptBridge. Never on any
+## other platform.
+static func standalone() -> bool:
+	if _standalone < 0:
+		_standalone = 0
+		if OS.has_feature("web"):
+			var got = JavaScriptBridge.eval("(navigator.standalone === true || !!(window.matchMedia && " \
+					+ "window.matchMedia('(display-mode: standalone)').matches)) ? 1 : 0", true)
+			_standalone = 1 if (got is int or got is float) and int(got) == 1 else 0
+	return _standalone == 1
+
+
+## For tests: as if from the Home Screen (true), not (false), or ask the browser again (null).
+static func set_standalone_for_test(on: Variant) -> void:
+	_standalone = -1 if on == null else (1 if on else 0)
 
 
 static func on_fire_button(p: Vector2, screen: Vector2, t: Tuning) -> bool:
 	var b := fire_button(screen, t)
-	return p.distance_to(Vector2(b.x, b.y)) <= b.z * 1.15  # a little forgiving at the edge
+	return p.distance_to(Vector2(b.x, b.y)) <= b.z * TOUCH_REACH
 
 
 func _unhandled_input(event: InputEvent) -> void:
