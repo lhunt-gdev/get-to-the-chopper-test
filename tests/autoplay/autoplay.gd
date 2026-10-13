@@ -96,6 +96,11 @@ extends Node
 ##                  (low on his body, off-centre): FIRE shoots him, and it takes him down
 ##   boss_skip    - main route; it taps at once in the boss's KO replay (too soon: nothing), then
 ##                  two seconds in: skipped, it runs on
+##   buttons      - as ground, with SETTINGS' MOVE on BUTTONS: its lane changes, jumps and slides
+##                  pressed on the on-screen buttons by touch, now and then a real swipe instead, FIRE
+##                  held by a touch on the trigger meanwhile (_swipe): RESULT ends
+##                  buttons=presses/swipes/ok (each press heard as its swipe, once; never a tap)
+##   buttons_left - as buttons, with TRIGGER LEFT too (FIRE bottom left, the buttons on the right)
 ## Every KO replay is watched: RESULT ends ko=shots shown/skipped/ok, ok when it ended with time back
 ## to normal, the camera back (its field of view, behind us), the HUD back (FIRE showing, REPLAY
 ## gone), the chopper's clock not moved, us not moved, the boss in view on a tall phone through it,
@@ -230,6 +235,13 @@ func _ready() -> void:
 	# (only mission 1 EASY open). intro_skip has got out of mission 1 on EASY and MEDIUM, so HARD is
 	# open for it to pick.
 	_plays = "cover" if scenario == "tips" else scenario
+	# The move buttons' bots (MOVE: BUTTONS) play as ground does, by touch (see _swipe), whatever the
+	# device's SETTINGS say (never saved: only this run's).
+	_buttons = scenario in ["buttons", "buttons_left"]
+	if _buttons:
+		_plays = "ground"
+		Settings._values["controls"] = "buttons"
+		Settings._values["fire_side"] = "left" if scenario == "buttons_left" else "right"
 	Progress.load_from("")
 	if scenario == "intro_skip":
 		Progress.record_extraction(1, "easy")
@@ -267,6 +279,10 @@ func _ready() -> void:
 				_tips_bad += " %s-twice" % id
 			_tips[id] = int(_tips.get(id, 0)) + 1)
 	add_child(_level)
+	if _buttons:
+		var input: SwipeInput = _level.get("_input")
+		input.swiped.connect(func(dir: Vector2i) -> void: _heard[dir] = int(_heard.get(dir, 0)) + 1)
+		input.tapped.connect(func(_p: Vector2) -> void: _taps_heard += 1)
 	_player = _level.get_node("Player")
 	GameState.run_ended.connect(_on_end)
 	if scenario in ["menu_start", "intro_skip"]:
@@ -342,6 +358,8 @@ func _setup_test_range() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _buttons:
+		_lift_fingers()
 	if scenario == "tips":
 		_watch_tips(delta)
 	if not GameState.run_active or scenario in ["naive", "naive_skip"]:
@@ -369,7 +387,7 @@ func _physics_process(delta: float) -> void:
 		# Break cover once nobody ahead is alive to shoot at us.
 		var hiding := scenario == "squad_caught" and GameState.alert_level >= 3
 		if scenario != "camper" and not hiding and not _trooper_ahead(d):
-			_player.handle_swipe(Vector2i.RIGHT if _player.lane < lane_count / 2 else Vector2i.LEFT)
+			_swipe(Vector2i.RIGHT if _player.lane < lane_count / 2 else Vector2i.LEFT)
 		return
 
 	# The guard dog: dog_dodge swipes out of the lane it's coming down; dog_bite holds its lane.
@@ -378,7 +396,7 @@ func _physics_process(delta: float) -> void:
 		_cooldown = 5
 	if dog != null and scenario == "dog_dodge" and absf(dog.locked_x - _player.lane_x(_player.lane)) < 0.1 and _cooldown <= 0:
 		var to := _player.lane - 1 if _player.lane > 0 and not _blocked_ahead(obstacles, _player.lane - 1, d) else _player.lane + 1
-		_player.handle_swipe(Vector2i.LEFT if to < _player.lane else Vector2i.RIGHT)
+		_swipe(Vector2i.LEFT if to < _player.lane else Vector2i.RIGHT)
 		_cooldown = 30
 
 	# Last-minute change of mind: back to the middle just before the first split.
@@ -404,7 +422,7 @@ func _physics_process(delta: float) -> void:
 		elif in_line:
 			var to := _dodge_lane(obstacles, d)
 			if to != _player.lane:
-				_player.handle_swipe(Vector2i.RIGHT if to > _player.lane else Vector2i.LEFT)
+				_swipe(Vector2i.RIGHT if to > _player.lane else Vector2i.LEFT)
 		_cooldown = maxi(_cooldown, 3)
 
 	# Steering: avoid lanes with cover (walls, boxes) coming up; lean to the preferred side at junctions.
@@ -430,7 +448,7 @@ func _physics_process(delta: float) -> void:
 				best_score = score
 				best = lane
 		if best != _player.lane:
-			_player.handle_swipe(Vector2i.RIGHT if best > _player.lane else Vector2i.LEFT)
+			_swipe(Vector2i.RIGHT if best > _player.lane else Vector2i.LEFT)
 			_cooldown = 5
 
 	# Jumping and sliding (halfway: from the WING on, it runs into everything).
@@ -447,12 +465,12 @@ func _physics_process(delta: float) -> void:
 				if scenario == "stumble_once" and (_fumble == null or _fumble == o):
 					_fumble = o  # run straight into this one
 					continue
-				_player.handle_swipe(Vector2i.UP)
+				_swipe(Vector2i.UP)
 			"jump_or_alert":
 				if not _level._runner.current in _trip_in:
-					_player.handle_swipe(Vector2i.UP)
+					_swipe(Vector2i.UP)
 			"slide":
-				_player.handle_swipe(Vector2i.DOWN)
+				_swipe(Vector2i.DOWN)
 
 
 ## The boss at the chopper: while his minigun spins up, step toward the nearest of his 2 free
@@ -496,6 +514,123 @@ func _tips_report() -> String:
 	return " tips=%d/%s" % [_tips.size(), "ok" if ok else "bad(%s seen=%s longest=%.1f%s)" % [",".join(_tips.keys()), Progress.tips_seen(), _tip_longest, _tips_bad]]
 
 
+## buttons / buttons_left (SETTINGS' MOVE on BUTTONS; buttons_left with TRIGGER LEFT too): every lane
+## change, jump and slide is a press of the on-screen button, as a phone's touch (BUTTON_HOLD frames
+## down, a finger of its own), but every SWIPE_EVERY-th move a real swipe (a touch dragged across the
+## middle of the screen: swipes still work with the buttons); FIRE is held with a touch on the trigger
+## the whole while (finger 0), so the buttons are pressed with FIRE held. Each press must be that
+## button's swipe, once (the level's own way in), lit while it's down, and never a tap.
+const BUTTON_HOLD := 4
+const SWIPE_EVERY := 5
+var _buttons := false
+## Presses made, real swipes made, the swipes the level heard (by direction), the touches still down
+## ([frame to lift, finger, where]), the next finger, FIRE's finger down, and what went wrong.
+var _presses := {}
+var _swipes_made := 0
+var _heard := {}
+var _down: Array = []
+var _finger := 1
+var _fire_down := false
+var _taps_heard := 0
+var _buttons_bad := ""
+
+
+## A move: the swipe straight to the player, or with the buttons on, a touch on its button (or now and
+## then a real swipe).
+func _swipe(dir: Vector2i) -> void:
+	if not _buttons:
+		_player.handle_swipe(dir)
+		return
+	for t: Array in _down:
+		if t[3] == dir:
+			return  # (that button's still held down from a moment ago: one press is one move)
+	var n := 0
+	for k in _presses:
+		n += int(_presses[k])
+	var v := get_viewport().get_visible_rect().size
+	if (n + _swipes_made) % SWIPE_EVERY == SWIPE_EVERY - 1:
+		# A real swipe across the middle of the screen, the finger dragged well past the threshold.
+		var from := Vector2(v.x / 2.0, v.y * 0.45)
+		_touch(20, from, true)
+		var drag := InputEventScreenDrag.new()
+		drag.index = 20
+		drag.position = from + Vector2(dir) * v.x * 0.3
+		get_viewport().push_input(drag, true)
+		_touch(20, drag.position, false)
+		_swipes_made += 1
+		return
+	var b: Vector3 = SwipeInput.move_buttons(v, _level.tuning)[dir]
+	var at := Vector2(b.x, b.y)
+	var finger := _finger
+	_finger = _finger % 9 + 1
+	_touch(finger, at, true)
+	_presses[dir] = int(_presses.get(dir, 0)) + 1
+	if not _level._hud.button_pad().is_lit(dir):
+		_buttons_bad += " not-lit(%s)" % dir
+	_down.append([Engine.get_physics_frames() + BUTTON_HOLD, finger, at, dir])
+
+
+func _touch(finger: int, at: Vector2, down: bool) -> void:
+	var t := InputEventScreenTouch.new()
+	t.index = finger
+	t.position = at
+	t.pressed = down
+	get_viewport().push_input(t, true)  # (in the game's own pixels, as SwipeInput reads them)
+
+
+## Each frame, with the buttons: the fingers due up lift.
+func _lift_fingers() -> void:
+	var still: Array = []
+	for t: Array in _down:
+		if Engine.get_physics_frames() >= int(t[0]):
+			_touch(int(t[1]), t[2], false)
+		else:
+			still.append(t)
+	_down = still
+
+
+## FIRE held or let go: straight to the level, or with the buttons on, a finger on the trigger (a new
+## press if the level has let it go meanwhile: the KO replay, the end).
+func _hold_fire(want: bool) -> void:
+	if not _buttons:
+		_level.set_fire_held(want)
+		return
+	var fb := SwipeInput.fire_button(get_viewport().get_visible_rect().size, _level.tuning)
+	var at := Vector2(fb.x, fb.y)
+	if want and _fire_down and not _level._fire_held:
+		_touch(0, at, false)
+		_fire_down = false
+	if want and not _fire_down:
+		_touch(0, at, true)
+		_fire_down = true
+	elif not want and _fire_down:
+		_touch(0, at, false)
+		_fire_down = false
+
+
+func _buttons_report() -> String:
+	if not _buttons:
+		return ""
+	var n := 0
+	var bad := _buttons_bad
+	for d: Vector2i in SwipeInput.BUTTON_DIRS:
+		n += int(_presses.get(d, 0))
+	var heard := 0
+	for d in _heard:
+		heard += int(_heard[d])
+	# (every press and every real swipe heard as one swipe; each kind of button pressed; no taps)
+	if heard != n + _swipes_made:
+		bad += " heard-%d-of-%d" % [heard, n + _swipes_made]
+	for d: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		if int(_presses.get(d, 0)) == 0:
+			bad += " never-pressed(%s)" % d
+	if _swipes_made == 0:
+		bad += " no-swipes"
+	if _taps_heard > 0:
+		bad += " taps-%d" % _taps_heard
+	return " buttons=%d/%d/%s" % [n, _swipes_made, "ok" if bad == "" else "bad(%s)" % bad.strip_edges()]
+
+
 func _boss_standoff() -> bool:
 	if not _player.standoff:
 		return false
@@ -514,7 +649,7 @@ func _boss_standoff() -> bool:
 			best = cost
 			to = l
 	if to != _player.lane:
-		_player.handle_swipe(Vector2i.RIGHT if to > _player.lane else Vector2i.LEFT)
+		_swipe(Vector2i.RIGHT if to > _player.lane else Vector2i.LEFT)
 	return true
 
 
@@ -594,7 +729,7 @@ func _shoot() -> void:
 		want = false  # prove the cover works: only shoot once we're behind it...
 	if _plays == "cover" and _player.in_cover and _cover_frames < 90:
 		want = false  # ...and only after he's had a shot at us (1.5 s)
-	_level.set_fire_held(want)
+	_hold_fire(want)
 
 
 func _trooper_ahead(d: float) -> bool:
@@ -1026,7 +1161,7 @@ func _report(reason: String) -> void:
 			_count("dog_bite"), _count("dog_dodged"), _count("dog_down"), _count("runner_down"), _count("runner_alarm"), _count("squad_out"), _count("squad_caught"), _count("searchlight"), _level._clock.elapsed,
 			_count("sniper_hit"), _count("sniper_dodged"), _unseen]
 			+ (" boss=HIDDEN" if _boss_hidden else " boss=%d/%d/%d" % [_count("boss_down"), _count("boss_hit"), _count("boss_attack")])
-			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + _tips_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved]
+			+ " ko=%d/%d/%s" % [_count("ko_shot"), 1 if _level._ko_skipped else 0, _ko_ok] + _death_report + _talk_report + _intro_report + _gates_report() + _stairwell_report() + _tips_report() + _buttons_report() + " setting=%s bosshp=%d opened=%s saved=%s" % [_level._graph.setting, _boss_hp(), _opened(), _saved]
 			+ _score_report() + _board_report)
 	# The run's raw tally for the cast's board entries (tests/house/make_house.sh collects these).
 	var st: Dictionary = _level.last_stats

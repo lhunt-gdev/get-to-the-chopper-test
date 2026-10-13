@@ -48,6 +48,8 @@ const MADE_BY := "LUKE HUNT"
 
 const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
 const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
+## SETTINGS' MOVE (the "controls" setting): swipes only, or the on-screen move buttons too.
+const CONTROLS_NAMES := {"swipe": "SWIPE", "buttons": "BUTTONS"}
 ## Each ending's debrief title (its name: the scoreboard names it the same, BoardRow), the line under
 ## it, and its colour.
 const END_TITLES := {
@@ -498,7 +500,7 @@ func _build_controls() -> void:
 	_header("CONTROLS", "FIELD MANUAL")
 	var col := _column()
 	var y := 104.0
-	for row in controls_lines(String(Settings.get_value("aim"))):
+	for row in controls_lines(String(Settings.get_value("aim")), String(Settings.get_value("controls")) == "buttons"):
 		var a := UiKit.label(row[0], 8, UiKit.TEAL)
 		a.position = Vector2(26, y)
 		col.add_child(a)
@@ -511,9 +513,12 @@ func _build_controls() -> void:
 
 ## CONTROLS' lines ([what you do, what it does]) for the AIM setting `aim` (Settings: "auto",
 ## "auto_tap" or "tap"): FIRE aims itself unless it's TAP ONLY (then it shoots the enemy tapped), and a
-## tap on an enemy targets it unless it's AUTO. (No dogs line: the demo's mission has none.)
-static func controls_lines(aim: String) -> Array:
+## tap on an enemy targets it unless it's AUTO. (No dogs line: the demo's mission has none.) With MOVE
+## on BUTTONS (`buttons`), the moves are the on-screen buttons' (and swipes still do them).
+static func controls_lines(aim: String, buttons: bool = false) -> Array:
 	var lines := [["SWIPE < >", "DODGE A LANE"], ["SWIPE UP", "JUMP"], ["SWIPE DOWN", "SLIDE"]]
+	if buttons:
+		lines = [["TAP ◀ ▶", "DODGE A LANE"], ["TAP ▲", "JUMP"], ["TAP ▼", "SLIDE"], ["OR SWIPE", "THE SAME MOVES"]]
 	if aim == "tap":
 		lines.append_array([["TAP ENEMY", "TARGET IT"], ["HOLD FIRE", "SHOOT THE TARGET"]])
 	else:
@@ -522,7 +527,7 @@ static func controls_lines(aim: String) -> Array:
 			lines.append(["TAP ENEMY", "TARGET IT"])
 	lines.append_array([
 		["RUN INTO COVER", "HIDE BEHIND IT"],
-		["  SWIPE < >", "LEAVE COVER"],
+		["  TAP ◀ ▶" if buttons else "  SWIPE < >", "LEAVE COVER"],
 		["OUTER LANES", "TAKE SIDE EXITS"],
 		["TRIPWIRES", "RAISE THE ALERT"],
 		["ALARM BOXES", "SHOOT: ALERT DOWN"],
@@ -639,9 +644,21 @@ func _build_mission() -> void:
 	(focus if focus != null else back).grab_focus()
 
 
+## SETTINGS' spacing (px) between a section and the row above it, from a section's title to its first
+## row, and from the last row to RESET and BACK: roomy, or on a screen under ROOMY_FROM high a little
+## closer (every row, RESET and BACK then fit a 480-high one; the rows stay 22 apart).
+const SECTION_GAP := {true: 4.0, false: 1.0}
+const SECTION_STEP := {true: 17.0, false: 15.0}
+const BUTTONS_GAP := {true: 10.0, false: 7.0}
+const ROOMY_FROM := 500.0
+var _roomy := true
+
+
 func _build_settings() -> void:
 	_header("SETTINGS", "AGENT PREFERENCES")
 	_column()
+	_roomy = _root.get_viewport_rect().size.y >= ROOMY_FROM
+	var gap: float = SECTION_GAP[_roomy]
 	var y := 90.0
 	y = _section("AUDIO", y)
 	y = _toggle_row("SOUND", "sound_on", y)
@@ -649,23 +666,25 @@ func _build_settings() -> void:
 	y = _slider_row("MUSIC", "music_volume", y)
 	y = _slider_row("EFFECTS", "effects_volume", y)
 	y = _slider_row("AMBIENCE", "ambience_volume", y)
-	y = _section("DISPLAY", y + 4)
+	y = _section("DISPLAY", y + gap)
 	y = _slider_row("BRIGHTNESS", "brightness", y, 50, 150)
 	y = _toggle_row("SCREEN SHAKE", "screen_shake", y)
 	y = _toggle_row("RETRO FILTER", "retro_filter", y)
 	y = _toggle_row("BLOOD", "blood", y)
-	y = _section("CONTROLS", y + 4)
+	y = _section("CONTROLS", y + gap)
 	y = _choice_row("AIM", "aim", AIM_NAMES, y)
 	y = _choice_row("TRIGGER", "fire_side", {"right": "RIGHT", "left": "LEFT"}, y)
 	y = _choice_row("SWIPE", "swipe", SWIPE_NAMES, y)
+	y = _choice_row("MOVE", "controls", CONTROLS_NAMES, y)
 	y = _tips_row(y)
+	y += BUTTONS_GAP[_roomy]
 	# RESET and BACK side by side, under the rows.
-	var reset := _button("RESET", y + 10, func() -> void:
+	var reset := _button("RESET", y, func() -> void:
 		Settings.reset()
 		_show(Screen.SETTINGS))
 	reset.offset_left = -112
 	reset.offset_right = -8
-	var back := _button("BACK", y + 10, func() -> void: _open(_back_to))
+	var back := _button("BACK", y, func() -> void: _open(_back_to))
 	back.offset_left = 8
 	back.offset_right = 112
 	back.grab_focus()
@@ -1308,7 +1327,7 @@ func _section(title: String, y: float) -> float:
 	line.size = Vector2(230 - title.length() * 6 - 4, 1)
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_col.add_child(line)
-	return y + 17.0
+	return y + SECTION_STEP[_roomy]
 
 
 func _row_label(text: String, y: float) -> void:

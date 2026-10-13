@@ -131,6 +131,12 @@ expect boss_hold_fire "reason=chopper_left alert=1 route=$G |" "time=106.0" "bos
 expect boss_tap "reason=extracted alert=1 route=$G | covers=0 hits=0" "boss=1/0/" "ko=3/0/ok"
 # The boss's KO replay skipped with a tap: one shot shown, and you run on.
 expect boss_skip "reason=extracted alert=1 route=$G | covers=0 hits=0" "boss=1/0/" "ko=1/1/ok" "talk=extracted/skipped/ok"
+# The on-screen buttons (SETTINGS' MOVE: BUTTONS): ground's run, its lane changes, jumps and slides
+# pressed on the buttons by touch (every fifth move a real swipe), FIRE held by a touch on the trigger
+# meanwhile; each press heard as its swipe once, never a tap (buttons=presses/swipes/ok). buttons_left
+# with TRIGGER LEFT too (the buttons on the right). The same run as ground's.
+expect buttons "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "buttons=" "/ok setting=medium" "dist=820 "
+expect buttons_left "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=0 doors=12 $NONE" "boss=1/0/" "ko=3/0/ok" "buttons=" "/ok setting=medium" "dist=820 "
 # Through the real main menu, the mission briefing and the opening pan (tapped through every line,
 # the pan starting mid gun check; or SKIP, then a tap skipping the pan): nothing of the run under
 # the briefing; CROSS's ready stance hands over to the run with no joint jumping, the pistol never

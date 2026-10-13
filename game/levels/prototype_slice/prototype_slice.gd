@@ -514,6 +514,8 @@ func _ready() -> void:
 	_input.fire_pressed.connect(_on_fire)
 	_input.fire_released.connect(set_fire_held.bind(false))
 	_hud.setup(tuning)
+	_input.pad = _hud.button_pad()  # (the move buttons, MOVE: BUTTONS: a press is that button's swipe)
+	_input.button_held.connect(_hud.button_pad().set_held)
 	_frontend = Frontend.new()
 	_frontend.name = "Frontend"
 	add_child(_frontend)
@@ -730,6 +732,7 @@ func _apply_settings() -> void:
 		_:
 			tuning.targeting_mode = Tuning.TargetingMode.HYBRID
 	tuning.fire_on_left = String(Settings.get_value("fire_side")) == "left"
+	tuning.move_buttons = String(Settings.get_value("controls")) == "buttons"
 	if _swipe_base <= 0.0:
 		_swipe_base = tuning.swipe_min_fraction
 	tuning.swipe_min_fraction = _swipe_base * {"low": 1.4, "medium": 1.0, "high": 0.7}.get(String(Settings.get_value("swipe")), 1.0)
@@ -737,6 +740,7 @@ func _apply_settings() -> void:
 	_shake_on = bool(Settings.get_value("screen_shake"))
 	_hud.set_retro_filter(bool(Settings.get_value("retro_filter")))
 	_hud.redraw_fire()
+	_hud.redraw_buttons()
 
 
 ## How far through the mission you are, 0 to 1: the distance run, against the distance run plus

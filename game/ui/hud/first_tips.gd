@@ -3,7 +3,8 @@ extends RefCounted
 ## The first-time tips (the decision log's "The demo pass"): one-time prompts in mission 1's opening
 ## stretch (the LOBBY, the MAIN FLOOR and the SECURITY WING, up to its junction) teaching the controls
 ## and the rules: change lane, jump, slide, run into cover and swipe out of it, hold FIRE (and the
-## TRIGGER side setting), tripwires and alarm boxes, and the junction's doors. Each shows once, ever,
+## TRIGGER side setting), tripwires and alarm boxes, and the junction's doors (the moves' worded for
+## the on-screen move buttons with SETTINGS' MOVE on BUTTONS: BY_BUTTONS). Each shows once, ever,
 ## on this device (Progress remembers it; SETTINGS' TIPS turns them off, SHOW AGAIN brings them back),
 ## just before the thing it teaches and never mid-danger: only while no guard is aiming at him (FIRE's
 ## own excepted: a guard ahead is what it's about; it comes first behind cover, the calmest place to
@@ -49,6 +50,20 @@ const TIPS := {
 const FIRE_BY_AIM := {
 	"tap": ["TAP AN ENEMY TO TARGET IT", "HOLD FIRE TO SHOOT IT", "SETTINGS: TRIGGER LEFT OR RIGHT"],
 	"auto_tap": ["HOLD FIRE TO SHOOT", "IT AIMS, OR TAP AN ENEMY", "SETTINGS: TRIGGER LEFT OR RIGHT"],
+}
+
+## The moves' lines and icons with SETTINGS' MOVE on BUTTONS (the on-screen move buttons), as CONTROLS
+## words it: TIPS' own are SWIPE's. (Swipes still work: these teach the buttons.) Each one's card rings
+## its buttons on the screen (BUTTONS_FOR).
+const BY_BUTTONS := {
+	"lane": {"lines": ["TAP ◀ OR ▶", "TO CHANGE LANE"], "icon": "tap_side"},
+	"jump": {"lines": ["TAP ▲ TO JUMP"], "icon": "tap_up"},
+	"slide": {"lines": ["TAP ▼ TO SLIDE"], "icon": "tap_down"},
+	"cover": {"lines": ["RUN INTO COVER TO HIDE", "OR TAP ◀ ▶ EARLY TO RUN ON PAST"], "icon": "cover"},
+	"cover_out": {"lines": ["TAP ◀ OR ▶", "TO LEAVE COVER"], "icon": "tap_side"},
+}
+const BUTTONS_FOR := {
+	"lane": [Vector2i.LEFT, Vector2i.RIGHT], "jump": [Vector2i.UP], "slide": [Vector2i.DOWN], "cover_out": [Vector2i.LEFT, Vector2i.RIGHT],
 }
 
 ## The breather after one goes before the next can show (game time, s).
@@ -101,11 +116,21 @@ static func pick(s: Dictionary) -> String:
 	return ""
 
 
-## Tip `id`'s lines (the first its headline), with SETTINGS' AIM `aim` (FIRE's follows it).
-static func lines_of(id: String, aim: String = "auto") -> Array:
+## Tip `id`'s lines (the first its headline), with SETTINGS' AIM `aim` (FIRE's follows it) and MOVE
+## on BUTTONS or not (`buttons`: the moves' follow it).
+static func lines_of(id: String, aim: String = "auto", buttons: bool = false) -> Array:
 	if id == "fire" and FIRE_BY_AIM.has(aim):
 		return FIRE_BY_AIM[aim]
+	if buttons and BY_BUTTONS.has(id):
+		return BY_BUTTONS[id]["lines"]
 	return TIPS.get(id, {}).get("lines", [])
+
+
+## Tip `id`'s gesture icon (Card.draw_icon), with MOVE on BUTTONS or not.
+static func icon_of(id: String, buttons: bool = false) -> String:
+	if buttons and BY_BUTTONS.has(id):
+		return String(BY_BUTTONS[id]["icon"])
+	return String(TIPS.get(id, {}).get("icon", ""))
 
 
 ## The hold or cover's tip to show now (MOMENTS), or "": as pick(), but only those (they skip the
@@ -221,6 +246,10 @@ class Card extends Control:
 	var fire_at := Vector3.ZERO
 	## SETTINGS' AIM (set by the HUD), for FIRE's wording (lines_of).
 	var aim := "auto_tap"
+	## SETTINGS' MOVE on BUTTONS (set by the HUD), for the moves' wording, and where the move buttons
+	## are (SwipeInput.move_buttons), for their cards to ring them.
+	var buttons := false
+	var pad_at := {}
 	var _t := 0.0
 	var _in := 0.0
 
@@ -237,7 +266,7 @@ class Card extends Control:
 		queue_redraw()
 
 	func lines() -> Array:
-		return FirstTips.lines_of(id, aim)
+		return FirstTips.lines_of(id, aim, buttons)
 
 	## The card's box on a screen `size` big.
 	func box(size: Vector2) -> Rect2:
@@ -265,7 +294,7 @@ class Card extends Control:
 		draw_rect(tab, Color(UiKit.RED, a))
 		draw_string(f, tab.position + Vector2(6, 9), "TIP", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, a))
 		var icon := Rect2(r.position.x + (r.size.x - ICON * 2.0) / 2.0, r.position.y + 8.0, ICON * 2.0, ICON)
-		draw_icon(self, String(TIPS[id]["icon"]), icon, _t, a)
+		draw_icon(self, FirstTips.icon_of(id, buttons), icon, _t, a)
 		var y := icon.end.y + 6.0 + 8.0
 		var ls := lines()
 		for i in ls.size():
@@ -279,6 +308,15 @@ class Card extends Control:
 			for k in 2:
 				var p := fmod(_t * 1.2 + k * 0.5, 1.0)
 				draw_arc(Vector2(fire_at.x, fire_at.y), fire_at.z * (1.0 + 0.5 * p), 0, TAU, 32, Color(UiKit.TEAL, a * (1.0 - p)), 2.0)
+		if buttons and BUTTONS_FOR.has(id):
+			# The moves' with MOVE on BUTTONS: the same rings round the buttons it means.
+			for d: Vector2i in BUTTONS_FOR[id]:
+				var b: Vector3 = pad_at.get(d, Vector3.ZERO)
+				if b.z <= 0.0:
+					continue
+				for k in 2:
+					var p := fmod(_t * 1.2 + k * 0.5, 1.0)
+					draw_arc(Vector2(b.x, b.y), b.z * (1.0 + 0.5 * p), 0, TAU, 24, Color(UiKit.TEAL, a * (1.0 - p)), 2.0)
 		var hint := "TAP TO CLOSE"
 		var hw := f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 		draw_string(f, Vector2(roundf(r.position.x + (r.size.x - hw) / 2.0), y + 4.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
@@ -307,6 +345,23 @@ class Card extends Control:
 				ci.draw_line(c + Vector2(0, 8), c + Vector2(0, -8), dim, 1.0)
 				_chevron_v(ci, c + Vector2(0, 10.0 * dir), dir, teal)
 				_finger(ci, c + Vector2(0, y), paper)
+			"tap_side", "tap_up", "tap_down":
+				# The move buttons' (MOVE: BUTTONS): small round buttons, a fingertip tapping each in
+				# turn, lighting it (the side ones: left, then right).
+				var dirs: Array = [Vector2i.LEFT, Vector2i.RIGHT] if kind == "tap_side" else [Vector2i.UP if kind == "tap_up" else Vector2i.DOWN]
+				var on := int(loop * 2.0) % dirs.size()
+				var down := fmod(loop * 2.0, 1.0) > 0.35  # (each tap: the finger comes down partway through)
+				for i in dirs.size():
+					var dir := Vector2(dirs[i])
+					var p := c + Vector2((i * 2 - 1) * 12.0 if dirs.size() == 2 else 0.0, 0.0)
+					var lit := i == on and down
+					ci.draw_circle(p, 8.0, Color(UiKit.INK, a * 0.5))
+					ci.draw_circle(p, 7.0, Color(UiKit.TEAL, a * (0.45 if lit else 0.18)))
+					ci.draw_arc(p, 7.0, 0, TAU, 16, Color(UiKit.TEAL, a), 1.0)
+					var side := Vector2(-dir.y, dir.x)
+					ci.draw_colored_polygon(PackedVector2Array([p + dir * 3.5, p - dir * 2.0 + side * 3.0, p - dir * 2.0 - side * 3.0]), paper if lit else teal)
+					if i == on:
+						_finger(ci, p + Vector2(5, 5) + (Vector2.ZERO if down else Vector2(3, 3)), paper)
 			"hold":
 				# A press: the fingertip on the trigger, rings going out from it while it's held.
 				ci.draw_arc(c + Vector2(10, 0), 7.0, 0, TAU, 16, teal, 2.0)

@@ -2,8 +2,8 @@ class_name Hud
 extends CanvasLayer
 ## The in-run HUD, in the game's espionage style (see UiKit): a LIFE bar and alert box top left,
 ## the chopper clock top centre with a codec message box under it, a progress rail down the left,
-## the pistol-trigger FIRE button, a pause button, and the area caption. The helicopter should
-## still carry the urgency, not a big timer.
+## the pistol-trigger FIRE button, the move buttons (SETTINGS' MOVE: BUTTONS), a pause button, and
+## the area caption. The helicopter should still carry the urgency, not a big timer.
 
 ## Pause pressed (the level pauses the game and shows the pause menu).
 signal pause_pressed
@@ -29,6 +29,11 @@ var _flash: ColorRect
 var _fire: TriggerButton
 var _clock: ClockDial
 var _pause: PauseButton
+## The move buttons (MOVE: BUTTONS): shown in live play only, never under the pause menu.
+var _pad: ButtonPad
+var _playing := false
+var _paused := false
+var _tuning: Tuning
 ## The first-time tip up now (FirstTips), if any.
 var _tip_card: FirstTips.Card
 
@@ -485,6 +490,70 @@ class TriggerButton extends Control:
 		draw_polyline(inner, line, 1.0)
 
 
+## The move buttons (SETTINGS' MOVE: BUTTONS; the decision log's "On-screen buttons option"): four
+## round see-through buttons in a diamond, like a pad's face buttons (up JUMP, left and right change
+## lane, down SLIDE), each with its arrow, on the side away from FIRE. In the HUD's look: a pale teal
+## glass disc with a thin bright ring and a dark rim, so it reads over any floor; a pressed one lights
+## up while the finger's on it. SwipeInput decides what counts as touching one; this draws them in the
+## same place (SwipeInput.move_buttons).
+class ButtonPad extends Control:
+	const GLASS := Color(0.75, 0.95, 0.9)
+	## Fill, ring and arrow alpha: at rest, and lit.
+	const FILL := 0.22
+	const FILL_LIT := 0.55
+	const RING := 0.7
+	const RING_LIT := 0.9
+	const ARROW := 0.7
+	const ARROW_LIT := 0.95
+	var tuning: Tuning
+	## Touch index -> the button it's holding down (SwipeInput's button_held).
+	var _held := {}
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		get_viewport().size_changed.connect(queue_redraw)
+		# (hidden, a finger lifted meanwhile is never heard of: none stays lit)
+		visibility_changed.connect(func() -> void:
+			_held.clear()
+			queue_redraw())
+
+	## Touch `index` is on the button `dir` (ZERO: it's lifted).
+	func set_held(index: int, dir: Vector2i) -> void:
+		if dir == Vector2i.ZERO:
+			if not _held.has(index):
+				return
+			_held.erase(index)
+		else:
+			_held[index] = dir
+		queue_redraw()
+
+	## Whether the button `dir` is held down (lit) now.
+	func is_lit(dir: Vector2i) -> bool:
+		return dir in _held.values()
+
+	func _draw() -> void:
+		if tuning == null:
+			return
+		var all := SwipeInput.move_buttons(get_viewport_rect().size, tuning)
+		for d: Vector2i in all:
+			var b: Vector3 = all[d]
+			var c := Vector2(b.x, b.y)
+			var lit := is_lit(d)
+			draw_circle(c, b.z + 1.0, Color(UiKit.INK, 0.35))  # (a dark rim, so it reads on a pale floor)
+			# (lit: the glass glows teal, its ring bright and thicker)
+			draw_circle(c, b.z - 1.0, Color(UiKit.TEAL, FILL_LIT) if lit else Color(GLASS, FILL))
+			draw_arc(c, b.z - 0.75, 0.0, TAU, 24, Color(UiKit.PAPER if lit else GLASS, RING_LIT if lit else RING), 2.0 if lit else 1.5)
+			# The arrow: a solid triangle pointing its way, edged dark.
+			var dir := Vector2(d)
+			var side := Vector2(-dir.y, dir.x)
+			var s := 6.0
+			var tri := PackedVector2Array([c + dir * s, c - dir * s * 0.6 + side * s * 0.9, c - dir * s * 0.6 - side * s * 0.9])
+			draw_colored_polygon(tri, Color(UiKit.PAPER if lit else GLASS, ARROW_LIT if lit else ARROW))
+			tri.append(tri[0])
+			draw_polyline(tri, Color(UiKit.INK, 0.45), 1.0)
+
+
 ## Top right: pause.
 class PauseButton extends Button:
 	func _ready() -> void:
@@ -689,10 +758,48 @@ func _process(_delta: float) -> void:
 
 ## The in-run HUD shows only during a run (not over the main menu, the pan or the end screens).
 func set_playing(on: bool) -> void:
+	_playing = on
 	for n in [_status, _clock, _fire, _rail, _pause, _message, _runner_bar, _boss_bar, _rear]:
 		if n:
 			n.visible = on and (n != _message or _message.text != "") and (n != _runner_bar or _runner_bar.fraction >= 0.0) \
 					and (n != _boss_bar or _boss_bar.fraction >= 0.0) and (n != _rear or _rear._picture.texture != null)
+	_show_pad()
+
+
+## The move buttons show with the rest of the HUD (live play), with MOVE on BUTTONS, and never under
+## the pause menu.
+func _show_pad() -> void:
+	if _pad:
+		_pad.visible = _playing and not _paused and _tuning != null and _tuning.move_buttons
+
+
+## The move buttons (SETTINGS' MOVE), the TRIGGER side or the screen changed: the buttons in their place
+## (or gone), and the area's name clear of them.
+func redraw_buttons() -> void:
+	_show_pad()
+	if _pad:
+		_pad.queue_redraw()
+	if _area:
+		_area.offset_top = area_top(get_viewport().get_visible_rect().size, _tuning)
+
+
+## The button pad (SwipeInput presses it).
+func button_pad() -> ButtonPad:
+	return _pad
+
+
+## Where the area's name sits (its top, up from the screen's bottom, px): its usual place, or with the
+## move buttons on (MOVE: BUTTONS), a little higher, AREA_CLEAR px over the top button's touch area.
+const AREA_TOP := -120.0
+const AREA_CLEAR := 4.0
+const AREA_H := 18.0  # (the 16 px letters' line)
+
+
+static func area_top(screen: Vector2, t: Tuning) -> float:
+	if t == null or not t.move_buttons:
+		return AREA_TOP
+	var up: Vector3 = SwipeInput.move_buttons(screen, t)[Vector2i.UP]
+	return minf(AREA_TOP, up.y - up.z * SwipeInput.TOUCH_REACH - AREA_CLEAR - AREA_H - screen.y)
 
 
 ## MGS-style location caption: the area's name types out bottom left, then fades.
@@ -701,8 +808,8 @@ func show_area(area_name: String) -> void:
 		_area = UiKit.label("", 16, Color("e8f0e0"))
 		_area.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		_area.offset_left = 22
-		_area.offset_top = -120
 		add_child(_area)
+	_area.offset_top = area_top(get_viewport().get_visible_rect().size, _tuning)
 	if _area_tween:
 		_area_tween.kill()
 	_area.text = area_name
@@ -715,11 +822,17 @@ func show_area(area_name: String) -> void:
 
 
 func setup(tuning: Tuning) -> void:
+	_tuning = tuning
 	_rail = ProgressRail.new()
 	add_child(_rail)
 	_fire = TriggerButton.new()
 	_fire.tuning = tuning
 	add_child(_fire)
+	_pad = ButtonPad.new()
+	_pad.tuning = tuning
+	add_child(_pad)
+	_show_pad()
+	get_viewport().size_changed.connect(redraw_buttons)
 	_clock = ClockDial.new()
 	_clock.tuning = tuning
 	add_child(_clock)
@@ -832,6 +945,10 @@ func show_tip(id: String) -> void:
 		if _fire and _fire.tuning:
 			_tip_card.fire_at = SwipeInput.fire_button(get_viewport().get_visible_rect().size, _fire.tuning)
 		_tip_card.aim = String(Settings.get_value("aim"))  # (FIRE's wording follows SETTINGS' AIM)
+		# (the moves' wording follows SETTINGS' MOVE: with BUTTONS on, its card rings the button)
+		_tip_card.buttons = _tuning != null and _tuning.move_buttons
+		if _tip_card.buttons:
+			_tip_card.pad_at = SwipeInput.move_buttons(get_viewport().get_visible_rect().size, _tuning)
 		_tip_card.show_tip(id)
 	# (the cover hint under the clock makes way for a tip's card while it's up)
 	_hint.visible = id == ""
@@ -843,14 +960,19 @@ func tip_shown() -> String:
 
 
 ## The pause menu up (or gone): a tip's card goes under it while it's up, and comes back as the run
-## goes on (the tip itself stays up: it's only hidden).
+## goes on (the tip itself stays up: it's only hidden). The move buttons go too, and come back.
 func set_paused(on: bool) -> void:
+	_paused = on
+	_show_pad()
 	if _tip_card:
 		_tip_card.visible = _tip_card.id != "" and not on
 
 
+## The hint under the clock in cover, or facing the boss (worded for the move buttons with MOVE on
+## BUTTONS).
 func show_cover_hint(on: bool, standoff: bool = false) -> void:
-	_hint.text = "IN COVER - SWIPE < > TO BREAK COVER" if on else ("SWIPE < > TO DODGE - HOLD FIRE" if standoff else "")
+	var move := "TAP ◀ ▶" if _tuning != null and _tuning.move_buttons else "SWIPE < >"
+	_hint.text = "IN COVER - %s TO BREAK COVER" % move if on else ("%s TO DODGE - HOLD FIRE" % move if standoff else "")
 	# Below the rear-view monitor while it's up (Alert 3), otherwise in its usual place.
 	_hint.offset_top = 176 if _rear and _rear.visible else 104
 

@@ -90,6 +90,12 @@ func _run() -> void:
 	_test_demo_polish_rooftops()
 	_test_demo_polish_board_floor()
 	await _test_demo_polish_level()
+	# --- On-screen buttons (MOVE: BUTTONS) ---
+	_test_buttons_layout()
+	_test_buttons_setting()
+	_test_buttons_touches()
+	_test_buttons_words()
+	await _test_buttons_level()
 	print("%d checks, %d failed" % [_checks, _failures])
 	await _settle_audio(root)
 	quit(1 if _failures > 0 else 0)
@@ -6051,6 +6057,344 @@ func _test_demo_polish_level() -> void:
 	_check(faces >= 1 and faces == letters and boards == faces and glows == 0 and dissolves and lens and near_ok and under < level.SIGN_LETTERS_NEAR and short > level.SIGN_LETTERS_NEAR,
 			"exit sign: the MAIN FLOOR EXIT's %d hanging signs dissolve like the rest (lit in the PS1 shader, no glow) and dither away within %.1f m of the lens (face and board), their lettering gone with the camera nearer than %.1f m (him under it at %.1f, two metres short at %.1f)"
 			% [faces, level.SIGN_LENS_FADE, level.SIGN_LETTERS_NEAR, under, short])
+	await _settle_audio(level)
+	level.queue_free()
+	await process_frame
+	gs.alert_level = was_alert
+	gs.run_active = was_active
+
+
+# ---- On-screen buttons (SETTINGS' MOVE: BUTTONS; the decision log's "On-screen buttons option") ---
+
+## A touch at `p` (index `i`), down or lifted, straight to `input` as a phone delivers it.
+func _buttons_touch(input: SwipeInput, i: int, p: Vector2, down: bool) -> void:
+	var e := InputEventScreenTouch.new()
+	e.index = i
+	e.position = p
+	e.pressed = down
+	input._unhandled_input(e)
+
+
+func _buttons_drag(input: SwipeInput, i: int, p: Vector2) -> void:
+	var e := InputEventScreenDrag.new()
+	e.index = i
+	e.position = p
+	input._unhandled_input(e)
+
+
+## The four buttons' place on each screen (270x480, 270x584, 328x480, a 360x480 tablet's), either
+## TRIGGER side, in Safari and from the Home Screen: a diamond, each 30 px across (its touch area
+## wider, like FIRE's), its touch areas apart from each other's, from FIRE's (on the other side) and
+## from the pause button's, on the screen and clear of the home swipe at the bottom from the Home
+## Screen; the first-time tips' card and the area's name (moved up with BUTTONS on) clear above it.
+func _test_buttons_layout() -> void:
+	var HUD: GDScript = load("res://game/ui/hud/hud.gd")  # (loaded here: the HUD needs the autoloads)
+	var K := HUD.get_script_constant_map()
+	var t := Tuning.new()
+	t.move_buttons = true
+	var reach := SwipeInput.TOUCH_REACH
+	var size_ok := true
+	var apart := true
+	var off_fire := true
+	var opposite := true
+	var on_screen := true
+	var home := true
+	var picks := true
+	var above := true
+	var card := FirstTips.Card.new()
+	card.id = "lane"
+	var least := INF
+	for v: Vector2 in [Vector2(270, 480), Vector2(270, 584), Vector2(328, 480), Vector2(360, 480)]:
+		for left: bool in [false, true]:
+			for standalone: bool in [false, true]:
+				t.fire_on_left = left
+				SwipeInput.set_standalone_for_test(standalone)
+				var all := SwipeInput.move_buttons(v, t)
+				var fire := SwipeInput.fire_button(v, t)
+				size_ok = size_ok and all.size() == 4
+				for d: Vector2i in SwipeInput.BUTTON_DIRS:
+					var b: Vector3 = all[d]
+					var c := Vector2(b.x, b.y)
+					least = minf(least, b.z * 2.0)
+					size_ok = size_ok and b.z * 2.0 >= 30.0
+					off_fire = off_fire and c.distance_to(Vector2(fire.x, fire.y)) >= (b.z + fire.z) * reach
+					opposite = opposite and signf(b.x - v.x / 2.0) == -signf(fire.x - v.x / 2.0)
+					on_screen = on_screen and b.x - b.z * reach >= 0.0 and b.x + b.z * reach <= v.x and b.y + b.z * reach <= v.y \
+							and b.y - b.z * reach > 30.0  # (the pause button's touch area: the top 30 px)
+					if standalone:
+						home = home and b.y + b.z * reach <= v.y - SwipeInput.HOME_SWIPE_CLEAR + 0.01
+					picks = picks and SwipeInput.on_move_button(c, v, t) == d \
+							and SwipeInput.on_move_button(c + Vector2(d) * b.z * (reach - 0.05), v, t) == d
+					for e: Vector2i in SwipeInput.BUTTON_DIRS:
+						if e != d:
+							var o: Vector3 = all[e]
+							apart = apart and c.distance_to(Vector2(o.x, o.y)) >= (b.z + o.z) * reach
+				# The diamond's middle, between the four: none of them.
+				var up: Vector3 = all[Vector2i.UP]
+				var dn: Vector3 = all[Vector2i.DOWN]
+				picks = picks and SwipeInput.on_move_button(Vector2(up.x, (up.y + dn.y) / 2.0), v, t) == Vector2i.ZERO \
+						and is_equal_approx(up.x, dn.x) and dn.y > up.y
+				var top := up.y - up.z * reach
+				var area: float = v.y + HUD.call("area_top", v, t)
+				above = above and card.box(v).end.y < top - 8.0 and area + float(K["AREA_H"]) <= top - float(K["AREA_CLEAR"]) + 0.01 \
+						and HUD.call("area_top", v, t) <= float(K["AREA_TOP"]) and area > float((K["ProgressRail"] as GDScript).get_script_constant_map()["BOTTOM"])
+	card.free()
+	SwipeInput.set_standalone_for_test(null)
+	t.move_buttons = false
+	_check(size_ok, "buttons: four, each %.0f px across (about 44 pt on a phone; the touch area %.1f), on every screen" % [least, least * reach])
+	_check(apart and picks, "buttons: their touch areas apart, each touch picking its own button and the diamond's middle none")
+	_check(off_fire and opposite, "buttons: on the side away from FIRE (TRIGGER either side), touch areas clear of FIRE's, on 270, 328 and 360 wide")
+	_check(on_screen and home, "buttons: on the screen, under the pause button's touch area, and from the Home Screen clear of the bottom %d px (the home swipe)" % SwipeInput.HOME_SWIPE_CLEAR)
+	_check(above, "buttons: the tips' card above them, and the area's name moved up clear of the top one (and below the progress rail)")
+	_check(HUD.call("area_top", Vector2(270, 584), t) == float(K["AREA_TOP"]), "buttons: with SWIPE, the area's name where it always was")
+
+
+## SETTINGS' MOVE ("controls"): SWIPE by default; BUTTONS saved and read back; a value of the wrong
+## kind read as SWIPE.
+func _test_buttons_setting() -> void:
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	var spath := "user://test_buttons_settings.cfg"
+	_check(settings.DEFAULTS["controls"] == "swipe", "buttons setting: SWIPE by default")
+	settings._values["controls"] = "buttons"
+	settings._save(spath)
+	settings._values = settings.DEFAULTS.duplicate()
+	settings.load_from(spath)
+	var kept: bool = settings.get_value("controls") == "buttons"
+	var cfg := ConfigFile.new()
+	cfg.set_value("settings", "controls", 1)
+	var fw := FileAccess.open(spath, FileAccess.WRITE)
+	fw.store_string(cfg.encode_to_text())
+	fw.close()
+	settings.load_from(spath)
+	var typed: bool = settings.get_value("controls") == "swipe"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(spath))
+	_check(kept and typed, "buttons setting: BUTTONS saved and read back; a number read as SWIPE")
+	settings._values = saved
+
+
+## The touches (SwipeInput, with the pad showing): a touch on a button is that button's swipe at once,
+## once (no repeat while held, nothing as it moves or lifts: never a tap, so never a tap-to-target);
+## it lights while held; FIRE held with one finger while the other taps the buttons; a touch from FIRE
+## onto a button is still only FIRE; with the pad hidden or MOVE on SWIPE, the same spot is an ordinary
+## touch.
+func _test_buttons_touches() -> void:
+	var K := (load("res://game/ui/hud/hud.gd") as GDScript).get_script_constant_map()
+	var t := Tuning.new()
+	t.move_buttons = true
+	var input := SwipeInput.new()
+	input.tuning = t
+	var pad = (K["ButtonPad"] as GDScript).new()
+	pad.tuning = t
+	root.add_child(input)
+	root.add_child(pad)
+	input.pad = pad
+	input.button_held.connect(pad.set_held)
+	var got := {"swiped": [], "tapped": 0, "fire": 0, "fire_up": 0}
+	input.swiped.connect(func(d: Vector2i) -> void: got["swiped"].append(d))
+	input.tapped.connect(func(_p: Vector2) -> void: got["tapped"] += 1)
+	input.fire_pressed.connect(func() -> void: got["fire"] += 1)
+	input.fire_released.connect(func() -> void: got["fire_up"] += 1)
+	var v := root.get_visible_rect().size
+	var at := func(d: Vector2i) -> Vector2:
+		var b: Vector3 = SwipeInput.move_buttons(v, t)[d]
+		return Vector2(b.x, b.y)
+	var fb := SwipeInput.fire_button(v, t)
+	var fire_at := Vector2(fb.x, fb.y)
+	# Each button: its swipe as it goes down, lit while held, nothing more.
+	var each := true
+	for d: Vector2i in SwipeInput.BUTTON_DIRS:
+		got["swiped"] = []
+		_buttons_touch(input, 3, at.call(d), true)
+		var lit: bool = pad.is_lit(d) and SwipeInput.BUTTON_DIRS.all(func(e: Vector2i) -> bool: return e == d or not pad.is_lit(e))
+		_buttons_drag(input, 3, at.call(d) + Vector2(0, -60))  # (a finger sliding off it, far: no swipe)
+		_buttons_touch(input, 3, at.call(d) + Vector2(0, -60), false)
+		each = each and got["swiped"] == [d] and lit and not pad.is_lit(d)
+	var no_tap: bool = got["tapped"] == 0
+	# A quick tap on one, released where it went down: the button's swipe, never a tap.
+	got["swiped"] = []
+	_buttons_touch(input, 0, at.call(Vector2i.LEFT), true)
+	_buttons_touch(input, 0, at.call(Vector2i.LEFT), false)
+	no_tap = no_tap and got["tapped"] == 0 and got["swiped"] == [Vector2i.LEFT]
+	# FIRE held (finger 0) while the other thumb taps (finger 1, then 2): each button's swipe, FIRE still
+	# held throughout, and let go only when its own finger lifts.
+	got["swiped"] = []
+	_buttons_touch(input, 0, fire_at, true)
+	_buttons_touch(input, 1, at.call(Vector2i.UP), true)
+	_buttons_touch(input, 1, at.call(Vector2i.UP), false)
+	_buttons_touch(input, 2, at.call(Vector2i.RIGHT), true)
+	var both: bool = got["fire"] == 1 and got["fire_up"] == 0 and pad.is_lit(Vector2i.RIGHT)
+	_buttons_touch(input, 2, at.call(Vector2i.RIGHT), false)
+	both = both and got["fire_up"] == 0 and got["swiped"] == [Vector2i.UP, Vector2i.RIGHT]
+	_buttons_touch(input, 0, fire_at, false)
+	both = both and got["fire_up"] == 1 and got["tapped"] == 0
+	# A finger from FIRE slid onto a button: still only FIRE.
+	got["swiped"] = []
+	_buttons_touch(input, 0, fire_at, true)
+	_buttons_drag(input, 0, at.call(Vector2i.LEFT))
+	_buttons_touch(input, 0, at.call(Vector2i.LEFT), false)
+	var fire_only: bool = got["swiped"].is_empty() and got["fire"] == 2 and got["fire_up"] == 2 and not pad.is_lit(Vector2i.LEFT)
+	# A swipe started away from the buttons works as ever (BUTTONS on).
+	got["swiped"] = []
+	_buttons_touch(input, 4, Vector2(v.x / 2.0, v.y / 2.0), true)
+	_buttons_drag(input, 4, Vector2(v.x / 2.0 + 60.0, v.y / 2.0))
+	_buttons_touch(input, 4, Vector2(v.x / 2.0 + 60.0, v.y / 2.0), false)
+	var swipes: bool = got["swiped"] == [Vector2i.RIGHT]
+	# The pad hidden (not live play), or MOVE on SWIPE: the button's spot is an ordinary touch (a tap).
+	var plain := true
+	for how in ["hidden", "swipe"]:
+		pad.visible = how != "hidden"
+		t.move_buttons = how != "swipe"
+		got["swiped"] = []
+		got["tapped"] = 0
+		_buttons_touch(input, 5, at.call(Vector2i.UP), true)
+		_buttons_touch(input, 5, at.call(Vector2i.UP), false)
+		plain = plain and got["swiped"].is_empty() and got["tapped"] == 1
+	# Hidden while one's held (the pause menu up): it isn't lit when it shows again.
+	pad.visible = true
+	t.move_buttons = true
+	_buttons_touch(input, 6, at.call(Vector2i.DOWN), true)
+	pad.visible = false
+	pad.visible = true
+	var unlit: bool = not pad.is_lit(Vector2i.DOWN)
+	input.free()
+	pad.free()
+	_check(each, "buttons: each one's touch is its own swipe (up JUMP, left and right lane, down SLIDE), once as it goes down, lit while held")
+	_check(no_tap, "buttons: a touch on one is never a tap (so never a tap-to-target) nor a swipe as it moves")
+	_check(both, "buttons: FIRE held with one finger while the other taps the buttons, FIRE let go only by its own finger")
+	_check(fire_only and swipes, "buttons: a touch from FIRE onto a button is only FIRE; a swipe away from them works as ever")
+	_check(plain and unlit, "buttons: hidden or with SWIPE their spot is an ordinary touch; none left lit after the pad's been hidden")
+
+
+## The words: with BUTTONS the first-time tips for the moves and CONTROLS say TAP and the button
+## (TAP ▲ TO JUMP), in letters the font has, fitting their card and columns; with SWIPE as they were.
+func _test_buttons_words() -> void:
+	var f := UiKit.font()
+	var fits := true
+	var tapped := true
+	var same := true
+	for id: String in FirstTips.TIPS:
+		for line: String in FirstTips.lines_of(id, "auto_tap", true):
+			fits = fits and _font_has(line) and f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x <= FirstTips.Card.W - 16.0
+		var with: String = " ".join(FirstTips.lines_of(id, "auto_tap", true))
+		if FirstTips.BY_BUTTONS.has(id):
+			tapped = tapped and with.contains("TAP") and not with.contains("SWIPE")
+		same = same and FirstTips.lines_of(id, "auto") == FirstTips.TIPS[id]["lines"] and FirstTips.icon_of(id) == FirstTips.TIPS[id]["icon"]
+	_check(fits and tapped and same and String(FirstTips.lines_of("jump", "auto", true)[0]) == "TAP ▲ TO JUMP"
+			and String(FirstTips.lines_of("slide", "auto", true)[0]) == "TAP ▼ TO SLIDE" and String(FirstTips.lines_of("lane", "auto", true)[0]) == "TAP ◀ OR ▶"
+			and FirstTips.icon_of("jump", true) == "tap_up" and FirstTips.lines_of("fire", "tap", true) == FirstTips.FIRE_BY_AIM["tap"],
+			"buttons words: the moves' tips say TAP and the button with BUTTONS (TAP ▲ TO JUMP), fit their card in the font's letters; with SWIPE as they were")
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var said := func(aim: String, buttons: bool) -> String:
+		return " / ".join(FE.controls_lines(aim, buttons).map(func(r: Array) -> String: return r[0] + ": " + r[1]))
+	var letters := true
+	for aim: String in ["auto", "auto_tap", "tap"]:
+		for r: Array in FE.controls_lines(aim, true):
+			letters = letters and _font_has(r[0]) and _font_has(r[1]) and String(r[0]).length() * 6 <= 132 - 26 - 6
+	var b: String = said.call("auto_tap", true)
+	var s: String = said.call("auto_tap", false)
+	_check(letters and b.contains("TAP ◀ ▶: DODGE A LANE") and b.contains("TAP ▲: JUMP") and b.contains("TAP ▼: SLIDE") and b.contains("TAP ◀ ▶: LEAVE COVER")
+			and b.contains("OR SWIPE") and not b.contains("SWIPE UP") and s.contains("SWIPE UP: JUMP") and s.contains("SWIPE < >: DODGE A LANE") and not s.contains("TAP ▲")
+			and said.call("tap", true).contains("TAP ENEMY: TARGET IT"), "buttons words: CONTROLS says TAP and the buttons with BUTTONS (%s)" % b)
+
+
+## In the level: MOVE in SETTINGS (its row, under SWIPE); the buttons only in live play (not under the
+## menu, the pause menu, the debrief, nor with SWIPE); a press does just what that swipe does, by the
+## same way in (a lane, a jump, a slide); FIRE held through the other thumb's presses; the cover hint
+## and a tip's card worded for them.
+func _test_buttons_level() -> void:
+	var gs := root.get_node("GameState")
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	var was_alert: int = gs.alert_level
+	var was_active: bool = gs.run_active
+	var level_script: GDScript = load("res://game/levels/prototype_slice/prototype_slice.gd")
+	level_script.route_path = MISSION_1
+	settings._values["controls"] = "swipe"
+	var level := await _locked_doors_level(gs, false)
+	var hud = level._hud
+	var pad = hud.button_pad()
+	var inp: SwipeInput = level.get("_input")  # (the level's SwipeInput: `_input` alone is Node's own method)
+	var fe = level._frontend
+	# SETTINGS' MOVE row, under SWIPE, reading the setting.
+	fe._open(fe.Screen.SETTINGS)
+	await process_frame
+	var move_y := -1.0
+	var swipe_y := -1.0
+	for l in fe.find_children("*", "Label", true, false):
+		if not l.is_queued_for_deletion() and (l as Label).position.x == 26.0:
+			if (l as Label).text == "MOVE":
+				move_y = (l as Label).position.y
+			elif (l as Label).text == "SWIPE":
+				swipe_y = (l as Label).position.y
+	var row := _menu_button(fe, "< SWIPE >")
+	_check(move_y > swipe_y and swipe_y > 0.0 and row != null and absf(row.position.y + 1.0 - (move_y - 3.0)) < 1.0,
+			"buttons in the level: SETTINGS' MOVE row, under SWIPE, reading SWIPE")
+	fe.hide_all()
+	# Under the menu: never. With BUTTONS in live play: shown; under the pause menu: not; with SWIPE: not.
+	settings._values["controls"] = "buttons"
+	level._apply_settings()
+	hud.set_playing(false)
+	var menu_off: bool = not pad.visible
+	hud.set_playing(true)
+	var live_on: bool = pad.visible and inp.buttons_live()
+	hud.set_paused(true)
+	var pause_off: bool = not pad.visible and not inp.buttons_live()
+	hud.set_paused(false)
+	var back_on: bool = pad.visible
+	settings._values["controls"] = "swipe"
+	level._apply_settings()
+	var swipe_off: bool = not pad.visible
+	settings._values["controls"] = "buttons"
+	level._apply_settings()
+	# A press: what the swipe does, the same way in (the level's _on_swipe: Player.handle_swipe).
+	gs.run_active = true
+	level._started = true
+	level._menu_open = false
+	var p: Node3D = level._player
+	p.distance = 6.0
+	p.lane = 2
+	var v: Vector2 = level.get_viewport().get_visible_rect().size
+	var at := func(d: Vector2i) -> Vector2:
+		var b: Vector3 = SwipeInput.move_buttons(v, level.tuning)[d]
+		return Vector2(b.x, b.y)
+	_buttons_touch(inp, 1, at.call(Vector2i.LEFT), true)
+	_buttons_touch(inp, 1, at.call(Vector2i.LEFT), false)
+	var lane_ok: bool = p.lane == 1
+	level._on_swipe(Vector2i.RIGHT)
+	lane_ok = lane_ok and p.lane == 2
+	_buttons_touch(inp, 1, at.call(Vector2i.UP), true)
+	var jump_ok: bool = p._y_velocity > 0.0
+	_buttons_touch(inp, 1, at.call(Vector2i.UP), false)
+	p._y_velocity = 0.0
+	p.jump_y = 0.0
+	_buttons_touch(inp, 2, at.call(Vector2i.DOWN), true)
+	var slide_ok: bool = p.is_sliding()
+	_buttons_touch(inp, 2, at.call(Vector2i.DOWN), false)
+	# FIRE held on its trigger while the other thumb taps: still held.
+	var fb := SwipeInput.fire_button(v, level.tuning)
+	_buttons_touch(inp, 0, Vector2(fb.x, fb.y), true)
+	_buttons_touch(inp, 3, at.call(Vector2i.RIGHT), true)
+	_buttons_touch(inp, 3, at.call(Vector2i.RIGHT), false)
+	var fire_ok: bool = level._fire_held and p.lane == 3
+	_buttons_touch(inp, 0, Vector2(fb.x, fb.y), false)
+	fire_ok = fire_ok and not level._fire_held
+	_check(menu_off and live_on and pause_off and back_on and swipe_off, "buttons in the level: shown only in live play with BUTTONS (not under the menu or the pause menu, nor with SWIPE)")
+	_check(lane_ok and jump_ok and slide_ok and fire_ok, "buttons in the level: a press changes lane, jumps or slides as that swipe does; FIRE held through the other thumb's presses")
+	# Worded for them: the cover hint, a tip's card (and it rings the button).
+	hud.show_cover_hint(true)
+	var hint: String = hud._hint.text
+	hud.show_tip("jump")
+	var card_ok: bool = hud._tip_card.buttons and hud._tip_card.lines() == FirstTips.lines_of("jump", "auto", true) and hud._tip_card.pad_at.has(Vector2i.UP)
+	hud.show_tip("")
+	hud.show_cover_hint(false)
+	_check(hint.contains("TAP ◀ ▶") and card_ok, "buttons in the level: the cover hint and the tips' card worded for the buttons (%s)" % hint)
+	# The run over (the debrief): gone.
+	hud.show_end(&"extracted", "")
+	_check(not pad.visible, "buttons in the level: gone when the run's over")
+	gs.run_active = false
+	settings._values = saved
+	level._apply_settings()
 	await _settle_audio(level)
 	level.queue_free()
 	await process_frame
