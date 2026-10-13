@@ -35,6 +35,9 @@ func _run() -> void:
 	_test_corner_rule()
 	_test_searchlights()
 	_test_swipe_direction()
+	_test_fire_home_margin()
+	_test_icon_and_splash()
+	_test_web_shell()
 	_test_sounds()
 	await _test_sound_turns()
 	_test_menu_music_pace()
@@ -4061,6 +4064,96 @@ func _test_swipe_direction() -> void:
 	_check(SwipeInput.direction_of(Vector2(-30, 5)) == Vector2i.LEFT, "swipe left")
 	_check(SwipeInput.direction_of(Vector2(3, -30)) == Vector2i.UP, "swipe up")
 	_check(SwipeInput.direction_of(Vector2(3, 30)) == Vector2i.DOWN, "swipe down")
+
+
+# ---- The web page round the game (demo polish, round 1: iPhone) ---------------------------------
+
+## FIRE from the Home Screen: its touch area clear of the bottom HOME_SWIPE_CLEAR px (the home
+## swipe), both sides, 480 and 585 high, still under the tips; in Safari (and off the web) where it
+## always was.
+func _test_fire_home_margin() -> void:
+	var t := Tuning.new()
+	var clear := true
+	var same := true
+	var held := true
+	var tips := true
+	var card := FirstTips.Card.new()
+	card.id = String(FirstTips.ORDER[0])
+	for v: Vector2 in [Vector2(270, 480), Vector2(270, 585)]:
+		for left: bool in [false, true]:
+			t.fire_on_left = left
+			SwipeInput.set_standalone_for_test(false)
+			var tab := SwipeInput.fire_button(v, t)
+			var r := v.x * t.fire_button_fraction
+			var m := v.x * 0.04
+			same = same and is_equal_approx(tab.y, v.y - r - m) and is_equal_approx(tab.x, r + m if left else v.x - r - m)
+			SwipeInput.set_standalone_for_test(true)
+			var home := SwipeInput.fire_button(v, t)
+			clear = clear and home.y + home.z * SwipeInput.TOUCH_REACH <= v.y - SwipeInput.HOME_SWIPE_CLEAR + 0.01 \
+					and is_equal_approx(home.x, tab.x) and home.y <= tab.y
+			held = held and SwipeInput.on_fire_button(Vector2(home.x, home.y), v, t) \
+					and not SwipeInput.on_fire_button(Vector2(home.x, v.y - SwipeInput.HOME_SWIPE_CLEAR + 2.0), v, t)
+			tips = tips and card.box(v).end.y < home.y - home.z - 8.0
+	card.free()
+	SwipeInput.set_standalone_for_test(null)
+	_check(same, "fire, in Safari: where it always was (bottom corner, its margin)")
+	_check(clear and held, "fire, from the Home Screen: its touch area %d px clear of the bottom (the home swipe), both sides, 480 and 585 high" % SwipeInput.HOME_SWIPE_CLEAR)
+	_check(tips, "fire, from the Home Screen: still under the first-time tips' card")
+	_check(not SwipeInput.standalone(), "fire: never Home Screen mode off the web (here: %s)" % OS.get_name())
+
+
+## The icon and the loading screen: the game's own (CROSS on red, 512; the logo on black), set for
+## the project and so the web build (favicon, Home Screen icon, loading image), sharp, with no
+## text or time chunks in the PNGs.
+func _test_icon_and_splash() -> void:
+	var icon_path := String(ProjectSettings.get_setting("application/config/icon", ""))
+	var splash_path := String(ProjectSettings.get_setting("application/boot_splash/image", ""))
+	var icon := Image.new()
+	var splash := Image.new()
+	for pair: Array in [[icon, icon_path], [splash, splash_path]]:
+		if String(pair[1]) != "":
+			(pair[0] as Image).load_png_from_buffer(FileAccess.get_file_as_bytes(String(pair[1])))
+	_check(icon.get_size() == Vector2i(512, 512) and icon.get_pixel(4, 4).a == 1.0,
+			"icon: %s, 512x512, opaque (the Home Screen icon and favicon)" % icon_path)
+	var black := not splash.is_empty() and splash.get_pixel(0, 0) == Color.BLACK and splash.get_pixel(splash.get_width() - 1, splash.get_height() - 1) == Color.BLACK
+	_check(black and splash.get_height() > splash.get_width() and ProjectSettings.get_setting("application/boot_splash/bg_color") == Color.BLACK \
+			and not ProjectSettings.get_setting("application/boot_splash/use_filter") and int(ProjectSettings.get_setting("application/boot_splash/stretch_mode")) == 1,
+			"splash: %s, upright, on black, the background black, kept sharp and whole (Keep)" % splash_path)
+	var clean := true
+	for p: String in [icon_path, splash_path]:
+		var bytes := FileAccess.get_file_as_bytes(p)
+		var at := 8
+		while at + 8 <= bytes.size():
+			var n := (bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]
+			var kind := bytes.slice(at + 4, at + 8).get_string_from_ascii()
+			clean = clean and not kind in ["tEXt", "zTXt", "iTXt", "tIME", "eXIf"]
+			at += 12 + n
+	_check(clean, "icon and splash: no text, time or EXIF chunks in the PNGs")
+
+
+## The web page (export_presets.cfg's head include): the status bar black (a real value), a black
+## theme colour and loading background; Safari's sound woken on every tap and on coming back to the
+## page; and the turn-upright screen, on touch screens only.
+func _test_web_shell() -> void:
+	var cfg := ConfigFile.new()
+	_check(cfg.load("res://export_presets.cfg") == OK, "web: export_presets.cfg loads")
+	var head := String(cfg.get_value("preset.0.options", "html/head_include", ""))
+	_check(head.contains("name=\"apple-mobile-web-app-status-bar-style\" content=\"black\"") and not head.contains("black-fullscreen") \
+			and head.contains("name=\"theme-color\" content=\"#000000\"") and head.contains("#status { background-color: #000; }"),
+			"web: status bar black, theme colour black, the loading screen's background black")
+	_check(bool(cfg.get_value("preset.0.options", "html/export_icon", false)), "web: exports the project's icon (favicon, apple-touch-icon)")
+	_check(not head.contains("removeEventListener") and head.contains("addEventListener(\"visibilitychange\", back)") \
+			and head.contains("addEventListener(\"pageshow\", back)") and head.contains("ctx.state !== \"running\""),
+			"web: Safari's sound woken on every tap for good, and on coming back to the page")
+	var media := "(orientation: landscape) and (hover: none) and (pointer: coarse)"
+	_check(head.count(media) == 2 and head.contains("id = \"turn-upright\"") and head.contains("alt = \"TURN YOUR PHONE UPRIGHT\""),
+			"web: held sideways on a touch screen (never a desktop), TURN YOUR PHONE UPRIGHT over the game")
+	var at := head.find("data:image/png;base64,")
+	var words := Image.new()
+	if at >= 0:
+		var b64 := head.substr(at + 22, head.find("\"", at) - at - 22)
+		words.load_png_from_buffer(Marshalls.base64_to_raw(b64))
+	_check(words.get_size() == Vector2i(89, 16), "web: the turn-upright words in the game's pixel font (89x16, drawn 4x)")
 
 
 class FakeEnemy extends Node3D:
