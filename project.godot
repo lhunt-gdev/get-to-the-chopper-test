@@ -9,6 +9,12 @@ config/name="HOT EXFIL"
 config/description="HOT EXFIL: a PS1-style action runner for your phone. Fight your way out and reach the chopper before it lifts off. Demo."
 run/main_scene="res://game/levels/prototype_slice/prototype_slice.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+; The loading screen: the logo on black (the web build shows it while it loads), kept pixel-sharp.
+boot_splash/bg_color=Color(0, 0, 0, 1)
+boot_splash/image="res://assets/textures/app/splash.png"
+boot_splash/use_filter=false
+; The Home Screen icon and favicon: CROSS, rendered from the game's own model.
+config/icon="res://assets/textures/app/icon.png"
 
 [audio]
 
