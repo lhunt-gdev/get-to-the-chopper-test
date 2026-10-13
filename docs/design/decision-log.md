@@ -116,6 +116,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Polish and fixes are made on the demo (`main`) first, tested and pushed, then merged into V2 (`v2`) straight after, so V2 is always the demo plus the new missions. Work only for V2 (missions 2 to 9, their art and story) is made on `v2` and never goes back to the demo. Where a demo fix touches something V2 has changed, V2 keeps its own version and gets the fix on top.
 - Polish is found by a sweep of the demo (bot playthroughs on every setting, phone-size screenshots of every screen, the web build's loading and speed, the menus and text) plus anything the user notices; each round is listed for the user to pick before it is built.
 
+### DECIDED — On-screen buttons option (player feedback; user, 2026-10-13)
+- **Why (user):** "they said it would be nice to have an option to switch to a button overlay, so jump and slide and left and right are buttons on screen on the opposite side to the trigger button. could be transparent circular buttons like the old snes controller." Then, of the mock-ups: "I prefer the round buttons."
+- A setting, CONTROLS: SWIPE (the default) / BUTTONS. With BUTTONS, four round see-through buttons in a diamond (SNES face buttons): up JUMP, down SLIDE, left and right change lane, each with an arrow, about 44 pt across with gaps between, lit while pressed; on the side opposite FIRE (following TRIGGER), low within thumb reach and clear of the iPhone's home swipe. Swipes still work with BUTTONS on.
+- The area-name banner sits a little higher with BUTTONS on, clear of the top button; the first-time tips and CONTROLS screen word themselves for buttons ("TAP ▲ TO JUMP").
+
 ### DECIDED — A slimmer web download (user, 2026-10-13)
 - **Why (user):** "work on the smaller download task."
 - The web builds (demo and V2) use a web export template built in CI from Godot 4.7.2's source with the parts the game doesn't use left out (.github/web_template/custom.py): the engine download goes from about 10.1 MB to 6.6 MB gzipped. It is cached and only rebuilt when Godot, Emscripten or custom.py change; if it is missing or its export fails, the stock template is used.
