@@ -627,7 +627,7 @@ func _test_settings_screen() -> void:
 			labels[(l as Label).text] = l
 	var y_of := func(t: String) -> float: return (labels[t] as Label).position.y if labels.has(t) else -1.0
 	_check(y_of.call("BLOOD") > y_of.call("RETRO FILTER") and y_of.call("BLOOD") < y_of.call("CONTROLS"), "settings: BLOOD is in DISPLAY, under RETRO FILTER")
-	_check(y_of.call("TRIGGER") > y_of.call("AIM") and y_of.call("TRIGGER") < y_of.call("SWIPE"), "settings: TRIGGER is under CONTROLS, where FIRE BUTTON was")
+	_check(y_of.call("TRIGGER") > y_of.call("AIM") and y_of.call("TRIGGER") < y_of.call("SWIPE SPEED"), "settings: TRIGGER is under CONTROLS, where FIRE BUTTON was")
 	# BLOOD's ON / OFF button, level with its label: a press switches it.
 	var blood_btn: Button = null
 	var trigger_btn: Button = null
@@ -6325,7 +6325,7 @@ func _test_buttons_level() -> void:
 		if not l.is_queued_for_deletion() and (l as Label).position.x == 26.0:
 			if (l as Label).text == "MOVE":
 				move_y = (l as Label).position.y
-			elif (l as Label).text == "SWIPE":
+			elif (l as Label).text == "SWIPE SPEED":
 				swipe_y = (l as Label).position.y
 	var row := _menu_button(fe, "< SWIPE >")
 	_check(move_y > swipe_y and swipe_y > 0.0 and row != null and absf(row.position.y + 1.0 - (move_y - 3.0)) < 1.0,
