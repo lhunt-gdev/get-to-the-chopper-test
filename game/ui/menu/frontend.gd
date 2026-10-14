@@ -46,21 +46,50 @@ const FOLLOW_AT := ""
 ## The game's maker, for CREDITS (the developer's name, from git).
 const MADE_BY := "LUKE HUNT"
 
-const AIM_NAMES := {"auto": "AUTO", "auto_tap": "AUTO + TAP", "tap": "TAP ONLY"}
-const SWIPE_NAMES := {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
+## SETTINGS' choices (each the id of its words: L10n).
+const AIM_NAMES := {"auto": "AIM_AUTO", "auto_tap": "AIM_AUTO_TAP", "tap": "AIM_TAP"}
+const TRIGGER_NAMES := {"right": "TRIGGER_RIGHT", "left": "TRIGGER_LEFT"}
+const SWIPE_NAMES := {"low": "SWIPE_LOW", "medium": "SWIPE_MEDIUM", "high": "SWIPE_HIGH"}
 ## SETTINGS' MOVE (the "controls" setting): swipes only, or the on-screen move buttons too.
-const CONTROLS_NAMES := {"swipe": "SWIPE", "buttons": "BUTTONS"}
+const CONTROLS_NAMES := {"swipe": "MOVE_SWIPE", "buttons": "MOVE_BUTTONS"}
 ## Each ending's debrief title (its name: the scoreboard names it the same, BoardRow), the line under
-## it, and its colour.
+## it, and its colour (the titles' ids: end_title() for the words).
 const END_TITLES := {
-	&"extracted": ["EXFIL COMPLETE", "EXTRACTED BY CHOPPER", UiKit.GREEN],
-	&"killed": ["KILLED IN ACTION", "AGENT DOWN", UiKit.RED],
-	&"captured": ["AGENT CAPTURED", "TAKEN BY THE ENEMY", UiKit.AMBER],
-	&"chopper_left": ["THE CHOPPER LEFT", "MISSION FAILED", UiKit.RED],
-	&"dead_end": ["NO WAY THROUGH", "MISSION FAILED", UiKit.RED],
+	&"extracted": ["END_EXTRACTED", "END_EXTRACTED_SUB", UiKit.GREEN],
+	&"killed": ["END_KILLED", "END_KILLED_SUB", UiKit.RED],
+	&"captured": ["END_CAPTURED", "END_CAPTURED_SUB", UiKit.AMBER],
+	&"chopper_left": ["END_CHOPPER_LEFT", "END_MISSION_FAILED", UiKit.RED],
+	&"dead_end": ["END_DEAD_END", "END_MISSION_FAILED", UiKit.RED],
 }
 
-var mission_title := "MISSION 1"
+
+## An ending's debrief title and the line under it, in words, and its colour (END_TITLES).
+static func end_title(reason: StringName) -> Array:
+	var info: Array = END_TITLES.get(reason, ["END_MISSION_FAILED", "", UiKit.RED])
+	var sub := L10n.t(info[1]) if info[1] != "" else String(reason).to_upper()
+	return [L10n.t(info[0]), sub, info[2]]
+
+
+## Mission n's name (Progress.MISSIONS), in words.
+static func mission_name(n: int) -> String:
+	if n < 1 or n > Progress.MISSIONS.size():
+		return ""
+	var m: Dictionary = Progress.MISSIONS[n - 1]
+	return L10n.t_or("MISSION_NAME_" + String(m["id"]).to_upper(), String(m["name"]))
+
+
+## The mission's title for the main menu and the opening pan (two lines: "MISSION 1", its name): a
+## mission of the game's from its number and name (in words), another (the TEST RANGE) as its route
+## file has it.
+static func mission_title_of(mission: Dictionary) -> String:
+	var n := Progress.mission_number(StringName(mission.get("mission", "")))
+	if n < 1:
+		return String(mission.get("title", ""))
+	return L10n.f("MISSION_N", {"n": n}) + "\n" + mission_name(n)
+
+
+## The level's mission (its route file's top: mission_title_of() names it on the main menu).
+var mission: Dictionary = {}
 var _screen := Screen.NONE
 ## The mission whose screen is (or was last) up.
 var _mission := 1
@@ -104,6 +133,7 @@ func _ready() -> void:
 	add_child(_dim)
 	_root = Control.new()
 	_root.theme = UiKit.theme()
+	_root.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED  # (its words are put in translated: L10n)
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
@@ -226,13 +256,13 @@ static func unlock_lines(news: Array, from: int) -> PackedStringArray:
 		if not Progress.is_built(int(pair[0])):
 			continue
 		if int(pair[0]) == from:
-			same.append("%s UNLOCKED" % String(pair[1]).to_upper())
+			same.append(L10n.f("DEBRIEF_UNLOCKED", {"setting": L10n.setting_name(String(pair[1]))}))
 		else:
 			if not next.has(int(pair[0])):
 				next[int(pair[0])] = PackedStringArray()
-			next[int(pair[0])].append(String(pair[1]).to_upper())
+			next[int(pair[0])].append(L10n.setting_name(String(pair[1])))
 	for m in next:
-		same.append("MISSION %d: %s UNLOCKED" % [m, " + ".join(next[m])])
+		same.append(L10n.f("DEBRIEF_UNLOCKED_NEXT", {"n": m, "settings": " + ".join(next[m])}))
 	return same
 
 
@@ -246,7 +276,7 @@ static func time_text(seconds: float) -> String:
 static func best_line(new_best: bool, was: float) -> String:
 	if not new_best:
 		return ""
-	return "NEW BEST TIME" if was < 0.0 else "NEW BEST TIME - WAS %s" % time_text(was)
+	return L10n.t("DEBRIEF_NEW_BEST_TIME") if was < 0.0 else L10n.f("DEBRIEF_NEW_BEST_TIME_WAS", {"time": time_text(was)})
 
 
 ## The line under the debrief's SCORE (from the run's stats: Progress.record_run): ["new_best",
@@ -256,12 +286,12 @@ static func best_line(new_best: bool, was: float) -> String:
 static func score_outcome(stats: Dictionary) -> Array:
 	var rank := int(stats.get("rank", 0))
 	if bool(stats.get("new_best_score", false)):
-		return ["new_best", "NEW BEST #%d" % rank if rank > 0 else "NEW BEST"]
+		return ["new_best", L10n.f("SCORE_NEW_BEST_RANK", {"rank": rank}) if rank > 0 else L10n.t("SCORE_NEW_BEST")]
 	if rank > 0:
-		return ["entry", "NEW ENTRY #%d" % rank]
+		return ["entry", L10n.f("NEW_ENTRY", {"rank": rank})]
 	var best := maxi(int(stats.get("score_was", -1)), -1)
 	if best >= 0 and int(stats.get("mission", 0)) >= 1:
-		return ["best", "BEST %s" % Score.format(best)]
+		return ["best", L10n.f("SCORE_BEST", {"score": Score.format(best)})]
 	return ["", ""]
 
 
@@ -418,31 +448,32 @@ static func title_rule() -> float:
 func _build_main() -> void:
 	_back_to = Screen.MAIN
 	_root.add_child(Reticle.new())
-	var tag := UiKit.label("// CLASSIFIED: EYES ONLY", 8, UiKit.RED, HORIZONTAL_ALIGNMENT_CENTER)
+	var tag := UiKit.label(L10n.t("MENU_CLASSIFIED"), 8, UiKit.RED, HORIZONTAL_ALIGNMENT_CENTER)
 	_place_wide(tag, 70)
 	var logo := Logo.new()
 	# Room round the logo (user: "it needs a bit of padding around the logo as the other texts are too
 	# close"): see logo_top.
 	_place_wide(logo, logo_top())
 	logo.offset_bottom = logo_top() + Logo.height()
-	_place_wide(UiKit.label(mission_title.replace("\n", ": "), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), mission_line())
+	_place_wide(UiKit.label(mission_title_of(mission).replace("\n", ": ") if not mission.is_empty() else "", 8, UiKit.DIM,
+			HORIZONTAL_ALIGNMENT_CENTER), mission_line())
 	Reticle.rule_bottom = title_rule()
 	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
 	# (30 px apart, CREDITS a little further: each one's tap area 30 px tall, clear of the next: MIN_TAP)
-	var first := _button("MISSION SELECT", 290, func() -> void: _open(Screen.MISSIONS))
+	var first := _button(L10n.t("MENU_MISSION_SELECT"), 290, func() -> void: _open(Screen.MISSIONS))
 	# HIGH SCORES: the scoreboard of the mission and setting last picked.
-	_button("HIGH SCORES", 320, func() -> void:
+	_button(L10n.t("MENU_HIGH_SCORES"), 320, func() -> void:
 		var n := int(Progress.last.get_slice(":", 0))
 		open_board(n if Progress.is_built(n) else 1, Progress.last.get_slice(":", 1), Screen.MAIN))
-	_button("SETTINGS", 350, func() -> void: _open(Screen.SETTINGS))
-	_button("CONTROLS", 380, func() -> void: _open(Screen.CONTROLS))
+	_button(L10n.t("MENU_SETTINGS"), 350, func() -> void: _open(Screen.SETTINGS))
+	_button(L10n.t("MENU_CONTROLS"), 380, func() -> void: _open(Screen.CONTROLS))
 	# CREDITS: a small text button under the four (user: keep the menu uncrowded).
-	var credits := _button("CREDITS", 415, func() -> void: _open(Screen.CREDITS))
+	var credits := _button(L10n.t("MENU_CREDITS"), 415, func() -> void: _open(Screen.CREDITS))
 	credits.theme_type_variation = "CompactButton"
 	credits.offset_left = -36
 	credits.offset_right = 36
 	credits.offset_bottom = 415 + 15
-	_place_wide(UiKit.label("DEMO", 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
+	_place_wide(UiKit.label(L10n.t("MENU_DEMO"), 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
 	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
 	_ios_tip = null
 	if not Progress.ios_tip_seen and (force_ios_tip or ios_tip_here()):
@@ -488,52 +519,70 @@ func _build_briefing() -> void:
 
 func _build_pause() -> void:
 	_back_to = Screen.PAUSE
-	_header("PAUSED", "MISSION ON HOLD")
-	var first := _button("RESUME", 170, func() -> void: resume_requested.emit())
-	_button("SETTINGS", 200, func() -> void: _open(Screen.SETTINGS))
-	_button("CONTROLS", 230, func() -> void: _open(Screen.CONTROLS))
-	_button("QUIT TO MENU", 272, func() -> void: menu_requested.emit())
+	_header(L10n.t("PAUSE_TITLE"), L10n.t("PAUSE_SUB"))
+	var first := _button(L10n.t("PAUSE_RESUME"), 170, func() -> void: resume_requested.emit())
+	_button(L10n.t("MENU_SETTINGS"), 200, func() -> void: _open(Screen.SETTINGS))
+	_button(L10n.t("MENU_CONTROLS"), 230, func() -> void: _open(Screen.CONTROLS))
+	_button(L10n.t("PAUSE_QUIT"), 272, func() -> void: menu_requested.emit())
 	first.grab_focus()
 
 
+## CONTROLS' two columns: where each starts (px, in the 270-wide column), and how wide each can be (a
+## longer one wraps onto a second line, and the row takes the room: CONTROLS_LINE a line).
+const CONTROLS_A := 26.0
+const CONTROLS_B := 132.0
+const CONTROLS_A_W := 100.0
+const CONTROLS_B_W := 118.0
+const CONTROLS_STEP := 18.0
+const CONTROLS_LINE := 10.0
+
+
 func _build_controls() -> void:
-	_header("CONTROLS", "FIELD MANUAL")
+	_header(L10n.t("MENU_CONTROLS"), L10n.t("CONTROLS_SUB"))
 	var col := _column()
 	var y := 104.0
 	for row in controls_lines(String(Settings.get_value("aim")), String(Settings.get_value("controls")) == "buttons"):
-		var a := UiKit.label(row[0], 8, UiKit.TEAL)
-		a.position = Vector2(26, y)
+		var a_lines := UiKit.wrap(row[0], CONTROLS_A_W)
+		var b_lines := UiKit.wrap(row[1], CONTROLS_B_W)
+		var a := UiKit.label("\n".join(a_lines), 8, UiKit.TEAL)
+		a.position = Vector2(CONTROLS_A, y)
 		col.add_child(a)
-		var b := UiKit.label(row[1], 8, UiKit.PAPER)
-		b.position = Vector2(132, y)
+		var b := UiKit.label("\n".join(b_lines), 8, UiKit.PAPER)
+		b.position = Vector2(CONTROLS_B, y)
 		col.add_child(b)
-		y += 18.0
-	_button("BACK", 430, func() -> void: _open(_back_to)).grab_focus()
+		for l: Label in [a, b]:
+			l.add_theme_constant_override("line_spacing", int(CONTROLS_LINE) - 9)
+		y += CONTROLS_STEP + (maxi(a_lines.size(), b_lines.size()) - 1) * CONTROLS_LINE
+	_button(L10n.t("COMMON_BACK"), 430, func() -> void: _open(_back_to)).grab_focus()
 
 
-## CONTROLS' lines ([what you do, what it does]) for the AIM setting `aim` (Settings: "auto",
-## "auto_tap" or "tap"): FIRE aims itself unless it's TAP ONLY (then it shoots the enemy tapped), and a
-## tap on an enemy targets it unless it's AUTO. (No dogs line: the demo's mission has none.) With MOVE
-## on BUTTONS (`buttons`), the moves are the on-screen buttons' (and swipes still do them).
+## CONTROLS' lines ([what you do, what it does], in words) for the AIM setting `aim` (Settings:
+## "auto", "auto_tap" or "tap"): FIRE aims itself unless it's TAP ONLY (then it shoots the enemy
+## tapped), and a tap on an enemy targets it unless it's AUTO. (No dogs line: the demo's mission has
+## none.) With MOVE on BUTTONS (`buttons`), the moves are the on-screen buttons' (and swipes still do
+## them).
 static func controls_lines(aim: String, buttons: bool = false) -> Array:
-	var lines := [["SWIPE < >", "DODGE A LANE"], ["SWIPE UP", "JUMP"], ["SWIPE DOWN", "SLIDE"]]
+	var lines := [["CONTROLS_SWIPE_LR", "CONTROLS_DODGE"], ["CONTROLS_SWIPE_UP", "CONTROLS_JUMP"], ["CONTROLS_SWIPE_DOWN", "CONTROLS_SLIDE"]]
 	if buttons:
-		lines = [["TAP ◀ ▶", "DODGE A LANE"], ["TAP ▲", "JUMP"], ["TAP ▼", "SLIDE"], ["OR SWIPE", "THE SAME MOVES"]]
+		lines = [["CONTROLS_TAP_LR", "CONTROLS_DODGE"], ["CONTROLS_TAP_UP", "CONTROLS_JUMP"], ["CONTROLS_TAP_DOWN", "CONTROLS_SLIDE"],
+				["CONTROLS_OR_SWIPE", "CONTROLS_SAME_MOVES"]]
 	if aim == "tap":
-		lines.append_array([["TAP ENEMY", "TARGET IT"], ["HOLD FIRE", "SHOOT THE TARGET"]])
+		lines.append_array([["CONTROLS_TAP_ENEMY", "CONTROLS_TARGET_IT"], ["CONTROLS_HOLD_FIRE", "CONTROLS_SHOOT_TARGET"]])
 	else:
-		lines.append(["HOLD FIRE", "SHOOT (AUTO-AIM)"])
+		lines.append(["CONTROLS_HOLD_FIRE", "CONTROLS_SHOOT_AUTO"])
 		if aim != "auto":
-			lines.append(["TAP ENEMY", "TARGET IT"])
+			lines.append(["CONTROLS_TAP_ENEMY", "CONTROLS_TARGET_IT"])
 	lines.append_array([
-		["RUN INTO COVER", "HIDE BEHIND IT"],
-		["  TAP ◀ ▶" if buttons else "  SWIPE < >", "LEAVE COVER"],
-		["OUTER LANES", "TAKE SIDE EXITS"],
-		["TRIPWIRES", "RAISE THE ALERT"],
-		["ALARM BOXES", "SHOOT: ALERT DOWN"],
-		["THE CHOPPER", "REACH IT IN TIME"],
+		["CONTROLS_RUN_INTO_COVER", "CONTROLS_HIDE"],
+		[">CONTROLS_TAP_LR" if buttons else ">CONTROLS_SWIPE_LR", "CONTROLS_LEAVE_COVER"],  # (">": indented, under cover's)
+		["CONTROLS_OUTER_LANES", "CONTROLS_SIDE_EXITS"],
+		["CONTROLS_TRIPWIRES", "CONTROLS_RAISE_ALERT"],
+		["CONTROLS_ALARM_BOXES", "CONTROLS_ALERT_DOWN"],
+		["CONTROLS_CHOPPER", "CONTROLS_REACH"],
 	])
-	return lines
+	return lines.map(func(r: Array) -> Array:
+		var a: String = r[0]
+		return ["  " + L10n.t(a.substr(1)) if a.begins_with(">") else L10n.t(a), L10n.t(r[1])])
 
 
 ## Where the mission select's rows start, and the least and most room each takes (px): 9 rows fit a
@@ -559,7 +608,7 @@ static func mission_step(height: float) -> float:
 ## (open_mission); a locked one is greyed with a padlock and does nothing, and the missions not built
 ## yet say COMING SOON. BACK: the main menu.
 func _build_missions() -> void:
-	_header("MISSION SELECT", "CONDOR JOB SHEET")
+	_header(L10n.t("MENU_MISSION_SELECT"), L10n.t("MISSIONS_SUB"))
 	var size := _root.get_viewport_rect().size
 	var count := Progress.MISSIONS.size()
 	var step := mission_step(size.y)
@@ -569,7 +618,7 @@ func _build_missions() -> void:
 		var n := i + 1
 		var row := MissionRow.new()
 		row.number = n
-		row.title = String(Progress.MISSIONS[i]["name"])
+		row.title = mission_name(n)
 		row.built = Progress.is_built(n)
 		for s in RouteGraph.SETTINGS:
 			row.unlocked.append(Progress.is_unlocked(n, s))
@@ -583,7 +632,7 @@ func _build_missions() -> void:
 		_root.add_child(row)
 		if row.playable() and (focus == null or n == last_n):
 			focus = row
-	var back := _button("BACK", MISSION_TOP + count * step + 6.0, func() -> void: _open(Screen.MAIN))
+	var back := _button(L10n.t("COMMON_BACK"), MISSION_TOP + count * step + 6.0, func() -> void: _open(Screen.MAIN))
 	(focus if focus != null else back).grab_focus()
 
 
@@ -609,7 +658,7 @@ static func setting_top(height: float) -> float:
 ## mission select.
 func _build_mission() -> void:
 	var n := _mission
-	_header(String(Progress.MISSIONS[n - 1]["name"]), "MISSION %02d: PICK YOUR DIFFICULTY" % n)
+	_header(mission_name(n), L10n.f("MISSION_PICK", {"n": "%02d" % n}))
 	var size := _root.get_viewport_rect().size
 	var top := setting_top(size.y)
 	var focus: SettingChip = null
@@ -623,7 +672,7 @@ func _build_mission() -> void:
 		c.cleared = Progress.is_cleared(n, which)
 		c.best = Progress.best_time(n, which)
 		c.score = Progress.best_score(n, which)
-		c.needs =String(RouteGraph.SETTINGS[s - 1]).to_upper() if s > 0 else ""
+		c.needs = L10n.setting_name(RouteGraph.SETTINGS[s - 1]) if s > 0 else ""
 		c.position = Vector2(14, top + s * (SETTING_H + SETTING_GAP))
 		c.size = Vector2(size.x - 28, SETTING_H)
 		c.pressed.connect(func() -> void: choose(n, which))
@@ -631,72 +680,84 @@ func _build_mission() -> void:
 		if c.playable() and (focus == null or Progress.key(n, which) == Progress.last):
 			focus = c
 	var end := top + 3.0 * SETTING_H + 2.0 * SETTING_GAP
-	_place_wide(UiKit.label("BEST: FASTEST EXTRACTION, TOP SCORE", 8, Color(UiKit.DIM, 0.8), HORIZONTAL_ALIGNMENT_CENTER), end + 12.0)
+	_place_wide(_wrapped(L10n.t("MISSION_BEST_NOTE"), 254.0, Color(UiKit.DIM, 0.8)), end + 12.0)
 	# The mission's scoreboard (on the setting last picked here, else EASY), and BACK, side by side.
 	var on := Progress.last.get_slice(":", 1) if int(Progress.last.get_slice(":", 0)) == n else "easy"
-	var board := _button("BOARD", end + 36.0, func() -> void: open_board(n, on, Screen.MISSION))
+	var board := _button(L10n.t("COMMON_BOARD"), end + 36.0, func() -> void: open_board(n, on, Screen.MISSION))
 	board.offset_left = -112
 	board.offset_right = -8
 	board.disabled = not Progress.is_built(n)
-	var back := _button("BACK", end + 36.0, func() -> void: _open(Screen.MISSIONS))
+	var back := _button(L10n.t("COMMON_BACK"), end + 36.0, func() -> void: _open(Screen.MISSIONS))
 	back.offset_left = 8
 	back.offset_right = 112
 	(focus if focus != null else back).grab_focus()
 
 
 ## SETTINGS' spacing (px) between a section and the row above it, from a section's title to its first
-## row, and from the last row to RESET and BACK: roomy, or on a screen under ROOMY_FROM high a little
-## closer (every row, RESET and BACK then fit a 480-high one; the rows stay 22 apart).
-const SECTION_GAP := {true: 4.0, false: 1.0}
-const SECTION_STEP := {true: 17.0, false: 15.0}
-const BUTTONS_GAP := {true: 10.0, false: 7.0}
-const ROOMY_FROM := 500.0
+## row, from one row to the next, and from the last row to RESET and BACK: roomy, or on a screen under
+## ROOMY_FROM high a little closer (every row, RESET and BACK then fit a 480-high one, the rows 21 apart).
+const SECTION_GAP := {true: 4.0, false: 0.0}
+const SECTION_STEP := {true: 17.0, false: 14.0}
+const ROW_STEP := {true: 22.0, false: 21.0}
+const BUTTONS_GAP := {true: 10.0, false: 6.0}
+## Where the first section starts, and a slider's top in its row (on a short screen level with the
+## row's buttons, so every tap area keeps its height).
+const SETTINGS_TOP := {true: 90.0, false: 88.0}
+const SLIDER_Y := {true: 2.0, false: -1.0}
+const ROOMY_FROM := 520.0
 var _roomy := true
+## Where SETTINGS' rows end on the right (px, in the column), and the least room between a row's name
+## and its control.
+const ROW_END := 240.0
+const ROW_GAP := 6.0
 
 
 func _build_settings() -> void:
-	_header("SETTINGS", "AGENT PREFERENCES")
+	_header(L10n.t("MENU_SETTINGS"), L10n.t("SETTINGS_SUB"))
 	_column()
 	_roomy = _root.get_viewport_rect().size.y >= ROOMY_FROM
 	var gap: float = SECTION_GAP[_roomy]
-	var y := 90.0
-	y = _section("AUDIO", y)
-	y = _toggle_row("SOUND", "sound_on", y)
-	y = _slider_row("MASTER", "master_volume", y)
-	y = _slider_row("MUSIC", "music_volume", y)
-	y = _slider_row("EFFECTS", "effects_volume", y)
-	y = _slider_row("AMBIENCE", "ambience_volume", y)
-	y = _section("DISPLAY", y + gap)
-	y = _slider_row("BRIGHTNESS", "brightness", y, 50, 150)
-	y = _toggle_row("SCREEN SHAKE", "screen_shake", y)
-	y = _toggle_row("RETRO FILTER", "retro_filter", y)
-	y = _toggle_row("BLOOD", "blood", y)
-	y = _section("CONTROLS", y + gap)
-	y = _choice_row("AIM", "aim", AIM_NAMES, y)
-	y = _choice_row("TRIGGER", "fire_side", {"right": "RIGHT", "left": "LEFT"}, y)
-	y = _choice_row("SWIPE SPEED", "swipe", SWIPE_NAMES, y)
-	y = _choice_row("MOVE", "controls", CONTROLS_NAMES, y)
+	var y: float = SETTINGS_TOP[_roomy]
+	y = _section(L10n.t("SETTINGS_AUDIO"), y)
+	y = _toggle_row(L10n.t("SETTINGS_SOUND"), "sound_on", y)
+	y = _slider_row(L10n.t("SETTINGS_MASTER"), "master_volume", y)
+	y = _slider_row(L10n.t("SETTINGS_MUSIC"), "music_volume", y)
+	y = _slider_row(L10n.t("SETTINGS_EFFECTS"), "effects_volume", y)
+	y = _slider_row(L10n.t("SETTINGS_AMBIENCE"), "ambience_volume", y)
+	y = _section(L10n.t("SETTINGS_DISPLAY"), y + gap)
+	y = _language_row(y)
+	y = _slider_row(L10n.t("SETTINGS_BRIGHTNESS"), "brightness", y, 50, 150)
+	y = _toggle_row(L10n.t("SETTINGS_SCREEN_SHAKE"), "screen_shake", y)
+	y = _toggle_row(L10n.t("SETTINGS_RETRO_FILTER"), "retro_filter", y)
+	y = _toggle_row(L10n.t("SETTINGS_BLOOD"), "blood", y)
+	y = _section(L10n.t("MENU_CONTROLS"), y + gap)
+	y = _choice_row(L10n.t("SETTINGS_AIM"), "aim", AIM_NAMES, y)
+	y = _choice_row(L10n.t("SETTINGS_TRIGGER"), "fire_side", TRIGGER_NAMES, y)
+	y = _choice_row(L10n.t("SETTINGS_SWIPE_SPEED"), "swipe", SWIPE_NAMES, y)
+	y = _choice_row(L10n.t("SETTINGS_MOVE"), "controls", CONTROLS_NAMES, y)
 	y = _tips_row(y)
 	y += BUTTONS_GAP[_roomy]
 	# RESET and BACK side by side, under the rows.
-	var reset := _button("RESET", y, func() -> void:
+	var reset := _button(L10n.t("SETTINGS_RESET"), y, func() -> void:
 		Settings.reset()
 		_show(Screen.SETTINGS))
 	reset.offset_left = -112
 	reset.offset_right = -8
-	var back := _button("BACK", y, func() -> void: _open(_back_to))
+	var back := _button(L10n.t("COMMON_BACK"), y, func() -> void: _open(_back_to))
 	back.offset_left = 8
 	back.offset_right = 112
 	back.grab_focus()
 
 
 func _build_end() -> void:
-	var info: Array = END_TITLES.get(_end_reason, ["MISSION FAILED", String(_end_reason).to_upper(), UiKit.RED])
+	var info: Array = end_title(_end_reason)
 	var col: Color = info[2]
 	_root.add_child(Stamp.new(col))
-	var title := UiKit.label(info[0], 16, col, HORIZONTAL_ALIGNMENT_CENTER)
+	# (a title too long for the stamp in big letters is in small ones, in the middle of its line)
+	var big := UiKit.fit_size(info[0], 16, STAMP_TEXT_W)
+	var title := UiKit.label(info[0], big, col, HORIZONTAL_ALIGNMENT_CENTER)
 	var sub := UiKit.label(info[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER)
-	_place_wide(title, 80)
+	_place_wide(title, 80 if big == 16 else 85)
 	_place_wide(sub, 104)
 	# The debrief (the LOCKED post-run route record): the route map, then the tally under it, with
 	# the SCORE line (Tally.setup) at its foot.
@@ -728,7 +789,7 @@ func _build_end() -> void:
 		map.size = Vector2(inner, 52)
 		_root.add_child(map)
 		if not run.is_empty():
-			var where := UiKit.label("▶ " + graph.display_name(run[-1]), 8, col)
+			var where := UiKit.label("▶ " + area_name(graph, run[-1]), 8, col)
 			where.position = Vector2(x, 213)
 			_root.add_child(where)
 			area_typer.add(where.text, 0.035, Typer.label_setter(where))
@@ -736,14 +797,19 @@ func _build_end() -> void:
 	# the route map's line reaches it.
 	typer.add(info[0], 0.05, Typer.label_setter(title))
 	typer.add(info[1], 0.03, Typer.label_setter(sub))
-	typer.add("DEBRIEF", 0.04, func(n: int) -> void: panel.shown = n)
-	# Which mission and setting it was, across from DEBRIEF.
+	panel.header = L10n.t("DEBRIEF_HEADER")
+	panel.shown = panel.header.length()
+	typer.add(panel.header, 0.04, func(n: int) -> void: panel.shown = n)
+	# Which mission and setting it was, across from DEBRIEF (its number for its name, if that's too
+	# long to fit by DEBRIEF).
 	var n := int(_end_stats.get("mission", 0))
 	var which := String(_end_stats.get("setting", ""))
 	if n >= 1 and n <= Progress.MISSIONS.size() and which != "":
-		panel.tag = "%s / %s" % [Progress.MISSIONS[n - 1]["name"], which.to_upper()]
+		panel.tag = "%s / %s" % [mission_name(n), L10n.setting_name(which)]
+		if UiKit.text_w(panel.header) + 8.0 + UiKit.text_w(panel.tag) > inner:
+			panel.tag = "%02d / %s" % [n, L10n.setting_name(which)]
 	# A new best time (user: the best for each setting), then what getting out opened (user: the
-	# unlocks), under the buttons, typed out after DEBRIEF.
+	# unlocks), under the buttons, typed out after DEBRIEF (a line too long for the screen on two).
 	var buttons_y := panel.rect.end.y + 4.0
 	var y := buttons_y + 28.0
 	var lines := PackedStringArray()
@@ -752,10 +818,11 @@ func _build_end() -> void:
 		lines.append(best)
 	lines.append_array(unlock_lines(_end_stats.get("unlocked", []), n))
 	for line in lines:
-		var l := UiKit.label(line, 8, UiKit.AMBER if line == best else UiKit.GREEN, HORIZONTAL_ALIGNMENT_CENTER)
-		_place_wide(l, y)
-		typer.add(line, 0.03, Typer.label_setter(l))
-		y += 12.0
+		for part in UiKit.wrap(line, END_LINE_W):
+			var l := UiKit.label(part, 8, UiKit.AMBER if line == best else UiKit.GREEN, HORIZONTAL_ALIGNMENT_CENTER)
+			_place_wide(l, y)
+			typer.add(part, 0.03, Typer.label_setter(l))
+			y += 12.0
 	area_typer.delay = RouteMap.DRAW_TIME if map != null else 0.0
 	for t in [typer, area_typer]:
 		_root.add_child(t)
@@ -802,17 +869,20 @@ func _build_end() -> void:
 		_end_done = true
 	# RETRY, BOARD and MAIN MENU side by side (the run's board: the name entry first if its entry has
 	# no name yet; none for a run with no board, the TEST RANGE).
-	var first := _button("RETRY", buttons_y, func() -> void: _leave_debrief(func() -> void: retry_requested.emit()))
-	var second := _button("BOARD", buttons_y, func() -> void:
+	var first := _button(L10n.t("DEBRIEF_RETRY"), buttons_y, func() -> void: _leave_debrief(func() -> void: retry_requested.emit()))
+	var second := _button(L10n.t("COMMON_BOARD"), buttons_y, func() -> void:
 		if _name_pending:
 			_open_name()
 		else:
 			open_board(n, which, Screen.END, int(_end_stats.get("seq", 0)) if int(_end_stats.get("rank", 0)) > 0 else 0))
-	var third := _button("MAIN MENU", buttons_y, func() -> void: _leave_debrief(func() -> void: menu_requested.emit()))
+	var third := _button(L10n.t("DEBRIEF_MAIN_MENU"), buttons_y, func() -> void: _leave_debrief(func() -> void: menu_requested.emit()))
+	var widths := row_widths([first.text, second.text, third.text])
+	var left := -126.0
 	for i in 3:
 		var b: Button = [first, second, third][i]
-		b.offset_left = -126.0 + i * 86.0
-		b.offset_right = b.offset_left + 80.0
+		b.offset_left = left
+		b.offset_right = left + widths[i]
+		left += widths[i] + 6.0
 	var has_board := Progress.is_built(n) and which in RouteGraph.SETTINGS
 	second.disabled = not has_board
 	if _end_guard and not _end_done:
@@ -848,6 +918,35 @@ func _open_name() -> void:
 const DEBRIEF_TOP := 132.0
 const TALLY_TOP := 236.0
 const NAME_BEAT := 1.0
+## The room for the debrief's title on its stamp, and for each line under its buttons (px).
+const STAMP_TEXT_W := 236.0
+const END_LINE_W := 246.0
+## The debrief's three buttons side by side: each one's width (80 px, or wider for a longer word, the
+## others giving up room for it), and the room they share (px, with 6 between each).
+const ROW_BUTTON_W := 80.0
+const ROW_BUTTONS_W := 252.0
+
+
+## The widths of the debrief's three buttons for their `texts`: ROW_BUTTON_W each when they fit;
+## otherwise each as wide as its words need (a button's padding, 20 px, round them), the room left
+## over shared out.
+static func row_widths(texts: Array) -> Array:
+	var need := []
+	var total := 0.0
+	for t in texts:
+		need.append(UiKit.text_w(String(t)) + 20.0)
+		total += need[-1]
+	var room := ROW_BUTTONS_W - 6.0 * (texts.size() - 1)
+	if need.all(func(w: float) -> bool: return w <= ROW_BUTTON_W):
+		return need.map(func(_w: float) -> float: return ROW_BUTTON_W)
+	var spare := maxf(0.0, room - total) / texts.size()
+	return need.map(func(w: float) -> float: return floorf(w + spare))
+
+
+## An area's name (in words: AREA_ and its id; one with none, the TEST RANGE's, as its route file has
+## it).
+static func area_name(graph: RouteGraph, id: StringName) -> String:
+	return L10n.t_or("AREA_" + String(id).to_upper(), graph.display_name(id))
 ## The name entry's keys (user: "A-Z 0-9 space . -, DEL, OK"), 7 across, as they're laid out; " " is
 ## the space key, and OK takes two keys' room.
 const KEY_ROWS := [["A", "B", "C", "D", "E", "F", "G"], ["H", "I", "J", "K", "L", "M", "N"], ["O", "P", "Q", "R", "S", "T", "U"],
@@ -877,14 +976,14 @@ static func tall_shift(height: float, most: float = 60.0) -> float:
 ## the entry keeps the name it was filled in with.
 func _build_name() -> void:
 	var rank := int(_end_stats.get("rank", 0))
-	_header("NEW ENTRY #%d" % rank, "ENTER YOUR NAME")
+	_header(L10n.f("NEW_ENTRY", {"rank": rank}), L10n.t("NAME_ENTER"))
 	var size := _root.get_viewport_rect().size
 	var top := name_grid_top(size.y) - 72.0  # (the score and the name just above the keys)
 	var n := int(_end_stats.get("mission", 0))
 	var which := String(_end_stats.get("setting", ""))
 	_place_wide(UiKit.label(Score.format(int(_end_stats.get("score", 0))), 16, UiKit.AMBER, HORIZONTAL_ALIGNMENT_CENTER), top)
 	if n >= 1 and n <= Progress.MISSIONS.size():
-		_place_wide(UiKit.label("%s / %s" % [Progress.MISSIONS[n - 1]["name"], which.to_upper()], 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), top + 20.0)
+		_place_wide(UiKit.label("%s / %s" % [mission_name(n), L10n.setting_name(which)], 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), top + 20.0)
 	var slots := NameSlots.new()
 	slots.text = _name
 	slots.position = Vector2(roundf((size.x - NameSlots.width()) / 2.0), top + 36.0)
@@ -922,7 +1021,7 @@ func _build_name() -> void:
 ## just entered blinks. BACK goes where it was opened from.
 func _build_board() -> void:
 	var n := _board_mission
-	_header("HIGH SCORES", "MISSION %02d: %s" % [n, Progress.MISSIONS[n - 1]["name"]])
+	_header(L10n.t("MENU_HIGH_SCORES"), L10n.f("MISSION_LINE", {"n": "%02d" % n, "mission": mission_name(n)}))
 	var size := _root.get_viewport_rect().size
 	var tab_w := floorf((size.x - 28.0 - 2.0 * 6.0) / 3.0)
 	var focus: Button = null
@@ -957,7 +1056,7 @@ func _build_board() -> void:
 		row.position = Vector2(14, BOARD_ROWS + i * step)
 		row.size = Vector2(size.x - 28, step - 4.0)
 		_root.add_child(row)
-	var back := _button("BACK", BOARD_ROWS + Progress.BOARD_SIZE * step + 4.0, func() -> void:
+	var back := _button(L10n.t("COMMON_BACK"), BOARD_ROWS + Progress.BOARD_SIZE * step + 4.0, func() -> void:
 		if _board_back == Screen.END:
 			_show(Screen.END)  # (as it was left: _end_done)
 		else:
@@ -1032,7 +1131,8 @@ func _build_demo_end() -> void:
 	var heads := demo_end_lines()
 	# THANKS FOR PLAYING / THE HOT EXFIL DEMO in the dossier header, the game's logo under it.
 	_root.add_child(HeaderBar.new())
-	_place_wide(UiKit.label(heads[0], 16, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 44)
+	var big := UiKit.fit_size(heads[0], 16, HEADER_W)
+	_place_wide(UiKit.label(heads[0], big, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 44 if big == 16 else 48)
 	_place_wide(UiKit.label(heads[1], 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), 66)
 	var logo := Logo.new()
 	_place_wide(logo, 86 + top)
@@ -1050,8 +1150,8 @@ func _build_demo_end() -> void:
 		var l := UiKit.label(String(coming[i]), 8, UiKit.DIM)
 		l.position = box.position + Vector2(12, 8 + i * 12.0)
 		_root.add_child(l)
-		var soon := UiKit.label("SOON", 8, Color(UiKit.TEAL, 0.7))
-		soon.position = box.position + Vector2(box.size.x - 12 - 24, 8 + i * 12.0)
+		var soon := UiKit.label(L10n.t("DEMO_SOON"), 8, Color(UiKit.TEAL, 0.7))
+		soon.position = box.position + Vector2(box.size.x - 12 - UiKit.text_w(soon.text), 8 + i * 12.0)
 		_root.add_child(soon)
 	y = box.position.y + box.size.y + 14.0
 	var follow := follow_lines()
@@ -1059,7 +1159,7 @@ func _build_demo_end() -> void:
 		_place_wide(UiKit.label(follow[i], 8, UiKit.PAPER if i == 0 else UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), y)
 		y += 12.0
 	var button_y := maxf(y + 12.0, 410.0 + top)
-	var b := _button("BACK" if _demo_from_credits else "CONTINUE", button_y, func() -> void:
+	var b := _button(L10n.t("COMMON_BACK") if _demo_from_credits else L10n.t("COMMON_CONTINUE"), button_y, func() -> void:
 		if _demo_from_credits:
 			_open(Screen.CREDITS)
 		elif _demo_then.is_valid():
@@ -1069,7 +1169,7 @@ func _build_demo_end() -> void:
 
 ## The lines across the end-of-demo screen's top (the tests read them).
 static func demo_end_lines() -> PackedStringArray:
-	return PackedStringArray(["THANKS FOR PLAYING", "THE HOT EXFIL DEMO", "MORE MISSIONS ARE ON THE WAY:", "EIGHT MORE JOBS FOR CONDOR"])
+	return PackedStringArray([L10n.t("DEMO_THANKS"), L10n.t("DEMO_THE_DEMO"), L10n.t("DEMO_MORE"), L10n.t("DEMO_JOBS")])
 
 
 ## The missions still to come, as the end-of-demo screen lists them ("02 SHORT LEASH"...): every one
@@ -1078,7 +1178,7 @@ static func coming_missions() -> PackedStringArray:
 	var out := PackedStringArray()
 	for i in Progress.MISSIONS.size():
 		if not Progress.is_built(i + 1):
-			out.append("%02d %s" % [i + 1, Progress.MISSIONS[i]["name"]])
+			out.append("%02d %s" % [i + 1, mission_name(i + 1)])
 	return out
 
 
@@ -1086,36 +1186,36 @@ static func coming_missions() -> PackedStringArray:
 static func follow_lines(at: String = FOLLOW_AT) -> PackedStringArray:
 	if at.strip_edges() == "":
 		return PackedStringArray()
-	return PackedStringArray(["FOLLOW THE GAME:", at.strip_edges().to_upper()])
+	return PackedStringArray([L10n.t("DEMO_FOLLOW"), at.strip_edges().to_upper()])
 
 
 ## CREDITS (from the main menu): who made it, the engine it's made with (its licence under
 ## LICENCES, as the Godot licence asks), how its art and sound were made; LICENCES, ABOUT THE DEMO
 ## (the end-of-demo screen again) and BACK.
 func _build_credits() -> void:
-	_header("CREDITS", "HOT EXFIL DEMO")
+	_header(L10n.t("MENU_CREDITS"), L10n.t("CREDITS_SUB"))
 	var top := tall_shift(_root.get_viewport_rect().size.y, 40.0)
 	var y := 92.0 + top
 	for block: Array in credit_blocks():
 		_place_wide(UiKit.label(String(block[0]), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), y)
-		_place_wide(UiKit.label(String(block[1]), 16, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), y + 12.0)
+		_place_wide(UiKit.label(String(block[1]), UiKit.fit_size(String(block[1]), 16, HEADER_W), UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), y + 12.0)
 		y += 34.0
 		for extra in block.slice(2):
 			_place_wide(UiKit.label(String(extra), 8, UiKit.PAPER, HORIZONTAL_ALIGNMENT_CENTER), y)
 			y += 12.0
 		y += 10.0
 	# (30 px apart: each button's tap area is 30 px tall, clear of the next one's)
-	_button("LICENCES", y + 6.0, func() -> void: _open(Screen.LICENCES))
-	_button("ABOUT THE DEMO", y + 36.0, func() -> void: open_demo_end())
-	_button("BACK", y + 66.0, func() -> void: _open(Screen.MAIN)).grab_focus()
+	_button(L10n.t("CREDITS_LICENCES"), y + 6.0, func() -> void: _open(Screen.LICENCES))
+	_button(L10n.t("CREDITS_ABOUT"), y + 36.0, func() -> void: open_demo_end())
+	_button(L10n.t("COMMON_BACK"), y + 66.0, func() -> void: _open(Screen.MAIN)).grab_focus()
 
 
 ## What CREDITS says, a block at a time: [its label, its headline, any lines under it].
 static func credit_blocks() -> Array:
 	return [
-		["A GAME BY", MADE_BY],
-		["MADE WITH", "GODOT ENGINE", "GODOTENGINE.ORG", "MIT LICENCE: SEE LICENCES"],
-		["LEVELS, TEXTURES, SOUND, MUSIC", "MADE IN CODE", "CHARACTERS MADE WITH BLENDER"],
+		[L10n.t("CREDITS_BY"), MADE_BY],
+		[L10n.t("CREDITS_MADE_WITH"), "GODOT ENGINE", "GODOTENGINE.ORG", L10n.t("CREDITS_MIT")],
+		[L10n.t("CREDITS_IN_CODE_WHAT"), L10n.t("CREDITS_IN_CODE"), L10n.t("CREDITS_BLENDER")],
 	]
 
 
@@ -1126,13 +1226,13 @@ static func credit_blocks() -> Array:
 ## and their licences' full texts (Engine.get_license_info()), scrolling (a drag, or the wheel).
 ## Built a few paragraphs a frame (LicenceView), so it opens at once.
 func _build_licences() -> void:
-	_header("LICENCES", "GODOT ENGINE + THIRD PARTIES")
+	_header(L10n.t("CREDITS_LICENCES"), L10n.t("LICENCES_SUB"))
 	var size := _root.get_viewport_rect().size
 	var view := LicenceView.new()
 	view.position = Vector2(12, 84)
 	view.size = Vector2(size.x - 24, size.y - 84 - 34)
 	_root.add_child(view)
-	_button("BACK", size.y - 28, func() -> void: _open(Screen.CREDITS)).grab_focus()
+	_button(L10n.t("COMMON_BACK"), size.y - 28, func() -> void: _open(Screen.CREDITS)).grab_focus()
 
 
 ## The licence screen's text, paragraph by paragraph ([text, colour] pairs): the Godot notice and
@@ -1232,17 +1332,33 @@ func _open(s: Screen) -> void:
 	_show(s)
 
 
+## The header's room for its title (big letters; a longer one is in small ones) and for the line
+## under it ("// ..."; a longer one goes onto two lines, the title moving up for it).
+const HEADER_W := 240.0
+const HEADER_SUB_W := 240.0
+
+
 func _header(title: String, sub: String) -> void:
 	var bar := HeaderBar.new()
 	_root.add_child(bar)
-	_place_wide(UiKit.label(title, 16, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 44)
-	_place_wide(UiKit.label("// " + sub, 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER), 66)
+	var subs := UiKit.wrap("// " + sub, HEADER_SUB_W)
+	var big := UiKit.fit_size(title, 16, HEADER_W)
+	var two := subs.size() > 1
+	_place_wide(UiKit.label(title, big, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), (38.0 if two else 44.0) + (0.0 if big == 16 else 4.0))
+	var s := UiKit.label("\n".join(subs.slice(0, 2)), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER)
+	s.add_theme_constant_override("line_spacing", 0)
+	_place_wide(s, 59.0 if two else 66.0)
 
 
 func _place_wide(c: Control, y: float) -> void:
 	c.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	c.offset_top = y
 	_root.add_child(c)
+
+
+## A centred label across the screen, wrapped to `width` (8 px letters, 12 px a line).
+func _wrapped(text: String, width: float, color: Color) -> Label:
+	return UiKit.label("\n".join(UiKit.wrap(text, width)), 8, color, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 ## A COLUMN_W-wide column for a screen's rows (SETTINGS, CONTROLS), centred on the screen however wide
@@ -1262,7 +1378,7 @@ func _column() -> Control:
 ## The least height of a button's tap area (px; user: "tap areas of at least 30 px ... with the same
 ## look"): a button or slider drawn smaller takes taps above and below it too (TapButton, TapSlider,
 ## BoardTab: its `hit`), but only up to halfway to the next one above or below it, so two never share
-## a spot (SETTINGS' rows are 22 px apart to fit a 480-high screen: theirs are 20 to 28 px).
+## a spot (SETTINGS' rows are 21 px apart to fit a 480-high screen: theirs are 20 to 28 px).
 const MIN_TAP := 30.0
 
 
@@ -1321,10 +1437,11 @@ func _section(title: String, y: float) -> float:
 	var l := UiKit.label(title, 8, UiKit.RED)
 	l.position = Vector2(20, y)
 	_col.add_child(l)
+	var w := UiKit.text_w(title)
 	var line := ColorRect.new()
 	line.color = Color(UiKit.RED, 0.5)
-	line.position = Vector2(20 + title.length() * 6 + 4, y + 4)
-	line.size = Vector2(230 - title.length() * 6 - 4, 1)
+	line.position = Vector2(20 + w + 4, y + 4)
+	line.size = Vector2(230 - w - 4, 1)
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_col.add_child(line)
 	return y + SECTION_STEP[_roomy]
@@ -1336,49 +1453,61 @@ func _row_label(text: String, y: float) -> void:
 	_col.add_child(l)
 
 
-func _toggle_row(text: String, key: String, y: float) -> float:
-	_row_label(text, y)
+## ON / OFF, in words.
+static func on_off(on: bool) -> String:
+	return L10n.t("SETTINGS_ON") if on else L10n.t("SETTINGS_OFF")
+
+
+## A settings row's small button (CompactButton), `w` px wide, its right end at `right` (in the
+## column), level with the row's label.
+func _row_button(text: String, y: float, w: float, right: float = ROW_END) -> TapButton:
 	var b := TapButton.new()
-	var on: bool = Settings.get_value(key)
-	b.text = "ON" if on else "OFF"
+	b.text = text
 	b.theme_type_variation = "CompactButton"
 	_col.add_child(b)  # in the menu first, so its theme (and small size) applies
-	b.position = Vector2(192, y - 1)  # level with the label
-	b.size = Vector2(48, 15)
+	b.position = Vector2(right - w, y - 1)  # level with the label
+	b.size = Vector2(w, 15)
+	return b
+
+
+## The width a settings row's small button needs for the longest of `texts`: `least`, or more for a
+## longer word (its padding, 6 px each side, round it).
+static func row_button_w(texts: Array, least: float) -> float:
+	var w := least
+	for t in texts:
+		w = maxf(w, ceilf(UiKit.text_w(String(t)) + 12.0))
+	return w
+
+
+func _toggle_row(text: String, key: String, y: float) -> float:
+	_row_label(text, y)
+	var b := _row_button(on_off(Settings.get_value(key)), y, row_button_w([on_off(true), on_off(false)], 48.0))
 	b.pressed.connect(func() -> void:
 		clicked.emit()
 		Settings.set_value(key, not bool(Settings.get_value(key)))
-		b.text = "ON" if Settings.get_value(key) else "OFF")
-	return y + 22.0
+		b.text = on_off(Settings.get_value(key)))
+	return y + ROW_STEP[_roomy]
 
 
 ## SETTINGS' TIPS row (the first-time tips: FirstTips): ON / OFF, and SHOW AGAIN, which brings every
 ## tip back for the next run (and turns them on).
 func _tips_row(y: float) -> float:
-	_row_label("TIPS", y)
-	var toggle := TapButton.new()
-	toggle.text = "ON" if Settings.get_value("tips") else "OFF"
-	toggle.theme_type_variation = "CompactButton"
-	_col.add_child(toggle)
-	toggle.position = Vector2(192, y - 1)
-	toggle.size = Vector2(48, 15)
+	_row_label(L10n.t("SETTINGS_TIPS"), y)
+	var toggle_w := row_button_w([on_off(true), on_off(false)], 48.0)
+	var toggle := _row_button(on_off(Settings.get_value("tips")), y, toggle_w)
 	toggle.pressed.connect(func() -> void:
 		clicked.emit()
 		Settings.set_value("tips", not bool(Settings.get_value("tips")))
-		toggle.text = "ON" if Settings.get_value("tips") else "OFF")
-	var again := TapButton.new()
-	again.text = "SHOW AGAIN"
-	again.theme_type_variation = "CompactButton"
-	_col.add_child(again)
-	again.position = Vector2(104, y - 1)
-	again.size = Vector2(80, 15)
+		toggle.text = on_off(Settings.get_value("tips")))
+	var again := _row_button(L10n.t("SETTINGS_SHOW_AGAIN"), y, row_button_w([L10n.t("SETTINGS_SHOW_AGAIN"), L10n.t("SETTINGS_DONE")], 80.0),
+			ROW_END - toggle_w - 8.0)
 	again.pressed.connect(func() -> void:
 		clicked.emit()
 		Progress.reset_tips()
 		Settings.set_value("tips", true)
-		toggle.text = "ON"
-		again.text = "DONE")
-	return y + 22.0
+		toggle.text = on_off(true)
+		again.text = L10n.t("SETTINGS_DONE"))
+	return y + ROW_STEP[_roomy]
 
 
 func _slider_row(text: String, key: String, y: float, lo: float = 0, hi: float = 100) -> float:
@@ -1388,7 +1517,7 @@ func _slider_row(text: String, key: String, y: float, lo: float = 0, hi: float =
 	s.max_value = hi
 	s.step = 5
 	s.value = float(Settings.get_value(key))
-	s.position = Vector2(140, y + 2)
+	s.position = Vector2(140, y + SLIDER_Y[_roomy])
 	s.size = Vector2(80, 10)
 	_col.add_child(s)
 	var v := UiKit.label(str(int(s.value)), 8, UiKit.TEAL)
@@ -1397,24 +1526,56 @@ func _slider_row(text: String, key: String, y: float, lo: float = 0, hi: float =
 	s.value_changed.connect(func(val: float) -> void:
 		v.text = str(int(val))
 		Settings.set_value(key, int(val)))
-	return y + 22.0
+	return y + ROW_STEP[_roomy]
 
 
+## A choice's words on its button: "< AUTO >".
+static func choice_text(words: String) -> String:
+	return "< %s >" % words
+
+
+## A row that steps through a setting's choices (`names`: each choice's id of its words), its button
+## as wide as its longest choice needs (at least 94 px), its right end at the row's.
 func _choice_row(text: String, key: String, names: Dictionary, y: float) -> float:
 	_row_label(text, y)
-	var b := TapButton.new()
-	b.text = "< %s >" % names.get(Settings.get_value(key), "?")
-	b.theme_type_variation = "CompactButton"
-	_col.add_child(b)
-	b.position = Vector2(146, y - 1)
-	b.size = Vector2(94, 15)
+	var words := names.values().map(func(id: String) -> String: return choice_text(L10n.t(id)))
+	var b := _row_button(choice_text(L10n.t(names.get(Settings.get_value(key), "?"))), y, row_button_w(words, 94.0))
 	b.pressed.connect(func() -> void:
 		clicked.emit()
 		var keys := names.keys()
 		var i := (keys.find(Settings.get_value(key)) + 1) % keys.size()
 		Settings.set_value(key, keys[i])
-		b.text = "< %s >" % names[keys[i]])
-	return y + 22.0
+		b.text = choice_text(L10n.t(names[keys[i]])))
+	return y + ROW_STEP[_roomy]
+
+
+## SETTINGS' LANGUAGE row (the decision log's "Languages: Luxembourgish first"): each language in its
+## own name (L10n.LANGUAGES: ENGLISH, LËTZEBUERGESCH), never translated; until one's picked, the phone's
+## own is shown (L10n.detect). A press picks the next, and every screen is in it at once: SETTINGS is
+## built again in it, the button still under the finger.
+func _language_row(y: float) -> float:
+	_row_label(L10n.t("SETTINGS_LANGUAGE"), y)
+	var langs := L10n.LANGUAGES.keys()
+	var now := L10n.language_for(String(Settings.get_value("language")))
+	var words := L10n.LANGUAGES.values().map(func(n: String) -> String: return choice_text(n))
+	var b := _row_button(choice_text(L10n.LANGUAGES.get(now, "?")), y, row_button_w(words, 94.0))
+	b.pressed.connect(func() -> void:
+		clicked.emit()
+		Settings.set_value("language", langs[(langs.find(now) + 1) % langs.size()])
+		_show(Screen.SETTINGS)
+		var again := language_button()
+		if again != null:
+			again.grab_focus())
+	_language_button = b
+	return y + ROW_STEP[_roomy]
+
+
+var _language_button: Button
+
+
+## SETTINGS' LANGUAGE button (while SETTINGS is up), else null.
+func language_button() -> Button:
+	return _language_button if _screen == Screen.SETTINGS and is_instance_valid(_language_button) and not _language_button.is_queued_for_deletion() else null
 
 
 ## The main menu's backdrop: a gun-barrel reticle (a GoldenEye nod) behind the title.
@@ -1526,7 +1687,9 @@ class Stamp extends Control:
 ## are their own controls, laid over it: RouteMap and Tally).
 class DebriefPanel extends Control:
 	var rect := Rect2()
-	## The mission and setting played (right of DEBRIEF), once DEBRIEF has typed out.
+	## Its header (DEBRIEF, in words), and the mission and setting played (right of it), once the
+	## header has typed out.
+	var header := "DEBRIEF"
 	var tag := ""
 	## Letters of its header shown (it types out).
 	var shown := 7:
@@ -1541,8 +1704,8 @@ class DebriefPanel extends Control:
 	func _draw() -> void:
 		UiKit.panel(self, rect, UiKit.TEAL, UiKit.PANEL_SOLID, 8.0)
 		var x := rect.position.x + 10.0
-		draw_string(UiKit.font(), Vector2(x, rect.position.y + 16), "DEBRIEF".substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
-		if tag != "" and shown >= 7:
+		draw_string(UiKit.font(), Vector2(x, rect.position.y + 16), header.substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)
+		if tag != "" and shown >= header.length():
 			var w := UiKit.font().get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 			draw_string(UiKit.font(), Vector2(rect.end.x - 10.0 - w, rect.position.y + 16), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
 		draw_rect(Rect2(x, rect.position.y + 96, rect.size.x - 20.0, 1), Color(UiKit.TEAL_DIM, 0.8))
@@ -1629,10 +1792,12 @@ class MissionRow extends Button:
 		if on and (has_focus() or mode == DRAW_HOVER):
 			ink = UiKit.TEAL
 		if not built:
-			draw_string(f, Vector2(40.0, mid + 3.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
-			var soon := "COMING SOON"
+			# Its name, COMING SOON at the right (under the name, if both don't fit on one line).
+			var soon := L10n.t("COMING_SOON")
 			var w := f.get_string_size(soon, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
-			draw_string(f, Vector2(size.x - w - 10.0, mid + 3.0), soon, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.AMBER, 0.75))
+			var one := 40.0 + UiKit.text_w(title) + 8.0 <= size.x - w - 10.0
+			draw_string(f, Vector2(40.0, mid + 3.0 if one else mid - 2.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
+			draw_string(f, Vector2(size.x - w - 10.0, mid + 3.0 if one else mid + 9.0), soon, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.AMBER, 0.75))
 			return
 		# Built: its name, and under it his best time on each setting (user: "it could display the
 		# best time for that mission ... E for easy, M for medium, H for hard"): "E 1:21  M --  H --".
@@ -1640,7 +1805,7 @@ class MissionRow extends Button:
 		var bx := 40.0
 		for s in RouteGraph.SETTINGS.size():
 			var t: float = best[s] if s < best.size() else -1.0
-			var letter := String(RouteGraph.SETTINGS[s]).substr(0, 1).to_upper()
+			var letter := L10n.setting_letter(RouteGraph.SETTINGS[s])
 			draw_string(f, Vector2(bx, mid + 9.0), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.DIM, 0.9))
 			var v := best_text(t)
 			draw_string(f, Vector2(bx + 12.0, mid + 9.0), v, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
@@ -1661,7 +1826,7 @@ class MissionRow extends Button:
 				edge.append(shape[0])
 				draw_polyline(edge, UiKit.TEAL_DIM if open else Color("2a3a3a"), 1.0)
 			if open or done:
-				var letter := String(RouteGraph.SETTINGS[s]).substr(0, 1).to_upper()
+				var letter := L10n.setting_letter(RouteGraph.SETTINGS[s])
 				draw_string(f, Vector2(m.position.x + 4.0, m.position.y + 9.0), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
 						UiKit.INK if done else UiKit.PAPER)
 			else:
@@ -1727,29 +1892,32 @@ class SettingChip extends Button:
 		var f := UiKit.font()
 		# Left: the setting's name (16 px), and under it whether he's got out on it (or what opens it).
 		var top := roundf(size.y / 2.0) - 14.0
-		draw_string(f, Vector2(SLANT + 12.0, top + 14.0), setting.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ink)
-		var status := "CLEARED" if cleared else "NOT CLEARED YET"
+		var right := size.x - SLANT - 12.0
+		# (a name too long for the big letters, by his time, is in small ones)
+		var name := L10n.setting_name(setting)
+		var big := UiKit.fit_size(name, 16, right - 72.0 - 8.0 - (SLANT + 12.0))
+		draw_string(f, Vector2(SLANT + 12.0, top + (14.0 if big == 16 else 10.0)), name, HORIZONTAL_ALIGNMENT_LEFT, -1, big, ink)
+		var status := L10n.t("CHIP_CLEARED") if cleared else L10n.t("CHIP_NOT_CLEARED")
 		var status_col := UiKit.GREEN if cleared else Color(UiKit.DIM, 0.9)
 		if not open:
-			status = "CLEAR %s TO UNLOCK" % needs if needs != "" else "LOCKED"
+			status = L10n.f("CHIP_CLEAR_TO_UNLOCK", {"setting": needs}) if needs != "" else L10n.t("CHIP_LOCKED")
 			status_col = Color(UiKit.DIM, 0.7)
 		elif not built:
-			status = "COMING SOON"
+			status = L10n.t("COMING_SOON")
 			status_col = Color(UiKit.AMBER, 0.75)
 		draw_string(f, Vector2(SLANT + 8.0, top + 28.0), status, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, status_col)
 		# Right: a big padlock while it's locked; else BEST over his time.
-		var right := size.x - SLANT - 12.0
 		if not open:
 			UiKit.draw_padlock(self, Vector2(right - 15.0, roundf(size.y / 2.0) - 10.0), ink, 3)
 			return
-		var label := "BEST"
+		var label := L10n.t("CHIP_BEST")
 		var t := Frontend.time_text(best) if best >= 0.0 else "--"
 		draw_string(f, Vector2(right - f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x, top + 4.0), label,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.DIM, 0.9))
 		draw_string(f, Vector2(right - f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x, top + 26.0), t,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.AMBER if best >= 0.0 else Color(UiKit.DIM, 0.6))
 		# Under it, his top score on its board (the scoreboard: "--" until he has one).
-		var pts := "%s PTS" % Score.format(score) if score >= 0 else "-- PTS"
+		var pts := L10n.f("CHIP_PTS", {"score": Score.format(score) if score >= 0 else "--"})
 		draw_string(f, Vector2(right - f.get_string_size(pts, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x, top + 40.0), pts,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.TEAL if score >= 0 else Color(UiKit.DIM, 0.6))
 
@@ -1826,8 +1994,8 @@ class KeyCap extends Button:
 		line.append(shape[0])
 		draw_polyline(line, edge, 1.0)
 		var f := UiKit.font()
-		var label: String = {" ": "SP"}.get(key, key)
-		var px := 16 if label.length() == 1 else 8
+		var label: String = {" ": L10n.t("KEY_SPACE"), "DEL": L10n.t("KEY_DEL"), "OK": L10n.t("KEY_OK")}.get(key, key)
+		var px := 16 if label.length() == 1 and key.length() == 1 and key != " " else 8
 		var w := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
 		draw_string(f, Vector2(roundf((size.x - w) / 2.0) + 1.0, roundf(size.y / 2.0) + (7.0 if px == 16 else 4.0)), label,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, px, ink)
@@ -1894,7 +2062,7 @@ class BoardTab extends Button:
 		if has_focus() and on:
 			draw_polyline(line, UiKit.PAPER, 1.0)
 		var f := UiKit.font()
-		var label := setting.to_upper()
+		var label := L10n.setting_name(setting)
 		var w := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 		draw_string(f, Vector2(roundf((size.x - w) / 2.0) + 1.0, 11.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, ink)
 
@@ -1905,7 +2073,9 @@ class BoardTab extends Button:
 class BoardRow extends Control:
 	## How an ending reads, [its name, its colour]: as the debrief names it (Frontend.END_TITLES).
 	static func ending(id: String) -> Array:
-		var info: Array = Frontend.END_TITLES.get(StringName(id), [id.to_upper(), "", UiKit.DIM])
+		if not Frontend.END_TITLES.has(StringName(id)):
+			return [id.to_upper(), UiKit.DIM]
+		var info: Array = Frontend.end_title(StringName(id))
 		return [info[0], info[2]]
 
 	var rank := 1
@@ -1938,8 +2108,12 @@ class BoardRow extends Control:
 			draw_string(f, Vector2(0, mid - 2.0), score, HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, UiKit.AMBER)
 		var end: Array = ending(String(entry.get("ending", "")))
 		draw_string(f, Vector2(40.0, mid + 9.0), end[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(end[1], 0.8))
+		# The highest alert in its colour (its number, if a long ending's words leave no room for its name).
 		var alert := clampi(int(entry.get("alert", 1)), 1, 3)
-		draw_string(f, Vector2(0, mid + 9.0), Tally.ALERT_NAMES[alert], HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, Tally.ALERT_COLORS[alert])
+		var word := Tally.alert_name(alert)
+		if 40.0 + UiKit.text_w(end[0]) + 6.0 + UiKit.text_w(word) > size.x - 10.0:
+			word = str(alert)
+		draw_string(f, Vector2(0, mid + 9.0), word, HORIZONTAL_ALIGNMENT_RIGHT, size.x - 10.0, 8, Tally.ALERT_COLORS[alert])
 
 
 ## A menu button whose tap area can be taller than it's drawn (`hit`, in its own pixels: Frontend's
@@ -2008,7 +2182,7 @@ class IosTip extends Button:
 
 	## Its lines (the tests read them): the headline, then how.
 	static func lines() -> PackedStringArray:
-		return PackedStringArray(["ADD TO HOME SCREEN", "TO KEEP YOUR PROGRESS", "TAP", "THEN ADD TO HOME SCREEN"])
+		return PackedStringArray([L10n.t("IOS_ADD"), L10n.t("IOS_KEEP"), L10n.t("IOS_TAP"), L10n.t("IOS_THEN")])
 
 	func _draw() -> void:
 		var f := UiKit.font()

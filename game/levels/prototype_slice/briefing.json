@@ -1,55 +1,55 @@
 {
-	"_note": "Mission 1's conversations (Briefing): the briefing after a mission is picked in MISSION SELECT (\"lines\"), and one for each ending of the run (\"endings\": extracted, killed, captured, chopper_left), played after the ending and before the DEBRIEF. The story (decision log, \"The story: CONDOR against VORHALT\"): VORHALT buys secrets and sells them to whoever pays the most; CONDOR, a small broke agency, sends Ernest Cross to grab each one before the sale; he runs past VORHALT's pad guard (always called ARDBALLS, a new one each mission) to a chopper CONDOR rents by the minute. Each cast member's name is set once, here (the General is BISHOP and the briefer VESPER): {general} or {briefer} in a line is replaced by their name, so a codename changes in one place (12 letters at most: it fits its name plate). CROSS is always the right card, whoever he's talking to the left. Killed: his signal is lost (his card static under SIGNAL LOST), so he has no lines there. An ending's \"title\" is its red tag in the top bar (18 letters at most). Letters: A-Z, 0-9, spaces and . , : ; ! ? - + = / ' \" ( ) < > % # & @ [ ]; curly quotes, dashes and ... are turned into plain ones. A line holds 5 rows of 39 letters, its speaker's [NAME] included.",
+	"_note": "Mission 1's conversations (Briefing): the briefing after a mission is picked in MISSION SELECT (\"lines\"), and one for each ending of the run (\"endings\": extracted, killed, captured, chopper_left), played after the ending and before the DEBRIEF. The story (decision log, \"The story: CONDOR against VORHALT\"): VORHALT buys secrets and sells them to whoever pays the most; CONDOR, a small broke agency, sends Ernest Cross to grab each one before the sale; he runs past VORHALT's pad guard (always called ARDBALLS, a new one each mission) to a chopper CONDOR rents by the minute. Each cast member's name is set once, here (the General is BISHOP and the briefer VESPER): {general} or {briefer} in a line is replaced by their name, so a codename changes in one place (12 letters at most: it fits its name plate). CROSS is always the right card, whoever he's talking to the left. Killed: his signal is lost (his card static under SIGNAL LOST), so he has no lines there. An ending's \"title\" is its red tag in the top bar (18 letters at most; a translation's up to 26, the count beside it making way). Each line's \"key\" (and each ending's \"title_key\") is its id in game/l10n/strings.csv, where its English must read the same as its \"text\" (a test checks) and the other languages' words are kept. Letters: the pixel font's (UiKit.GLYPHS: A-Z, 0-9, the accented capitals Luxembourgish needs, spaces and . , : ; ! ? - + = / ' \" ( ) < > % # & @ [ ] and the typeset quotes); dashes and ... are turned into plain ones. A line holds 5 rows of 39 letters, its speaker's [NAME] included.",
 	"cast": {
 		"cross": {"name": "CROSS", "portrait": "res://assets/textures/portraits/cross.jpg"},
 		"general": {"name": "BISHOP", "portrait": "res://assets/textures/portraits/general.jpg"},
 		"briefer": {"name": "VESPER", "portrait": "res://assets/textures/portraits/briefer.jpg"}
 	},
 	"lines": [
-		{"who": "general", "text": "CROSS! VORHALT'S SELLING A MUSEUM'S ALARM PLANS TO A GANG OF ART THIEVES. GO AND GET THEM!"},
-		{"who": "briefer", "text": "HE'S ALREADY GOT THEM, GENERAL. HE'S RUNNING FOR THE CHOPPER."},
-		{"who": "general", "text": "THAT'S MY BOY! AND THAT CHOPPER'S ON THE METER, SON. FUEL DOESN'T GROW ON TREES."},
-		{"who": "briefer", "text": "IT COMES OUT OF THE COFFEE MACHINE BUDGET. WHICH IS WHY WE DON'T HAVE A COFFEE MACHINE."},
-		{"who": "briefer", "text": "ONE GUARD ON THE PAD. HUGE. MINIGUN. SKULL ON HIS CHEST. NAME TAG SAYS ARDBALLS."},
-		{"who": "cross", "text": "KEEP THE METER RUNNING."}
+		{"key": "M1_BRIEF_01", "who": "general", "text": "CROSS! VORHALT'S SELLING A MUSEUM'S ALARM PLANS TO A GANG OF ART THIEVES. GO AND GET THEM!"},
+		{"key": "M1_BRIEF_02", "who": "briefer", "text": "HE'S ALREADY GOT THEM, GENERAL. HE'S RUNNING FOR THE CHOPPER."},
+		{"key": "M1_BRIEF_03", "who": "general", "text": "THAT'S MY BOY! AND THAT CHOPPER'S ON THE METER, SON. FUEL DOESN'T GROW ON TREES."},
+		{"key": "M1_BRIEF_04", "who": "briefer", "text": "IT COMES OUT OF THE COFFEE MACHINE BUDGET. WHICH IS WHY WE DON'T HAVE A COFFEE MACHINE."},
+		{"key": "M1_BRIEF_05", "who": "briefer", "text": "ONE GUARD ON THE PAD. HUGE. MINIGUN. SKULL ON HIS CHEST. NAME TAG SAYS ARDBALLS."},
+		{"key": "M1_BRIEF_06", "who": "cross", "text": "KEEP THE METER RUNNING."}
 	],
 	"endings": {
 		"extracted": {
-			"title": "EXFIL COMPLETE",
+			"title": "EXFIL COMPLETE", "title_key": "M1_EXTRACTED_TITLE",
 			"lines": [
-				{"who": "general", "text": "GOOD RIDDANCE, ARDBALLS! SON, ARE THE ALARM PLANS SAFE?"},
-				{"who": "cross", "text": "NO NEED TO BE ALARMED."},
-				{"who": "briefer", "text": "FOUR OUT OF TEN."},
-				{"who": "general", "text": "FOUR? THAT'S ERNEST CROSS YOU'RE SCORING!"},
-				{"who": "briefer", "text": "STILL A FOUR. AND WHILE WE'RE ON NUMBERS, I'D LIKE A RAISE."},
-				{"who": "general", "text": "DENIED. NOW GLIDE HOME, SON. SAVES FUEL."}
+				{"key": "M1_EXTRACTED_01", "who": "general", "text": "GOOD RIDDANCE, ARDBALLS! SON, ARE THE ALARM PLANS SAFE?"},
+				{"key": "M1_EXTRACTED_02", "who": "cross", "text": "NO NEED TO BE ALARMED."},
+				{"key": "M1_EXTRACTED_03", "who": "briefer", "text": "FOUR OUT OF TEN."},
+				{"key": "M1_EXTRACTED_04", "who": "general", "text": "FOUR? THAT'S ERNEST CROSS YOU'RE SCORING!"},
+				{"key": "M1_EXTRACTED_05", "who": "briefer", "text": "STILL A FOUR. AND WHILE WE'RE ON NUMBERS, I'D LIKE A RAISE."},
+				{"key": "M1_EXTRACTED_06", "who": "general", "text": "DENIED. NOW GLIDE HOME, SON. SAVES FUEL."}
 			]
 		},
 		"killed": {
-			"title": "KILLED IN ACTION",
+			"title": "KILLED IN ACTION", "title_key": "M1_KILLED_TITLE",
 			"lines": [
-				{"who": "briefer", "text": "CROSS? CROSS, COME IN. ...HIS SIGNAL'S GONE, GENERAL."},
-				{"who": "general", "text": "KEEP THE METER RUNNING."},
-				{"who": "briefer", "text": "GENERAL..."},
-				{"who": "general", "text": "ONE MORE MINUTE. I'LL PAY."}
+				{"key": "M1_KILLED_01", "who": "briefer", "text": "CROSS? CROSS, COME IN. ...HIS SIGNAL'S GONE, GENERAL."},
+				{"key": "M1_KILLED_02", "who": "general", "text": "KEEP THE METER RUNNING."},
+				{"key": "M1_KILLED_03", "who": "briefer", "text": "GENERAL..."},
+				{"key": "M1_KILLED_04", "who": "general", "text": "ONE MORE MINUTE. I'LL PAY."}
 			]
 		},
 		"captured": {
-			"title": "AGENT CAPTURED",
+			"title": "AGENT CAPTURED", "title_key": "M1_CAPTURED_TITLE",
 			"lines": [
-				{"who": "briefer", "text": "THEY'VE GOT HIM, GENERAL. I RANG VORHALT: \"YOUR SECRETS ARE IMPORTANT TO US. PLEASE HOLD.\""},
-				{"who": "general", "text": "HOLD? ON MY PHONE BILL? ...HANG ON, THERE'S MUSIC. IT'S ACTUALLY QUITE NICE."},
-				{"who": "cross", "text": "TAKE YOUR TIME, GENERAL. I'M NOT GOING ANYWHERE."}
+				{"key": "M1_CAPTURED_01", "who": "briefer", "text": "THEY'VE GOT HIM, GENERAL. I RANG VORHALT: \"YOUR SECRETS ARE IMPORTANT TO US. PLEASE HOLD.\""},
+				{"key": "M1_CAPTURED_02", "who": "general", "text": "HOLD? ON MY PHONE BILL? ...HANG ON, THERE'S MUSIC. IT'S ACTUALLY QUITE NICE."},
+				{"key": "M1_CAPTURED_03", "who": "cross", "text": "TAKE YOUR TIME, GENERAL. I'M NOT GOING ANYWHERE."}
 			]
 		},
 		"chopper_left": {
-			"title": "THE CHOPPER LEFT",
+			"title": "THE CHOPPER LEFT", "title_key": "M1_CHOPPER_LEFT_TITLE",
 			"lines": [
-				{"who": "briefer", "text": "THE CHOPPER'S GONE, GENERAL. YOUR MINUTES RAN OUT."},
-				{"who": "general", "text": "ALREADY? I PAID FOR MINUTES! PLURAL!"},
-				{"who": "briefer", "text": "AND YOU SPENT THE TOP-UP ON CIGARS."},
-				{"who": "cross", "text": "I'LL GET THE BUS."},
-				{"who": "general", "text": "PAY YOUR OWN FARE, SON."}
+				{"key": "M1_CHOPPER_LEFT_01", "who": "briefer", "text": "THE CHOPPER'S GONE, GENERAL. YOUR MINUTES RAN OUT."},
+				{"key": "M1_CHOPPER_LEFT_02", "who": "general", "text": "ALREADY? I PAID FOR MINUTES! PLURAL!"},
+				{"key": "M1_CHOPPER_LEFT_03", "who": "briefer", "text": "AND YOU SPENT THE TOP-UP ON CIGARS."},
+				{"key": "M1_CHOPPER_LEFT_04", "who": "cross", "text": "I'LL GET THE BUS."},
+				{"key": "M1_CHOPPER_LEFT_05", "who": "general", "text": "PAY YOUR OWN FARE, SON."}
 			]
 		}
 	}

@@ -1,5 +1,5 @@
 extends Node
-## The player's settings (audio, display, controls), saved on the device (user://settings.cfg,
+## The player's settings (audio, display, controls, the language), saved on the device (user://settings.cfg,
 ## which on the web is the browser's storage). Autoload "Settings". Changing one emits `changed`
 ## so the game applies it straight away.
 
@@ -21,6 +21,7 @@ const DEFAULTS := {
 	"swipe": "medium",      # "low" | "medium" | "high"
 	"controls": "swipe",    # "swipe" | "buttons" (MOVE: the on-screen move buttons too; swipes work either way)
 	"tips": true,           # the first-time tips in mission 1 (FirstTips; which were seen: Progress)
+	"language": "",         # "en" | "lb" (L10n.LANGUAGES); "" until one's picked: the phone's own (L10n.detect)
 }
 
 var _values: Dictionary = DEFAULTS.duplicate()
@@ -28,6 +29,7 @@ var _values: Dictionary = DEFAULTS.duplicate()
 
 func _ready() -> void:
 	load_from(PATH)
+	L10n.apply(String(get_value("language")))
 
 
 ## Reads the settings saved at `path`: each one only if it's the kind of value its default is (a
@@ -57,11 +59,17 @@ func set_value(key: String, value: Variant) -> void:
 		return
 	_values[key] = value
 	_save()
+	if key == "language":
+		L10n.apply(String(value))  # (straight away: the screens rebuild in it)
 	changed.emit()
 
 
+## Every setting back to its default, but the language (RESET is about how it plays and sounds; the
+## language stays the one he reads).
 func reset() -> void:
+	var language: Variant = _values.get("language", DEFAULTS["language"])
 	_values = DEFAULTS.duplicate()
+	_values["language"] = language
 	_save()
 	changed.emit()
 

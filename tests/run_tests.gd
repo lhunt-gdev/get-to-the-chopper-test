@@ -96,6 +96,11 @@ func _run() -> void:
 	_test_buttons_touches()
 	_test_buttons_words()
 	await _test_buttons_level()
+	# --- Languages (game/l10n) ---
+	_test_l10n_tables()
+	_test_l10n_fit()
+	await _test_l10n_screens()
+	await _test_language_setting()
 	print("%d checks, %d failed" % [_checks, _failures])
 	await _settle_audio(root)
 	quit(1 if _failures > 0 else 0)
@@ -866,7 +871,7 @@ func _test_briefing() -> void:
 		{"who": "colonel", "text": "Hello."},
 		{"who": "general", "text": "  "},
 		{"who": "general", "text": "Ask {colonel}."},
-		{"who": "general", "text": "Café."},
+		{"who": "general", "text": "Smørrebrød."},
 		{"who": "general", "text": "word ".repeat(45)},
 		{"who": "general", "text": "It’s “fine” — really…"},
 	]}
@@ -878,7 +883,8 @@ func _test_briefing() -> void:
 	long_cast["general"]["name"] = "GENERAL BISHOP"
 	var too_long := Briefing.problems({"cast": long_cast, "lines": data["lines"]})
 	_check(too_long.size() == 1 and too_long[0].contains("12 letters"), "briefing: a codename too long for its name plate is caught (%s)" % ", ".join(too_long))
-	_check(Briefing.plain("It’s “fine” — really…") == "It's \"fine\" - really...", "briefing: curly quotes, dashes and ... from a word processor made plain")
+	_check(Briefing.plain("It’s “fine” — really…") == "It’s “fine” - really..." and Briefing.plain("„Moien“ – ’t ass…") == "„Moien“ - ’t ass...",
+			"briefing: dashes and ... from a word processor made plain; the typeset quotes kept (the font has them: Luxembourgish's „...“ and ’)")
 	_check(Briefing.wrap_rows("AAAA BBBB CCCC", 9) == [[0, 9], [10, 4]] and Briefing.wrap_rows("ABCDEFGHIJ", 4) == [[0, 4], [4, 4], [8, 2]],
 			"briefing: lines wrap at spaces (a word too long for a row is split)")
 	for s in ["codec", "codec_open", "codec_static", "codec_close"]:
@@ -1146,8 +1152,13 @@ func _test_end_talk() -> void:
 	bad["endings"]["extract"] = {"title": "OUT", "lines": [{"who": "general", "text": "Typo."}]}
 	bad["endings"]["captured"]["title"] = "AGENT CAPTURED BY THE ENEMY"
 	bad["endings"]["chopper_left"]["title"] = " "
-	bad["endings"]["extracted"]["lines"][0]["text"] = "Café."
+	bad["endings"]["extracted"]["lines"][0]["text"] = "Smørrebrød."
 	bad["endings"]["extracted"]["lines"][1]["text"] = "word ".repeat(45)
+	# (their own words, not their ids' in strings.csv)
+	for e: String in ["captured", "chopper_left"]:
+		bad["endings"][e].erase("title_key")
+	for i in 2:
+		bad["endings"]["extracted"]["lines"][i].erase("key")
 	var found := Briefing.problems(bad)
 	var lost_line := "killed line %d" % bad["endings"]["killed"]["lines"].size()
 	_check(found.size() == 6 and found.any(func(p: String) -> bool: return p.begins_with(lost_line) and p.contains("signal is lost")),
@@ -1262,7 +1273,7 @@ func _end_talk_run(data: Dictionary, id: String, skip: bool) -> Dictionary:
 	out["shown"] = seen.size()
 	out["skip_frames"] = f - skipped_at if skipped_at >= 0 else -1
 	# The debrief: the end screen's title for this ending.
-	var want: String = (load("res://game/ui/menu/frontend.gd") as GDScript).get_script_constant_map()["END_TITLES"][StringName(id)][0]  # (not by class name: it needs the autoloads)
+	var want: String = L10n.t((load("res://game/ui/menu/frontend.gd") as GDScript).get_script_constant_map()["END_TITLES"][StringName(id)][0])  # (not by class name: it needs the autoloads)
 	var titled := false
 	for c in fe.find_children("*", "Label", true, false):
 		titled = titled or (c as Label).text == want
@@ -5181,6 +5192,11 @@ func _test_score_screens() -> void:
 	prog.save_path = saved_path
 
 
+## The words for a list of string ids (L10n), in the language shown.
+func _words(ids: Array) -> Array:
+	return ids.map(func(id: String) -> String: return L10n.t(id))
+
+
 ## Whether the pixel font has a letter for every character of `text` (UiKit.GLYPHS; lower case draws as
 ## upper).
 func _font_has(text: String) -> bool:
@@ -5580,11 +5596,11 @@ func _test_polish_menus() -> void:
 	var f := UiKit.font()
 	var alert_x := 242.0 - 10.0 - f.get_string_size("SNEAKING", HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 	for id: String in Progress.ENDINGS:
-		var t: String = titles[StringName(id)][0] if titles.has(StringName(id)) else ""
+		var t: String = L10n.t(titles[StringName(id)][0]) if titles.has(StringName(id)) else ""
 		same = same and t != "" and FE.BoardRow.ending(id)[0] == t and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x <= 242.0 \
 				and 40.0 + f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x + 6.0 <= alert_x
-	_check(same and titles[&"extracted"][0] == "EXFIL COMPLETE" and titles[&"captured"][0] == "AGENT CAPTURED" and titles[&"chopper_left"][0] == "THE CHOPPER LEFT"
-			and titles[&"killed"][0] == "KILLED IN ACTION", "polish: one name per ending on the debrief and the board, fitting both")
+	_check(same and FE.end_title(&"extracted")[0] == "EXFIL COMPLETE" and FE.end_title(&"captured")[0] == "AGENT CAPTURED" and FE.end_title(&"chopper_left")[0] == "THE CHOPPER LEFT"
+			and FE.end_title(&"killed")[0] == "KILLED IN ACTION", "polish: one name per ending on the debrief and the board, fitting both")
 	# CONTROLS' lines follow AIM; no dogs.
 	var said := func(aim: String) -> String:
 		return " / ".join(FE.controls_lines(aim).map(func(r: Array) -> String: return r[0] + ": " + r[1]))
@@ -5864,7 +5880,7 @@ func _test_demo_polish_tips() -> void:
 	var auto: Array = FirstTips.lines_of("fire", "auto")
 	_check(fits and String(tap[0]).contains("TAP AN ENEMY") and not " ".join(tap).contains("AIMS FOR YOU") and " ".join(both).contains("AIMS")
 			and " ".join(both).contains("TAP AN ENEMY") and " ".join(auto).contains("AIMS FOR YOU") and not " ".join(auto).contains("TAP")
-			and FirstTips.lines_of("jump", "tap") == FirstTips.TIPS["jump"]["lines"],
+			and FirstTips.lines_of("jump", "tap") == _words(FirstTips.TIPS["jump"]["lines"]),
 			"demo polish tips: HOLD FIRE's card says what AIM does (AUTO: it aims for you; TAP ONLY: tap an enemy to target it; AUTO + TAP: either), and fits")
 	var o := FirstTips.ORDER
 	_check(o.find("lane") < o.find("jump") and o.find("jump") < o.find("slide") and o.find("slide") < o.find("alert") and o.find("cover") < o.find("cover_out")
@@ -6279,10 +6295,10 @@ func _test_buttons_words() -> void:
 		var with: String = " ".join(FirstTips.lines_of(id, "auto_tap", true))
 		if FirstTips.BY_BUTTONS.has(id):
 			tapped = tapped and with.contains("TAP") and not with.contains("SWIPE")
-		same = same and FirstTips.lines_of(id, "auto") == FirstTips.TIPS[id]["lines"] and FirstTips.icon_of(id) == FirstTips.TIPS[id]["icon"]
+		same = same and FirstTips.lines_of(id, "auto") == _words(FirstTips.TIPS[id]["lines"]) and FirstTips.icon_of(id) == FirstTips.TIPS[id]["icon"]
 	_check(fits and tapped and same and String(FirstTips.lines_of("jump", "auto", true)[0]) == "TAP ▲ TO JUMP"
 			and String(FirstTips.lines_of("slide", "auto", true)[0]) == "TAP ▼ TO SLIDE" and String(FirstTips.lines_of("lane", "auto", true)[0]) == "TAP ◀ OR ▶"
-			and FirstTips.icon_of("jump", true) == "tap_up" and FirstTips.lines_of("fire", "tap", true) == FirstTips.FIRE_BY_AIM["tap"],
+			and FirstTips.icon_of("jump", true) == "tap_up" and FirstTips.lines_of("fire", "tap", true) == _words(FirstTips.FIRE_BY_AIM["tap"]),
 			"buttons words: the moves' tips say TAP and the button with BUTTONS (TAP ▲ TO JUMP), fit their card in the font's letters; with SWIPE as they were")
 	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
 	var said := func(aim: String, buttons: bool) -> String:
@@ -6400,3 +6416,471 @@ func _test_buttons_level() -> void:
 	await process_frame
 	gs.alert_level = was_alert
 	gs.run_active = was_active
+
+
+# --- Languages (game/l10n; the decision log's "Languages: Luxembourgish first") -----------------
+
+## The languages the fit checks run in: English, the pseudo-language (every string about 35% longer,
+## in accented capitals: L10n.pseudo) and Luxembourgish (its empty cells show the English until the
+## translation's in).
+const L10N_LOCALES := ["en", L10n.PSEUDO, "lb"]
+## The longest value each {place} can be given, for the fit checks (those in words are looked up in the
+## language being checked: _l10n_args).
+const L10N_SAMPLES := {"n": "99", "rank": "10", "time": "9:59.9", "score": "999,999"}
+
+
+## The tables: strings.csv (the id, the English, where it shows, its room: _fit, a note) and each
+## language's file have the same ids, every one of them once; each language names itself as L10n
+## does; every id the game uses is in the table (the ids in the code, and those made from data: the
+## missions', mission 1's areas' and ways', the difficulties', the tally's rows', the briefing's lines
+## and tags, whose English must read as their "text"), and every one in the table is used.
+func _test_l10n_tables() -> void:
+	var table := L10n.read_table(L10n.TABLE)
+	var ids := {}
+	var once := true
+	var filled := true
+	for row in table:
+		once = once and not ids.has(row["keys"])
+		ids[row["keys"]] = row
+		filled = filled and String(row["en"]) != "" and String(row["_where"]) != "" and _l10n_fit_ok(String(row["_fit"]))
+	_check(table.size() > 200 and once and filled, "languages: strings.csv has every id once, each with its English, where it shows and its room (%d)" % table.size())
+	for lang: String in L10n.FILES:
+		var theirs := {}
+		for row in L10n.read_table(L10n.FILES[lang]):
+			theirs[row["keys"]] = String(row.get(lang, ""))
+		var missing := ids.keys().filter(func(k: String) -> bool: return not theirs.has(k))
+		var extra := theirs.keys().filter(func(k: String) -> bool: return not ids.has(k))
+		_check(missing.is_empty() and extra.is_empty(), "languages: %s.csv has every id in strings.csv and no others (missing %s, extra %s)" % [lang, missing, extra])
+		_check(theirs.get("LANGUAGE_NAME", "") == L10n.LANGUAGES[lang] and String(ids["LANGUAGE_NAME"]["en"]) == L10n.LANGUAGES["en"],
+				"languages: %s names itself as SETTINGS does (%s)" % [lang, theirs.get("LANGUAGE_NAME", "")])
+	_check(not L10n.LANGUAGES.has(L10n.PSEUDO) and L10n.LANGUAGES.size() == 2 and TranslationServer.get_loaded_locales().has("lb"),
+			"languages: ENGLISH and LËTZEBUERGESCH to pick (the pseudo-language never), both loaded (%s)" % [TranslationServer.get_loaded_locales()])
+	# In the web build: the imported translations are resources (the Web preset exports them all; the
+	# CSVs themselves stay out), each one the project lists, English the fallback.
+	var listed: PackedStringArray = ProjectSettings.get_setting("internationalization/locale/translations", PackedStringArray())
+	var preset := ConfigFile.new()
+	preset.load("res://export_presets.cfg")
+	_check(listed.size() == 1 + L10n.FILES.size() and Array(listed).all(func(p: String) -> bool: return ResourceLoader.exists(p))
+			and ProjectSettings.get_setting("internationalization/locale/fallback", "") == "en" and preset.get_value("preset.0", "export_filter", "") == "all_resources",
+			"languages: the project lists each language's imported translation, English the fallback, and the web export carries them (%s)" % [listed])
+	# The ids the code names: every string in the game's scripts that starts like one of the table's.
+	var prefixes := {}
+	for k: String in ids:
+		prefixes[k.get_slice("_", 0) + "_"] = true
+	var used := {}
+	for path in _l10n_scripts("res://game"):
+		var src := FileAccess.get_file_as_string(path)
+		for part in src.split("\""):
+			if part.length() < 3 or part.to_upper() != part or part.contains(" ") or not part.contains("_"):
+				continue
+			if not prefixes.has(part.get_slice("_", 0) + "_") or part.ends_with("_") or part.contains("%"):
+				continue
+			used[part] = path
+	var unknown := used.keys().filter(func(k: String) -> bool: return not ids.has(k))
+	_check(unknown.is_empty(), "languages: every id the game's code names is in strings.csv (%s)" % [unknown.map(func(k: String) -> String: return "%s in %s" % [k, used[k]])])
+	# The ids made from data.
+	var made := {}
+	for m: Dictionary in Progress.MISSIONS:
+		made["MISSION_NAME_" + String(m["id"]).to_upper()] = true
+	for s: String in RouteGraph.SETTINGS:
+		made["SETTING_" + s.to_upper()] = true
+		made["SETTING_%s_LETTER" % s.to_upper()] = true
+	for k in Tally.LABEL_IDS.values():
+		made[k] = true
+	var g := RouteGraph.from_json_file(MISSION_1)
+	var route = JSON.parse_string(FileAccess.get_file_as_string(MISSION_1))
+	for n: Dictionary in route.get("nodes", []):
+		var nid := StringName(n["id"])
+		made["AREA_" + String(nid).to_upper()] = true
+		for e in g.all_next(nid):
+			made["WAY_" + g.edge_label(nid, e).to_upper().replace(" ", "_")] = true
+	var brief := Briefing.load_file("res://game/levels/prototype_slice/briefing.json")
+	var same := true
+	var keyed := true
+	var convos: Array = [brief] + (brief["endings"] as Dictionary).values()
+	for c: Dictionary in convos:
+		if c.has("title_key"):
+			made[c["title_key"]] = true
+			same = same and ids.has(c["title_key"]) and String(ids[c["title_key"]]["en"]) == String(c["title"])
+		for l: Dictionary in c["lines"]:
+			keyed = keyed and l.has("key")
+			made[String(l.get("key", ""))] = true
+			same = same and ids.has(l.get("key", "")) and String(ids[l["key"]]["en"]) == String(l["text"])
+	keyed = keyed and (brief["endings"] as Dictionary).values().all(func(e: Dictionary) -> bool: return e.has("title_key"))
+	var missing_made := made.keys().filter(func(k: String) -> bool: return not ids.has(k))
+	_check(missing_made.is_empty() and keyed, "languages: the missions', areas', ways', difficulties', tally rows' and briefing lines' ids are all in strings.csv (%s)" % [missing_made])
+	_check(same, "languages: each briefing line's (and tag's) English in strings.csv reads the same as its \"text\" in briefing.json")
+	var unused := ids.keys().filter(func(k: String) -> bool: return not used.has(k) and not made.has(k) and k != "LANGUAGE_NAME")
+	_check(unused.is_empty(), "languages: every id in strings.csv is used (%s)" % [unused])
+	# Godot reads them: each language's words (the English for an empty cell), the {places} filled in.
+	var was := TranslationServer.get_locale()
+	TranslationServer.set_locale("lb")
+	var lb_ok := L10n.t("MENU_SETTINGS") == "SETTINGS" and L10n.t("LANGUAGE_NAME") == "LËTZEBUERGESCH"
+	TranslationServer.set_locale("en")
+	_check(lb_ok and L10n.t("MENU_SETTINGS") == "SETTINGS" and L10n.f("MISSION_LINE", {"n": 1, "mission": "COLD CALL"}) == "MISSION 1: COLD CALL"
+			and L10n.t_or("AREA_NOWHERE", "NOWHERE") == "NOWHERE" and not L10n.has("AREA_NOWHERE") and L10n.has("MENU_SETTINGS"),
+			"languages: an id's words in the language shown, English for an empty cell, a {place} filled in, an unknown id its fallback")
+	TranslationServer.set_locale(was)
+
+
+## Whether a _fit (strings.csv: "8:136" one line of 8 px letters in 136 px; "16:240" big letters in
+## 240 px, small ones when longer; "8:226x2" wrapped to 226 px, two lines at most; "brief" a briefing
+## line; "tag" a briefing's tag) reads right.
+func _l10n_fit_ok(fit: String) -> bool:
+	if fit in ["brief", "tag"]:
+		return true
+	var parts := fit.split(":")
+	return parts.size() == 2 and parts[0] in ["8", "16"] and parts[1].get_slice("x", 0).is_valid_int()
+
+
+## Every script under `dir`.
+func _l10n_scripts(dir: String) -> Array:
+	var out := []
+	var d := DirAccess.open(dir)
+	if d == null:
+		return out
+	for f in d.get_files():
+		if f.ends_with(".gd"):
+			out.append(dir.path_join(f))
+	for sub in d.get_directories():
+		out.append_array(_l10n_scripts(dir.path_join(sub)))
+	return out
+
+
+## The longest words in `list` (the pixel font's letters are all one width).
+func _l10n_longest(list: Array) -> String:
+	var best := ""
+	for w: String in list:
+		if UiKit.text_w(w) > UiKit.text_w(best):
+			best = w
+	return best
+
+
+## The longest value each {place} takes in the language shown (numbers and times as L10N_SAMPLES).
+func _l10n_args() -> Dictionary:
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var a := L10N_SAMPLES.duplicate()
+	a["mission"] = _l10n_longest(range(1, Progress.MISSIONS.size() + 1).map(func(n: int) -> String: return FE.mission_name(n)))
+	a["setting"] = _l10n_longest(RouteGraph.SETTINGS.map(func(s: String) -> String: return L10n.setting_name(s)))
+	a["settings"] = " + ".join(RouteGraph.SETTINGS.map(func(s: String) -> String: return L10n.setting_name(s)))
+	a["move"] = _l10n_longest([L10n.t("HUD_MOVE_SWIPE"), L10n.t("HUD_MOVE_TAP")])
+	return a
+
+
+## Each string fits its room (its _fit in strings.csv), in every language (L10N_LOCALES), with its
+## {places} at their longest, in letters the pixel font has; and where strings share room, they fit it
+## together (_l10n_shared_room); the briefing's lines fit 5 rows of 39 letters with the speaker's
+## [NAME], its tags 18 letters (26 for a translation's: the count makes way) (Briefing.problems).
+func _test_l10n_fit() -> void:
+	var was := TranslationServer.get_locale()
+	var table := L10n.read_table(L10n.TABLE)
+	var brief := Briefing.load_file("res://game/levels/prototype_slice/briefing.json")
+	for lang: String in L10N_LOCALES:
+		if lang == L10n.PSEUDO:
+			L10n.use_pseudo()
+		else:
+			TranslationServer.set_locale(lang)
+		var args := _l10n_args()
+		var over := []
+		var glyphs := []
+		for row in table:
+			var id: String = row["keys"]
+			var fit: String = row["_fit"]
+			var text := L10n.t(id).format(args)
+			for ch in text:
+				if not UiKit.has_glyph(ch) and not glyphs.has(ch):
+					glyphs.append(ch)
+			if fit in ["brief", "tag"]:
+				continue  # (Briefing.problems, below)
+			var room := float(fit.get_slice(":", 1).get_slice("x", 0))
+			var most := int(fit.get_slice("x", 1)) if fit.contains("x") else 1
+			var lines := UiKit.wrap(text, room)
+			if lines.size() > most or Array(lines).any(func(l: String) -> bool: return UiKit.text_w(l) > room):
+				over.append("%s (%s): %s" % [id, fit, text])
+		_check(over.is_empty(), "languages %s: every string fits its room (%s)" % [lang, over])
+		_check(glyphs.is_empty(), "languages %s: every letter in the font (%s)" % [lang, glyphs])
+		var found := Briefing.problems(brief)
+		_check(found.is_empty(), "languages %s: the briefing's lines fit 5 rows of 39 letters, its tags 18, in the font's letters (%s)" % [lang, found])
+		_l10n_shared_room(lang, args)
+	TranslationServer.set_locale(was)
+
+
+## Where strings share their room, in the language shown: the debrief's buttons, SETTINGS' rows, the
+## scoreboard's rows, the tally's rows and SCORE line, the debrief's header, the HUD's boxes, the
+## iPhone tip's lines, the mission select's rows and a mission's chips, the tips' cards, CONTROLS, the
+## briefing's top bar and SIGNAL LOST.
+func _l10n_shared_room(lang: String, args: Dictionary) -> void:
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var bad := []
+	# The debrief's three buttons, in a row ROW_BUTTONS_W wide.
+	var texts := [L10n.t("DEBRIEF_RETRY"), L10n.t("COMMON_BOARD"), L10n.t("DEBRIEF_MAIN_MENU")]
+	var widths: Array = FE.row_widths(texts)
+	var total := 12.0
+	for i in 3:
+		total += float(widths[i])
+		if widths[i] < UiKit.text_w(texts[i]) + 20.0:
+			bad.append("debrief button " + texts[i])
+	if total > FE.ROW_BUTTONS_W:
+		bad.append("debrief buttons, %d px" % total)
+	# SETTINGS: each row's name, then its control at the row's right end.
+	for r: Array in [["SETTINGS_AIM", FE.AIM_NAMES], ["SETTINGS_TRIGGER", FE.TRIGGER_NAMES], ["SETTINGS_SWIPE_SPEED", FE.SWIPE_NAMES],
+			["SETTINGS_MOVE", FE.CONTROLS_NAMES]]:
+		var words: Array = (r[1] as Dictionary).values().map(func(id: String) -> String: return FE.choice_text(L10n.t(id)))
+		if 26.0 + UiKit.text_w(L10n.t(r[0])) + FE.ROW_GAP > FE.ROW_END - FE.row_button_w(words, 94.0):
+			bad.append("settings row " + r[0])
+	var langs: Array = L10n.LANGUAGES.values().map(func(n: String) -> String: return FE.choice_text(n))
+	if 26.0 + UiKit.text_w(L10n.t("SETTINGS_LANGUAGE")) + FE.ROW_GAP > FE.ROW_END - FE.row_button_w(langs, 94.0):
+		bad.append("settings row LANGUAGE")
+	var on_w: float = FE.row_button_w([FE.on_off(true), FE.on_off(false)], 48.0)
+	for id in ["SETTINGS_SOUND", "SETTINGS_SCREEN_SHAKE", "SETTINGS_RETRO_FILTER", "SETTINGS_BLOOD"]:
+		if 26.0 + UiKit.text_w(L10n.t(id)) + FE.ROW_GAP > FE.ROW_END - on_w:
+			bad.append("settings row " + id)
+	var again_w: float = FE.row_button_w([L10n.t("SETTINGS_SHOW_AGAIN"), L10n.t("SETTINGS_DONE")], 80.0)
+	if 26.0 + UiKit.text_w(L10n.t("SETTINGS_TIPS")) + FE.ROW_GAP > FE.ROW_END - on_w - 8.0 - again_w:
+		bad.append("settings row TIPS")
+	for id in ["SETTINGS_MASTER", "SETTINGS_MUSIC", "SETTINGS_EFFECTS", "SETTINGS_AMBIENCE", "SETTINGS_BRIGHTNESS"]:
+		if 26.0 + UiKit.text_w(L10n.t(id)) + 4.0 > 140.0:
+			bad.append("settings row " + id)
+	# The scoreboard's rows (242 wide): the ending, then the highest alert at the right (its number, if
+	# its name has no room).
+	var alert := _l10n_longest([1, 2, 3].map(func(a: int) -> String: return Tally.alert_name(a)))
+	for id: String in Progress.ENDINGS:
+		if 40.0 + UiKit.text_w(FE.BoardRow.ending(id)[0]) + 6.0 > 242.0 - 10.0 - UiKit.text_w("3"):
+			bad.append("board row " + id)
+	# The tally (222 wide): each row's name and its longest value; the SCORE line by its number.
+	var values := {"time": "9:59.9", "clock": "9:59.9", "metres": L10n.f("TALLY_METRES", {"n": 9999}), "count": "99"}
+	for row: Array in Tally.rows_for({"spare": 10.0}):
+		var v: String = values.get(row[1], "")
+		if row[0] == L10n.t("TALLY_TOP_ALERT"):
+			v = alert
+		elif row[0] == L10n.t("TALLY_ROUTE"):
+			v = Tally.fit_value(row[0], RouteMap.levels_shown("MAIN > ROOF > MAIN"), 222.0)
+		if UiKit.text_w(row[0]) + 6.0 + UiKit.text_w(v) > 222.0:
+			bad.append("tally row " + String(row[0]))
+	var mult := L10n.f("TALLY_MULT", {"n": 3, "setting": args["setting"]})
+	if maxf(36.0, UiKit.text_w(L10n.t("TALLY_SCORE")) + 6.0) + UiKit.text_w(mult) + 6.0 > 222.0 - UiKit.text_w("999,999", 16):
+		bad.append("SCORE line")
+	# The debrief's header: DEBRIEF and the mission / difficulty (its number, if its name's too long).
+	if UiKit.text_w(L10n.t("DEBRIEF_HEADER")) + 8.0 + UiKit.text_w("%02d / %s" % [9, args["setting"]]) > 222.0:
+		bad.append("debrief header")
+	# The HUD: the alert box clear of the clock; the rear camera's count; the words by their bars.
+	if 4.0 + maxf(62.0, 6.0 + UiKit.text_w(alert) + 4.0) + 12.0 > 270.0 / 2.0 - 18.0 - 4.0:
+		bad.append("HUD alert box")
+	if 13.0 + UiKit.text_w(L10n.f("HUD_SQUAD", {"n": 9})) + 6.0 > 136.0:
+		bad.append("HUD rear camera")
+	if 7.0 + UiKit.text_w(L10n.t("HUD_BOSS")) + 4.0 > 140.0 or 7.0 + UiKit.text_w(L10n.t("HUD_ALARM")) + 4.0 > 84.0 \
+			or 6.0 + UiKit.text_w(L10n.t("HUD_LIFE")) + 2.0 > 58.0:
+		bad.append("HUD bars")
+	# The iPhone tip (254 wide): its headline and the X; TAP [share] THEN ADD TO HOME SCREEN.
+	var ios: PackedStringArray = FE.IosTip.lines()
+	if 10.0 + UiKit.text_w(ios[0]) + 6.0 > 254.0 - 16.0 or 10.0 + UiKit.text_w(ios[2] + " ") + 16.0 + UiKit.text_w(ios[3]) > 254.0 - 6.0:
+		bad.append("iPhone tip")
+	# The mission select's rows (242 wide): a built one's name clear of its marks.
+	for n in Progress.MISSIONS.size():
+		if 40.0 + UiKit.text_w(FE.mission_name(n + 1)) + 6.0 > 242.0 - 10.0 - 3.0 * 13.0 - 2.0 * 3.0:
+			bad.append("mission row %d" % (n + 1))
+	# A mission's chips (242 wide): the status clear of the best time and the score.
+	for id in ["CHIP_CLEARED", "CHIP_NOT_CLEARED"]:
+		var right := maxf(UiKit.text_w("9:59.9", 16), UiKit.text_w(L10n.f("CHIP_PTS", {"score": "999,999"})))
+		if 16.0 + UiKit.text_w(L10n.t(id)) + 6.0 > 242.0 - 20.0 - right:
+			bad.append("chip " + id)
+	# The tips' cards: on both phone sizes, under the junction's prompt and over the FIRE trigger.
+	var t := Tuning.new()
+	var card := FirstTips.Card.new()
+	for id: String in FirstTips.TIPS:
+		for buttons in [false, true]:
+			for aim in ["auto", "auto_tap", "tap"]:
+				card.id = id
+				card.aim = aim
+				card.buttons = buttons
+				for v: Vector2 in [Vector2(270, 480), Vector2(270, 585)]:
+					var r: Rect2 = card.box(v)
+					var fire := SwipeInput.fire_button(v, t)
+					if r.position.y < 84.0 or r.end.y >= fire.y - fire.z - 8.0:
+						bad.append("tip card %s (%s%s)" % [id, aim, ", buttons" if buttons else ""])
+	card.free()
+	# CONTROLS: every row (a long one wrapped) above BACK.
+	for aim in ["auto", "auto_tap", "tap"]:
+		for buttons in [false, true]:
+			var y := 104.0
+			for r: Array in FE.controls_lines(aim, buttons):
+				var lines := maxi(UiKit.wrap(r[0], FE.CONTROLS_A_W).size(), UiKit.wrap(r[1], FE.CONTROLS_B_W).size())
+				y += FE.CONTROLS_STEP + (lines - 1) * FE.CONTROLS_LINE
+			if y > 430.0 - 4.0:
+				bad.append("controls (%s%s)" % [aim, ", buttons" if buttons else ""])
+	# The briefing's top bar: its tag, where we are and SKIP (as wide as its word needs).
+	var brief := Briefing.load_file("res://game/levels/prototype_slice/briefing.json")
+	var skip_w := maxf(Briefing.SKIP_SIZE.x, UiKit.text_w(L10n.t("BRIEF_SKIP") + " ▶▶") + 16.0)
+	for id in [Briefing.BRIEFING] + Briefing.ENDINGS:
+		var talk := Briefing.conversation(brief, id)
+		if talk.is_empty():
+			continue
+		var n: int = Briefing.lines_of(talk).size()
+		var tag_end := 8.0 + UiKit.text_w(String(talk["title"])) + 14.0
+		var count_w := UiKit.text_w("%d/%d" % [n, n]) + 14.0 + 4.0 if String(talk["title"]).length() <= Briefing.TAG_MOST else 0.0
+		if tag_end + 4.0 + count_w > 270.0 - 8.0 - skip_w:
+			bad.append("briefing top bar " + id)
+	if UiKit.text_w(L10n.t("BRIEF_SIGNAL_LOST")) + 18.0 > Briefing.CARD.x:
+		bad.append("SIGNAL LOST")
+	_check(bad.is_empty(), "languages %s: where strings share their room, they fit it together (%s)" % [lang, bad])
+
+
+## The menus' screens in the pseudo-language (every string about 35% longer, in accented capitals),
+## and in English, on a 270x480 phone: no words off the screen, none over another or under a button,
+## no button over another. (The HUD, the tally and the briefing draw their words: their rooms are
+## _test_l10n_fit's.)
+func _test_l10n_screens() -> void:
+	var was := TranslationServer.get_locale()
+	var window := root.size
+	root.size = Vector2i(405, 720)
+	await process_frame
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var fe = FE.new()
+	root.add_child(fe)
+	fe.mission = JSON.parse_string(FileAccess.get_file_as_string(MISSION_1))
+	FE.force_ios_tip = true
+	var debrief := {"time": 70.0, "spare": 20.0, "mission": 1, "setting": "medium", "unlocked": [[1, "hard"], [2, "easy"], [2, "medium"]],
+			"new_best": true, "was_best": 90.0, "rank": 4, "seq": 0, "new_best_score": true}
+	var screens := {
+		"main": func() -> void: fe.show_main(),
+		"pause": func() -> void: fe.show_pause(),
+		"settings": func() -> void: fe._open(FE.Screen.SETTINGS),
+		"controls": func() -> void: fe._open(FE.Screen.CONTROLS),
+		"controls (buttons, tap only)": func() -> void:
+			settings._values["controls"] = "buttons"
+			settings._values["aim"] = "tap"
+			fe._open(FE.Screen.CONTROLS),
+		"missions": func() -> void: fe._open(FE.Screen.MISSIONS),
+		"mission": func() -> void:
+			fe._open(FE.Screen.MISSIONS)
+			fe.open_mission(1),
+		"board": func() -> void: fe.open_board(1, "medium"),
+		"debrief": func() -> void: fe.show_end(&"extracted", debrief),
+		"debrief (captured)": func() -> void: fe.show_end(&"captured", {"mission": 1, "setting": "hard"}),
+		"name": func() -> void:
+			fe.show_end(&"extracted", debrief)
+			fe._open_name(),
+		"credits": func() -> void: fe._open(FE.Screen.CREDITS),
+		"demo end": func() -> void: fe.open_demo_end(),
+	}
+	var problems := []
+	for lang in [L10n.PSEUDO, "en"]:
+		if lang == L10n.PSEUDO:
+			L10n.use_pseudo()
+		else:
+			TranslationServer.set_locale("en")
+		for name: String in screens:
+			(screens[name] as Callable).call()
+			await process_frame
+			for t in fe.find_children("*", "", true, false):
+				if t is Typer:
+					(t as Typer).finish()
+			await process_frame
+			for p in _l10n_overlaps(fe):
+				problems.append("%s %s: %s" % [lang, name, p])
+			settings._values = saved.duplicate()
+	_check(problems.is_empty(), "languages: the menus' screens in the pseudo-language (and English) on a 270x480 phone: no words off the screen or over each other, no button over another (%s)" % [problems])
+	FE.force_ios_tip = false
+	fe.free()
+	settings._values = saved
+	root.size = window
+	await process_frame
+	TranslationServer.set_locale(was)
+
+
+## What's wrong on the frontend's screen up now: words off the screen, words over words or under a
+## button, a button off the screen or over another (each Label as far as its letters reach).
+func _l10n_overlaps(fe: Node) -> Array:
+	var out := []
+	var view: Vector2 = fe._root.get_viewport_rect().size
+	var words := []
+	var buttons := []
+	for c in fe.find_children("*", "Control", true, false):
+		if c.is_queued_for_deletion() or not (c as Control).is_visible_in_tree():
+			continue
+		if c is Label and (c as Label).text.strip_edges() != "":
+			var l := c as Label
+			var size := l.get_theme_font_size("font_size")
+			var lines := l.text.split("\n")
+			var widest := 0.0
+			for line in lines:
+				widest = maxf(widest, UiKit.text_w(line, size))
+			var r := l.get_global_rect()
+			var x := r.position.x
+			if l.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER:
+				x = r.get_center().x - widest / 2.0
+			var ink := Rect2(x, r.position.y + 1.0, widest, maxf(1.0, r.size.y - 2.0))
+			words.append([l.text, ink])
+			if ink.position.x < 0.0 or ink.end.x > view.x:
+				out.append("'%s' off the screen" % l.text)
+		elif c is Button and (c as Button).text != "":
+			buttons.append([(c as Button).text, (c as Control).get_global_rect()])
+	for i in words.size():
+		for j in range(i + 1, words.size()):
+			if (words[i][1] as Rect2).intersects(words[j][1]):
+				out.append("'%s' over '%s'" % [words[i][0], words[j][0]])
+		for b in buttons:
+			if (words[i][1] as Rect2).intersects(b[1]):
+				out.append("'%s' under the button '%s'" % [words[i][0], b[0]])
+	for i in buttons.size():
+		var bi: Rect2 = buttons[i][1]
+		if bi.position.x < 0.0 or bi.end.x > view.x:
+			out.append("the button '%s' off the screen" % buttons[i][0])
+		for j in range(i + 1, buttons.size()):
+			if bi.grow(-0.5).intersects(buttons[j][1]):
+				out.append("the button '%s' over '%s'" % [buttons[i][0], buttons[j][0]])
+	return out
+
+
+## SETTINGS' LANGUAGE (the decision log's "Languages: Luxembourgish first"): unset, the phone's own
+## (lb, lb-LU: LËTZEBUERGESCH; anything else ENGLISH); kept type-checked like the rest; a press picks
+## the next and the game's in it at once (SETTINGS built again in it), saved; RESET keeps it. And the
+## pseudo-language: longer, accented, its {places} and symbols as they were.
+func _test_language_setting() -> void:
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	var was := TranslationServer.get_locale()
+	_check(L10n.language_of("lb") == "lb" and L10n.language_of("lb-LU") == "lb" and L10n.language_of("LB_lu") == "lb" and L10n.language_of("de-LU") == "en"
+			and L10n.language_of("fr") == "en" and L10n.language_of("") == "en" and L10n.language_for("lb") == "lb" and L10n.language_for("en") == "en"
+			and L10n.language_for("xx") == L10n.detect() and L10n.language_for("") == L10n.detect(),
+			"language: lb (lb-LU) is Luxembourgish, anything else English; unset (or not a language), the phone's own")
+	var path := "user://test_language.cfg"
+	SaveFile.write_text(path, "[settings]\nlanguage=3\naim=\"tap\"\n")
+	settings.load_from(path)
+	var typed: bool = settings.get_value("language") == "" and settings.get_value("aim") == "tap"
+	SaveFile.write_text(path, "[settings]\nlanguage=\"lb\"\n")
+	settings.load_from(path)
+	typed = typed and settings.get_value("language") == "lb"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_check(typed and settings.DEFAULTS["language"] == "", "language: saved and read back type-checked like the rest (a number: unset)")
+	settings._values = saved.duplicate()
+	settings._values["language"] = "en"
+	TranslationServer.set_locale("en")
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	fe._open(fe.Screen.SETTINGS)
+	await process_frame
+	var b: Button = fe.language_button()
+	var row_ok := b != null and b.text == "< ENGLISH >" and _has_label(fe, "LANGUAGE")
+	if b != null:
+		b.pressed.emit()
+	await process_frame
+	var again: Button = fe.language_button()
+	var switched: bool = settings.get_value("language") == "lb" and L10n.current() == "lb" and again != null and again != b \
+			and again.text == "< LËTZEBUERGESCH >" and again.has_focus()
+	settings.reset()
+	var kept: bool = settings.get_value("language") == "lb"
+	if again != null:
+		again.pressed.emit()
+	await process_frame
+	_check(row_ok and switched and kept and settings.get_value("language") == "en" and L10n.current() == "en",
+			"language: SETTINGS' LANGUAGE reads each language in its own name; a press switches the game to it at once (SETTINGS built again, the button kept), RESET keeps it")
+	fe.free()
+	settings._values = saved
+	settings._save()  # (the device's own settings as they were)
+	TranslationServer.set_locale(was)
+	var p := L10n.pseudo("IN COVER - {move} TO BREAK ◀ ▶ 3")
+	_check(p.contains("{move}") and p.contains("◀ ▶") and p.contains(" 3") and p.length() > "IN COVER - {move} TO BREAK ◀ ▶ 3".length() + 3
+			and p.contains("Ö") and not p.contains("O"), "language: the pseudo-language lengthens and accents the words, never a {place} or a symbol (%s)" % p)

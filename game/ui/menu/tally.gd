@@ -37,8 +37,13 @@ const TYPE_STEP := 0.018
 const ROLL := 0.3
 const MULTIPLY_WAIT := 0.3
 const STAMP_WAIT := 0.4
-const ALERT_NAMES := {1: "SNEAKING", 2: "CAUTION", 3: "ALERT"}
+## The alert levels' names' ids (L10n), and their colours.
+const ALERT_NAMES := {1: "HUD_ALERT_1", 2: "HUD_ALERT_2", 3: "HUD_ALERT_3"}
 const ALERT_COLORS := {1: UiKit.GREEN, 2: UiKit.AMBER, 3: UiKit.RED}
+## Each row's id of its words (L10n), by the name Score knows it by.
+const LABEL_IDS := {"TIME": "TALLY_TIME", "DISTANCE": "TALLY_DISTANCE", "CHOPPER TO SPARE": "TALLY_SPARE", "ENEMIES DOWN": "TALLY_DOWNED",
+		"HITS TAKEN": "TALLY_HITS", "THINGS RUN INTO": "TALLY_RUN_INTO", "ALARMS SET OFF": "TALLY_SET_OFF", "ALARMS STOPPED": "TALLY_STOPPED",
+		"HIGHEST ALERT": "TALLY_TOP_ALERT", "ROUTE": "TALLY_ROUTE", "NEW AREAS FOUND": "TALLY_NEW_AREAS"}
 
 ## [label, kind ("time", "clock", "metres", "count", "text"), value, colour, points]: see rows_for().
 var rows: Array = []
@@ -89,12 +94,18 @@ static func rows_for(stats: Dictionary) -> Array:
 	out.append(["ALARMS SET OFF", "count", set_off, UiKit.RED if set_off > 0 else UiKit.PAPER])
 	out.append(["ALARMS STOPPED", "count", int(stats.get("alarms_stopped", 0)), UiKit.PAPER])
 	var top := clampi(int(stats.get("top_alert", 1)), 1, 3)
-	out.append(["HIGHEST ALERT", "text", ALERT_NAMES[top], ALERT_COLORS[top]])
-	out.append(["ROUTE", "text", String(stats.get("levels", "MAIN")), UiKit.TEAL])
+	out.append(["HIGHEST ALERT", "text", alert_name(top), ALERT_COLORS[top]])
+	out.append(["ROUTE", "text", RouteMap.levels_shown(String(stats.get("levels", "MAIN"))), UiKit.TEAL])
 	out.append(["NEW AREAS FOUND", "count", int(stats.get("new_areas", 0)), UiKit.TEAL])
 	for row in out:
 		row.append(Score.row_points(row[0], stats))
+		row[0] = L10n.t(LABEL_IDS[row[0]])  # (scored by its name, shown in words)
 	return out
+
+
+## An alert level's name (1 SNEAKING, 2 CAUTION, 3 ALERT), in words.
+static func alert_name(level: int) -> String:
+	return L10n.t(ALERT_NAMES.get(clampi(level, 1, 3)))
 
 
 ## The SCORE line for a run (stats as rows_for's, and its "setting"), and the line under it.
@@ -110,7 +121,7 @@ func setup(stats: Dictionary, kind: String = "", text: String = "") -> void:
 
 ## The multiplier as it types out beside SCORE: "x2 MEDIUM" ("x1" with no setting).
 func mult_text() -> String:
-	return "x%d %s" % [mult, setting.to_upper()] if setting != "" else "x%d" % mult
+	return L10n.f("TALLY_MULT", {"n": mult, "setting": L10n.setting_name(setting)}) if setting != "" else "x%d" % mult
 
 
 ## How a row's value reads after `step` of `steps` count steps.
@@ -121,7 +132,7 @@ static func value_text(row: Array, step: int, steps: int) -> String:
 			var d := int(round(float(row[2]) * k * 10.0))  # tenths of a second, so 59.97 s is 1:00.0
 			return "%d:%02d.%d" % [d / 600, (d / 10) % 60, d % 10]
 		"metres":
-			return "%d M" % int(round(int(row[2]) * k))
+			return L10n.f("TALLY_METRES", {"n": int(round(int(row[2]) * k))})
 		"count":
 			return str(int(round(int(row[2]) * k)))
 		_:
@@ -319,10 +330,11 @@ func _draw() -> void:
 ## the right; under it, the stamp (NEW BEST on a red slanted block, NEW ENTRY #N, or BEST).
 func _draw_score(f: Font, y0: float) -> void:
 	draw_rect(Rect2(0, y0, size.x, 1), Color(UiKit.TEAL_DIM, 0.8))
-	draw_string(f, Vector2(0, y0 + 15.0), "SCORE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+	var word := L10n.t("TALLY_SCORE")
+	draw_string(f, Vector2(0, y0 + 15.0), word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
 	var m := mult_text()
 	if _mult_typed > 0:
-		draw_string(f, Vector2(36.0, y0 + 15.0), m.substr(0, _mult_typed), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.AMBER)
+		draw_string(f, Vector2(maxf(36.0, UiKit.text_w(word) + 6.0), y0 + 15.0), m.substr(0, _mult_typed), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.AMBER)
 	var num := Score.format(shown_score())
 	draw_string(f, Vector2(0, y0 + 17.0), num, HORIZONTAL_ALIGNMENT_RIGHT, size.x, 16, UiKit.PAPER if not _multiplied else UiKit.AMBER)
 	if not _stamped or outcome_kind == "" or outcome == "":

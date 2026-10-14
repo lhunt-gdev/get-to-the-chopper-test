@@ -43,14 +43,16 @@ const ENDINGS := ["extracted", "killed", "captured", "chopper_left", "dead_end"]
 ## The endings where CROSS is gone (user: "Signal lost"): his card in static under SIGNAL LOST, his
 ## waveform flat for the whole conversation, and only the others speak.
 const SIGNAL_LOST := ["killed"]
-## The top bar's tag: the START briefing's (an ending's is its "title"), and the most letters a tag
-## can have (it shares the top bar with where we are and SKIP).
-const TAG := "MISSION BRIEFING"
+## The top bar's tag: the START briefing's (the id of its words: L10n; an ending's is its "title"),
+## and the most letters a tag can have (it shares the top bar with where we are and SKIP).
+const TAG := "BRIEF_TAG"
 const TAG_MOST := 18
+## A longer tag (a translation's) can have up to this many: where we are (3/9) then makes way for it.
+const TAG_LONGEST := 26
 ## CROSS's card when his signal's lost: this much static over his face (a ghost of it under the
 ## snow), and the words across it.
 const LOST_STATIC := 0.86
-const LOST_TEXT := "SIGNAL LOST"
+const LOST_TEXT := "BRIEF_SIGNAL_LOST"
 ## The most letters a name can have: it's shown big on the name plate by its card.
 const NAME_MOST := 12
 ## Letters a text row holds, and rows a line can have (the speaker's [NAME] included).
@@ -136,8 +138,9 @@ const WAVE_MOST := 64
 ## The slash behind the speech: its tilt, and how far past the speech's band it reaches up and down.
 const SLASH_TILT := -0.16
 const SLASH_OVER := 16.0
-## Typed text that a word processor puts in, made plain for the pixel font.
-const PLAIN := {"’": "'", "‘": "'", "“": "\"", "”": "\"", "—": "-", "–": "-", "…": "...", "\n": " ", "\t": " "}
+## Typed text that a word processor puts in, made plain for the pixel font (it has the typeset quotes,
+## Luxembourgish's „...“ and ’ among them, but the game's dashes and dots are the plain ones).
+const PLAIN := {"—": "-", "–": "-", "…": "...", "\n": " ", "\t": " "}
 
 ## The script (load_file()); set before it's added.
 var data: Dictionary = {}
@@ -176,7 +179,7 @@ var _open_cued := false
 ## flat; and the top bar's tag.
 var _lost := false
 var _lost_cued := false
-var _title := TAG
+var _title := ""
 var _pics := {}
 var _rect := {}
 var _front: Layer
@@ -199,10 +202,26 @@ static func plain(text: String) -> String:
 	return " ".join(text.split(" ", false)).strip_edges()
 
 
+## A line's words: in the language shown, from its "key" (L10n: strings.csv has each line's English,
+## the same as its "text"); a line with no key, its "text".
+static func words(entry: Dictionary) -> String:
+	var key := String(entry.get("key", ""))
+	return L10n.t_or(key, String(entry.get("text", ""))) if key != "" else String(entry.get("text", ""))
+
+
+## A conversation's tag in the top bar, in words: an ending's from its "title_key" (or its "title"),
+## the START briefing's TAG's.
+static func tag_words(e: Dictionary, fallback: String = "") -> String:
+	var key := String(e.get("title_key", ""))
+	if key != "":
+		return L10n.t_or(key, String(e.get("title", fallback)))
+	return String(e.get("title", fallback))
+
+
 ## A line of the script as shown: "[NAME] text", the {names} filled in.
 static func line_text(d: Dictionary, entry: Dictionary) -> String:
 	var cast: Dictionary = d.get("cast", {})
-	var text := plain(String(entry.get("text", "")))
+	var text := plain(words(entry))
 	for id: String in cast:
 		text = text.replace("{%s}" % id, String(cast[id].get("name", id)))
 	var who: Dictionary = cast.get(String(entry.get("who", "")), {})
@@ -238,14 +257,14 @@ static func conversation(d: Dictionary, id: String = BRIEFING) -> Dictionary:
 	if id == BRIEFING:
 		var out := d.duplicate()
 		out["id"] = BRIEFING
-		out["title"] = String(d.get("title", TAG))
+		out["title"] = tag_words(d, L10n.t(TAG))
 		out.erase("endings")
 		return out
 	var endings = d.get("endings")
 	if not endings is Dictionary or not (endings as Dictionary).get(id) is Dictionary:
 		return {}
 	var e: Dictionary = endings[id]
-	return {"id": id, "cast": d.get("cast", {}), "lines": e.get("lines", []), "title": String(e.get("title", "")),
+	return {"id": id, "cast": d.get("cast", {}), "lines": e.get("lines", []), "title": tag_words(e),
 			"signal_lost": id in SIGNAL_LOST}
 
 
@@ -272,7 +291,7 @@ static func problems(d: Dictionary) -> Array[String]:
 			out.append("cast %s: '%s' is longer than %d letters (its name plate)" % [id, c["name"], NAME_MOST])
 		if not ResourceLoader.exists(String(c.get("portrait", ""))):
 			out.append("cast %s: no picture at '%s'" % [id, c.get("portrait", "")])
-	out.append_array(_tag_problems(String(d.get("title", TAG)), "the briefing"))
+	out.append_array(_tag_problems(tag_words(d, L10n.t(TAG)), "the briefing"))
 	out.append_array(_line_problems(d, d.get("lines"), "", false))
 	var endings = d.get("endings", {})
 	if not endings is Dictionary:
@@ -288,7 +307,7 @@ static func problems(d: Dictionary) -> Array[String]:
 		if not e is Dictionary:
 			out.append("%s: not a conversation" % id)
 			continue
-		out.append_array(_tag_problems(String(e.get("title", "")), id))
+		out.append_array(_tag_problems(tag_words(e), id))
 		out.append_array(_line_problems(d, e.get("lines"), id + " ", id in SIGNAL_LOST))
 	return out
 
@@ -309,7 +328,7 @@ static func _line_problems(d: Dictionary, lines, prefix: String, lost: bool) -> 
 		if lost and String(l["who"]) == PLAYER:
 			out.append("%sline %d: %s's signal is lost: he can't speak" % [prefix, i + 1, PLAYER.to_upper()])
 			continue
-		if plain(String(l.get("text", ""))) == "":
+		if plain(words(l)) == "":
 			out.append("%sline %d: no words" % [prefix, i + 1])
 			continue
 		var text := line_text(d, l)
@@ -333,8 +352,8 @@ static func _tag_problems(tag: String, of: String) -> Array[String]:
 	tag = plain(tag)
 	if tag == "":
 		out.append("%s: no title (its tag in the top bar)" % of)
-	elif tag.length() > TAG_MOST:
-		out.append("%s: the title '%s' is longer than %d letters (the top bar)" % [of, tag, TAG_MOST])
+	elif tag.length() > TAG_LONGEST:
+		out.append("%s: the title '%s' is longer than %d letters (the top bar)" % [of, tag, TAG_LONGEST])
 	for ch in tag:
 		if not _has_glyph(ch):
 			out.append("%s: the title's font has no '%s'" % [of, ch])
@@ -352,7 +371,7 @@ static func lines_of(d: Dictionary) -> Array:
 		return out
 	var lost := bool(d.get("signal_lost", false))
 	for l in lines:
-		if l is Dictionary and (cast as Dictionary).has(String(l.get("who", ""))) and plain(String(l.get("text", ""))) != "" \
+		if l is Dictionary and (cast as Dictionary).has(String(l.get("who", ""))) and plain(words(l)) != "" \
 				and not (lost and String(l["who"]) == PLAYER):
 			out.append({"who": String(l["who"]), "text": line_text(d, l)})
 	return out
@@ -423,7 +442,7 @@ static func _lean(xl: float, xr: float, y0: float, y1: float) -> PackedVector2Ar
 
 
 static func _has_glyph(ch: String) -> bool:
-	return ch == " " or UiKit.GLYPHS.has(ch.to_upper())
+	return UiKit.has_glyph(ch)
 
 
 func _ready() -> void:
@@ -431,9 +450,9 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # added already: size it now
 	_lines = lines_of(data)
 	_lost = bool(data.get("signal_lost", false))
-	_title = plain(String(data.get("title", TAG))).to_upper()
+	_title = plain(String(data.get("title", L10n.t(TAG)))).to_upper()
 	if _title == "":
-		_title = TAG
+		_title = L10n.t(TAG)
 	# Who's on the left card first: the first in the script who isn't CROSS.
 	for l in _lines:
 		if l["who"] != PLAYER:
@@ -457,7 +476,7 @@ func _ready() -> void:
 	_front = Layer.new(_draw_front)
 	add_child(_front)
 	skip_button = Button.new()
-	skip_button.text = "SKIP ▶▶"
+	skip_button.text = L10n.t("BRIEF_SKIP") + " ▶▶"
 	skip_button.theme_type_variation = "CompactButton"
 	skip_button.focus_mode = Control.FOCUS_NONE  # (Space / Enter are "next", not SKIP)
 	add_child(skip_button)
@@ -480,8 +499,11 @@ func _layout() -> void:
 		p.size = _rect[side].size
 		p.pivot_offset = _rect[side].size / 2.0
 	_pose_cards()
-	skip_button.position = _rect["skip"].position
-	skip_button.size = _rect["skip"].size
+	# (wider to the left for a longer word)
+	var sk: Rect2 = _rect["skip"]
+	var sw := maxf(sk.size.x, UiKit.text_w(skip_button.text) + 16.0)
+	skip_button.position = Vector2(sk.end.x - sw, sk.position.y)
+	skip_button.size = Vector2(sw, sk.size.y)
 
 
 # --- What the level, the tests and the bots use ----------------------------------------------
@@ -865,8 +887,8 @@ func _draw() -> void:
 	_slab(self, Rect2(tag.position + Vector2(2, 2), tag.size), 3.0, Color(UiKit.INK, 0.8 * shade))
 	_slab(self, tag, 3.0, Color(UiKit.RED, shade))
 	draw_string(f, Vector2(tag.position.x + 8, tag.position.y + 11), _title, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, shade))
-	# Where we are (3/9), next to it.
-	if _line >= 0:
+	# Where we are (3/9), next to it (unless a translation's long tag needs its room).
+	if _line >= 0 and _title.length() <= TAG_MOST:
 		var count_s := "%d/%d" % [_line + 1, _lines.size()]
 		var cr := Rect2(tag.end.x + 4.0, tag.position.y, count_s.length() * 6.0 + 14.0, tag.size.y)
 		_slab(self, cr, 3.0, Color(UiKit.PANEL_SOLID, shade))
@@ -929,12 +951,13 @@ func _draw_lost(ci: CanvasItem) -> void:
 	if (_pics["right"] as Portrait).power < 0.7 or is_closing():
 		return
 	var at: Vector2 = _card_pose("right")["at"]
-	var w := LOST_TEXT.length() * 6.0 + 18.0
+	var lost := L10n.t(LOST_TEXT)
+	var w := UiKit.text_w(lost) + 18.0
 	var r := Rect2(roundf(at.x - w / 2.0), roundf(at.y - 8.0), w, 16.0)
 	_slab(ci, Rect2(r.position + Vector2(2, 2), r.size), 4.0, Color(UiKit.INK, 0.9))
 	_slab(ci, r, 4.0, UiKit.RED)
 	var lit := fmod(_t, 1.0) < 0.65
-	ci.draw_string(UiKit.font(), r.position + Vector2(10.0, 12.0), LOST_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, 1.0 if lit else 0.3))
+	ci.draw_string(UiKit.font(), r.position + Vector2(10.0, 12.0), lost, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, 1.0 if lit else 0.3))
 
 
 ## A name plate: a chunky slanted block with the name big, solid in its owner's colour while they
@@ -1063,8 +1086,8 @@ func _draw_speech(ci: CanvasItem) -> void:
 	if _phase == Phase.TALKING and line_done():
 		# TAP under the rows (the left card's speaker), or under the bar at the left (CROSS's: his
 		# card's at the right).
-		var last := "TAP TO END" if conversation_id() == BRIEFING else "TAP FOR DEBRIEF"  # (after the run: what's next)
-		var hint := last if _line + 1 >= _lines.size() else ("TAP TO CONTINUE" if _line == 0 else "TAP")
+		var last := L10n.t("BRIEF_TAP_END") if conversation_id() == BRIEFING else L10n.t("BRIEF_TAP_DEBRIEF")  # (after the run: what's next)
+		var hint := last if _line + 1 >= _lines.size() else (L10n.t("BRIEF_TAP_CONTINUE") if _line == 0 else L10n.t("BRIEF_TAP"))
 		var hr := hint_rect(band, n, top, hint)
 		hr.position.x = foot.x if top else hr.position.x
 		_slab(ci, Rect2(hr.position + Vector2(2, 2), hr.size), 3.0, Color(UiKit.INK, 0.9))

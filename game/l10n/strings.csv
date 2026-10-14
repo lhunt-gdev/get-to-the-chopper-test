@@ -1,0 +1,274 @@
+keys,en,_where,_fit,_note
+LANGUAGE_NAME,ENGLISH,"SETTINGS' LANGUAGE: the language's own name (filled in already: it is the choice SETTINGS shows)",8:96,Never translated: each language is named in its own words
+MENU_CLASSIFIED,// CLASSIFIED: EYES ONLY,Main menu: the red tag over the logo,8:254,
+MISSION_LINE,MISSION {n}: {mission},"Main menu: under the logo; HIGH SCORES: under the title",8:222,"{n}: the mission's number (1, or 01); {mission}: its name"
+MISSION_N,MISSION {n},"The opening pan: over the mission's name, big letters",16:254,{n}: the mission's number
+MENU_MISSION_SELECT,MISSION SELECT,"Main menu button; the mission select's title (big letters)",8:136,
+MENU_HIGH_SCORES,HIGH SCORES,"Main menu button; the scoreboard's title (big letters)",8:136,
+MENU_SETTINGS,SETTINGS,"Main menu and pause menu button; the settings' title (big letters)",8:136,
+MENU_CONTROLS,CONTROLS,"Main menu and pause menu button; the controls' title (big letters); a SETTINGS section",8:136,
+MENU_CREDITS,CREDITS,"Main menu: the small button under the others; the credits' title (big letters)",8:60,
+MENU_DEMO,DEMO,Main menu: at the foot,8:254,
+COMMON_BACK,BACK,A button on most screens,8:84,
+COMMON_BOARD,BOARD,"A button: a mission's screen, the debrief (the scoreboard)",8:84,"On the debrief it shares a row with RETRY and MAIN MENU"
+COMMON_CONTINUE,CONTINUE,The end-of-demo screen's button,8:136,
+PAUSE_TITLE,PAUSED,"The pause menu's title, big letters",16:240,
+PAUSE_SUB,MISSION ON HOLD,The pause menu: under the title,8:222,
+PAUSE_RESUME,RESUME,Pause menu button,8:136,
+PAUSE_QUIT,QUIT TO MENU,Pause menu button,8:136,
+CONTROLS_SUB,FIELD MANUAL,CONTROLS: under the title,8:222,
+CONTROLS_SWIPE_LR,SWIPE < >,"CONTROLS: what you do (left column); also indented, for leaving cover",8:100x2,
+CONTROLS_DODGE,DODGE A LANE,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_SWIPE_UP,SWIPE UP,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_JUMP,JUMP,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_SWIPE_DOWN,SWIPE DOWN,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_SLIDE,SLIDE,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_TAP_LR,TAP ◀ ▶,"CONTROLS with MOVE on BUTTONS: what you do (left column); also indented, for leaving cover",8:100x2,◀ ▶ are the on-screen buttons' arrows: keep them
+CONTROLS_TAP_UP,TAP ▲,CONTROLS with MOVE on BUTTONS: what you do (left column),8:100x2,▲ is the jump button's arrow: keep it
+CONTROLS_TAP_DOWN,TAP ▼,CONTROLS with MOVE on BUTTONS: what you do (left column),8:100x2,▼ is the slide button's arrow: keep it
+CONTROLS_OR_SWIPE,OR SWIPE,CONTROLS with MOVE on BUTTONS: what you do (left column),8:100x2,
+CONTROLS_SAME_MOVES,THE SAME MOVES,CONTROLS with MOVE on BUTTONS: what it does (right column),8:118x2,
+CONTROLS_TAP_ENEMY,TAP ENEMY,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_TARGET_IT,TARGET IT,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_HOLD_FIRE,HOLD FIRE,CONTROLS: what you do (left column),8:100x2,FIRE is the trigger button
+CONTROLS_SHOOT_TARGET,SHOOT THE TARGET,CONTROLS (AIM: TAP ONLY): what it does (right column),8:118x2,
+CONTROLS_SHOOT_AUTO,SHOOT (AUTO-AIM),CONTROLS: what it does (right column),8:118x2,
+CONTROLS_RUN_INTO_COVER,RUN INTO COVER,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_HIDE,HIDE BEHIND IT,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_LEAVE_COVER,LEAVE COVER,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_OUTER_LANES,OUTER LANES,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_SIDE_EXITS,TAKE SIDE EXITS,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_TRIPWIRES,TRIPWIRES,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_RAISE_ALERT,RAISE THE ALERT,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_ALARM_BOXES,ALARM BOXES,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_ALERT_DOWN,SHOOT: ALERT DOWN,CONTROLS: what it does (right column),8:118x2,
+CONTROLS_CHOPPER,THE CHOPPER,CONTROLS: what you do (left column),8:100x2,
+CONTROLS_REACH,REACH IT IN TIME,CONTROLS: what it does (right column),8:118x2,
+SETTINGS_SUB,AGENT PREFERENCES,SETTINGS: under the title,8:222,
+SETTINGS_AUDIO,AUDIO,SETTINGS: a section,8:200,
+SETTINGS_DISPLAY,DISPLAY,SETTINGS: a section,8:200,
+SETTINGS_LANGUAGE,LANGUAGE,SETTINGS: a row (its choices are each language's own name and are never translated),8:84,
+SETTINGS_SOUND,SOUND,SETTINGS: a row (ON / OFF),8:160,
+SETTINGS_MASTER,MASTER,SETTINGS: a volume slider's row (the overall volume),8:108,
+SETTINGS_MUSIC,MUSIC,SETTINGS: a volume slider's row,8:108,
+SETTINGS_EFFECTS,EFFECTS,SETTINGS: a volume slider's row (sound effects),8:108,
+SETTINGS_AMBIENCE,AMBIENCE,SETTINGS: a volume slider's row (background sound),8:108,
+SETTINGS_BRIGHTNESS,BRIGHTNESS,SETTINGS: a slider's row,8:108,
+SETTINGS_SCREEN_SHAKE,SCREEN SHAKE,SETTINGS: a row (ON / OFF),8:160,
+SETTINGS_RETRO_FILTER,RETRO FILTER,SETTINGS: a row (ON / OFF; the old-TV colour filter),8:160,
+SETTINGS_BLOOD,BLOOD,SETTINGS: a row (ON / OFF),8:160,
+SETTINGS_AIM,AIM,"SETTINGS: a row (AUTO, AUTO + TAP, TAP ONLY)",8:108,The row's name and its choice share the row
+SETTINGS_TRIGGER,TRIGGER,"SETTINGS: a row (which side the FIRE trigger is on)",8:108,The row's name and its choice share the row
+SETTINGS_SWIPE_SPEED,SWIPE SPEED,"SETTINGS: a row (how fast a swipe has to be: LOW, MEDIUM, HIGH)",8:108,The row's name and its choice share the row
+SETTINGS_MOVE,MOVE,"SETTINGS: a row (SWIPE, or BUTTONS: on-screen buttons)",8:108,The row's name and its choice share the row
+SETTINGS_TIPS,TIPS,"SETTINGS: a row (the first-time tips: SHOW AGAIN, ON / OFF)",8:72,"Shares its row with SHOW AGAIN and ON / OFF"
+SETTINGS_ON,ON,SETTINGS: a switch,8:36,
+SETTINGS_OFF,OFF,SETTINGS: a switch,8:36,
+SETTINGS_SHOW_AGAIN,SHOW AGAIN,SETTINGS' TIPS row: a button (every tip shows again),8:96,
+SETTINGS_DONE,DONE,SETTINGS' TIPS row: SHOW AGAIN once pressed,8:96,
+SETTINGS_RESET,RESET,SETTINGS: a button (every setting back to how it was),8:84,
+AIM_AUTO,AUTO,SETTINGS' AIM: a choice (FIRE aims itself),8:96,
+AIM_AUTO_TAP,AUTO + TAP,"SETTINGS' AIM: a choice (FIRE aims itself, or tap an enemy)",8:96,
+AIM_TAP,TAP ONLY,SETTINGS' AIM: a choice (tap an enemy to aim at it),8:96,
+TRIGGER_RIGHT,RIGHT,SETTINGS' TRIGGER: a choice,8:96,
+TRIGGER_LEFT,LEFT,SETTINGS' TRIGGER: a choice,8:96,
+SWIPE_LOW,LOW,SETTINGS' SWIPE SPEED: a choice (not the difficulty),8:96,
+SWIPE_MEDIUM,MEDIUM,SETTINGS' SWIPE SPEED: a choice (not the difficulty),8:96,
+SWIPE_HIGH,HIGH,SETTINGS' SWIPE SPEED: a choice (not the difficulty),8:96,
+MOVE_SWIPE,SWIPE,SETTINGS' MOVE: a choice (moves by swiping),8:96,
+MOVE_BUTTONS,BUTTONS,SETTINGS' MOVE: a choice (on-screen move buttons too),8:96,
+MISSIONS_SUB,CONDOR JOB SHEET,The mission select: under the title,8:222,CONDOR is the agency's name: keep it
+COMING_SOON,COMING SOON,"The mission select: a mission not made yet; a mission's screen",8:120,
+MISSION_NAME_COLD_CALL,COLD CALL,"Mission 1's name: the mission select, its screen's title (big letters), the debrief, the boards, the opening pan (big letters)",8:141,
+MISSION_NAME_SHORT_LEASH,SHORT LEASH,"Mission 2's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_DEAD_AIR,DEAD AIR,"Mission 3's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_NOTHING_TO_DECLARE,NOTHING TO DECLARE,"Mission 4's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_SEA_LEGS,SEA LEGS,"Mission 5's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_FIRE_SALE,FIRE SALE,"Mission 6's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_GLASS_HOUSE,GLASS HOUSE,"Mission 7's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_LIGHTS_OUT,LIGHTS OUT,"Mission 8's name: the mission select, the end-of-demo screen",8:141,
+MISSION_NAME_HOT_EXFIL,HOT EXFIL,"Mission 9's name (also the game's): the mission select, the end-of-demo screen",8:141,
+MISSION_PICK,MISSION {n}: PICK YOUR DIFFICULTY,A mission's screen: under the title,8:222x2,{n}: the mission's number (01)
+MISSION_BEST_NOTE,"BEST: FASTEST EXTRACTION, TOP SCORE",A mission's screen: under its three difficulties (what BEST means),8:254x2,
+SETTING_EASY,EASY,"A difficulty: a mission's screen (big letters), the boards' tabs, the debrief",8:66,
+SETTING_MEDIUM,MEDIUM,"A difficulty: a mission's screen (big letters), the boards' tabs, the debrief",8:66,
+SETTING_HARD,HARD,"A difficulty: a mission's screen (big letters), the boards' tabs, the debrief",8:66,
+SETTING_EASY_LETTER,E,The mission select: EASY's one letter (by its best time and on its mark),8:6,One letter
+SETTING_MEDIUM_LETTER,M,The mission select: MEDIUM's one letter (by its best time and on its mark),8:6,One letter
+SETTING_HARD_LETTER,H,The mission select: HARD's one letter (by its best time and on its mark),8:6,One letter
+CHIP_CLEARED,CLEARED,A mission's screen: a difficulty got out of,8:126,
+CHIP_NOT_CLEARED,NOT CLEARED YET,A mission's screen: a difficulty not got out of yet,8:126,
+CHIP_CLEAR_TO_UNLOCK,CLEAR {setting} TO UNLOCK,A mission's screen: a locked difficulty,8:180,{setting}: the difficulty before it (EASY or MEDIUM)
+CHIP_LOCKED,LOCKED,A mission's screen: a locked difficulty,8:180,
+CHIP_BEST,BEST,A mission's screen: over the best time,8:60,
+CHIP_PTS,{score} PTS,A mission's screen: the top score (PTS: points),8:110,{score}: the score (or --)
+NEW_ENTRY,NEW ENTRY #{rank},"The name entry's title (big letters); under the debrief's SCORE",8:200,{rank}: the place on the scoreboard (1-10)
+NAME_ENTER,ENTER YOUR NAME,The name entry: under the title,8:222,
+KEY_SPACE,SP,The name entry: the space key,8:30,
+KEY_DEL,DEL,The name entry: the delete key,8:30,
+KEY_OK,OK,The name entry: the key that saves the name,8:64,
+END_EXTRACTED,EXFIL COMPLETE,"The debrief's title for an escape (big letters); the scoreboard's rows",8:138,
+END_EXTRACTED_SUB,EXTRACTED BY CHOPPER,The debrief: under the title,8:236,
+END_KILLED,KILLED IN ACTION,"The debrief's title when CROSS is killed (big letters); the scoreboard's rows",8:138,
+END_KILLED_SUB,AGENT DOWN,The debrief: under the title,8:236,
+END_CAPTURED,AGENT CAPTURED,"The debrief's title when CROSS is caught (big letters); the scoreboard's rows",8:138,
+END_CAPTURED_SUB,TAKEN BY THE ENEMY,The debrief: under the title,8:236,
+END_CHOPPER_LEFT,THE CHOPPER LEFT,"The debrief's title when the chopper went without him (big letters); the scoreboard's rows",8:138,
+END_DEAD_END,NO WAY THROUGH,"The debrief's title for a dead end (big letters); the scoreboard's rows",8:138,
+END_MISSION_FAILED,MISSION FAILED,The debrief: under the title (the chopper left; a dead end),8:236,
+DEBRIEF_HEADER,DEBRIEF,"The debrief: the panel's heading (the mission and difficulty across from it)",8:72,
+DEBRIEF_NEW_BEST_TIME,NEW BEST TIME,The debrief: under the buttons,8:246x2,
+DEBRIEF_NEW_BEST_TIME_WAS,NEW BEST TIME - WAS {time},The debrief: under the buttons,8:246x2,{time}: the old best (1:30.2)
+DEBRIEF_UNLOCKED,{setting} UNLOCKED,The debrief: under the buttons,8:246x2,{setting}: a difficulty (MEDIUM)
+DEBRIEF_UNLOCKED_NEXT,MISSION {n}: {settings} UNLOCKED,The debrief: under the buttons,8:246x2,"{n}: the next mission's number; {settings}: its difficulties (EASY + MEDIUM)"
+DEBRIEF_RETRY,RETRY,The debrief: a button,8:72,"Shares a row with BOARD and MAIN MENU"
+DEBRIEF_MAIN_MENU,MAIN MENU,The debrief: a button,8:72,"Shares a row with RETRY and BOARD"
+TALLY_TIME,TIME,The debrief's tally: a row,8:150,
+TALLY_DISTANCE,DISTANCE,The debrief's tally: a row,8:150,
+TALLY_SPARE,CHOPPER TO SPARE,The debrief's tally: a row (how long the chopper would still have waited),8:150,
+TALLY_DOWNED,ENEMIES DOWN,The debrief's tally: a row,8:150,
+TALLY_HITS,HITS TAKEN,The debrief's tally: a row,8:150,
+TALLY_RUN_INTO,THINGS RUN INTO,The debrief's tally: a row (obstacles he ran into),8:150,
+TALLY_SET_OFF,ALARMS SET OFF,The debrief's tally: a row,8:150,
+TALLY_STOPPED,ALARMS STOPPED,The debrief's tally: a row,8:150,
+TALLY_TOP_ALERT,HIGHEST ALERT,The debrief's tally: a row,8:150,
+TALLY_ROUTE,ROUTE,"The debrief's tally: a row (the levels he went through: MAIN > ROOF)",8:150,
+TALLY_NEW_AREAS,NEW AREAS FOUND,The debrief's tally: a row,8:150,
+TALLY_METRES,{n} M,The debrief's tally: DISTANCE's value (M: metres),8:66,{n}: the metres
+TALLY_SCORE,SCORE,The debrief: the score's line,8:48,
+TALLY_MULT,x{n} {setting},"The debrief: by SCORE, the difficulty's multiplier (x2 MEDIUM)",8:96,"{n}: 1, 2 or 3; {setting}: the difficulty"
+SCORE_NEW_BEST,NEW BEST,The debrief: under SCORE (on a red block),8:200,
+SCORE_NEW_BEST_RANK,NEW BEST #{rank},The debrief: under SCORE (on a red block),8:200,{rank}: the place on the scoreboard
+SCORE_BEST,BEST {score},The debrief: under SCORE (his best there),8:200,{score}: his best score
+TIER_ROOF,ROOF,"The debrief's route map (a level's name, left) and the tally's ROUTE",8:42,
+TIER_MAIN,MAIN,"The debrief's route map (a level's name, left) and the tally's ROUTE",8:42,The ground floor
+TIER_BELOW,BELOW,"The debrief's route map (a level's name, left) and the tally's ROUTE",8:42,Underground
+AREA_MAIN_FLOOR_LOBBY,MAIN FLOOR LOBBY,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_BUILDING_MAIN_FLOOR,BUILDING MAIN FLOOR,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_SECURITY_WING,SECURITY WING,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_STAFF_CANTEEN,STAFF CANTEEN,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_SERVICE_TUNNEL,SERVICE TUNNEL,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_BOILER_ROOM,BOILER ROOM,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_ROOFTOPS,ROOFTOPS,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_ROOF_EDGE,ROOF EDGE,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_MAIN_FLOOR_EXIT,MAIN FLOOR EXIT,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+AREA_HELIPAD,HELIPAD,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",8:210,
+WAY_MAIN_FLOOR,MAIN FLOOR,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_SECURITY,SECURITY,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_CANTEEN,CANTEEN,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_EXIT,EXIT,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_HELIPAD,HELIPAD,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_ROOF_EDGE,ROOF EDGE,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_BOILER_ROOM,BOILER ROOM,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_LADDER,LADDER,"In the run: where a way goes, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_UP,UP,"In the run: a way up the stairs, over the road as you come up to it",8:84,The sign in the level stays in English
+WAY_DOWN,DOWN,"In the run: a way down the stairs, over the road as you come up to it",8:84,The sign in the level stays in English
+HUD_LIFE,LIFE,"In the run: top left, by the life bar",8:36,
+HUD_ALERT_1,SNEAKING,"In the run: top left, the alert box (level 1 of 3); the debrief's HIGHEST ALERT; the scoreboard",8:66,
+HUD_ALERT_2,CAUTION,"In the run: top left, the alert box (level 2 of 3); the debrief's HIGHEST ALERT; the scoreboard",8:66,
+HUD_ALERT_3,ALERT,"In the run: top left, the alert box (level 3 of 3); the debrief's HIGHEST ALERT; the scoreboard",8:66,
+HUD_CHOPPER_INBOUND,CHOPPER INBOUND,In the run: the message under the clock,8:228,
+HUD_CHOPPER_LANDED,CHOPPER LANDED,In the run: the message under the clock,8:228,
+HUD_CHOPPER_LIFTING_OFF,CHOPPER LIFTING OFF,In the run: the message under the clock (blinking),8:228,
+HUD_STOP_RUNNER,STOP THE RUNNER,In the run: the message under the clock (a guard running for an alarm),8:228,
+HUD_RUNNER_DOWN,RUNNER DOWN,In the run: the message under the clock,8:228,
+HUD_ALARM_RAISED,ALARM RAISED,In the run: the message under the clock,8:228,
+HUD_SNIPER,SNIPER!,In the run: the message under the clock,8:228,
+HUD_SPOTTED,SPOTTED,In the run: the message under the clock,8:228,
+HUD_SQUAD_TAIL,SQUAD ON YOUR TAIL,In the run: the message under the clock,8:228,
+HUD_SQUAD_FALLING_BACK,SQUAD FALLING BACK,In the run: the message under the clock,8:228,
+HUD_SQUAD_SHAKEN,SQUAD SHAKEN OFF,In the run: the message under the clock,8:228,
+HUD_CAUGHT,CAUGHT,In the run: the message under the clock,8:228,
+HUD_REAR_CAM,REAR CAM,In the run: the rear-view monitor's label (top),8:60,
+HUD_SQUAD,SQUAD {n},In the run: the rear-view monitor (how many are chasing),8:96,{n}: how many
+HUD_CLEAR,CLEAR,In the run: the rear-view monitor (none chasing),8:48,
+HUD_BOSS,BOSS,In the run: by the boss's health bar,8:48,
+HUD_ALARM,ALARM,In the run: by the alarm runner's bar,8:48,
+HUD_REPLAY,REPLAY,"The boss's knockout replay: top, big letters",16:254,
+HUD_TAP_TO_SKIP,TAP TO SKIP,The boss's knockout replay: bottom,8:254,
+HUD_MOVE_SWIPE,SWIPE < >,"In the run: {move} in the cover hint",8:84,
+HUD_MOVE_TAP,TAP ◀ ▶,"In the run, with MOVE on BUTTONS: {move} in the cover hint",8:84,◀ ▶ are the on-screen buttons' arrows: keep them
+HUD_IN_COVER,IN COVER - {move} TO BREAK COVER,In the run: the hint while in cover,8:254x2,"{move}: SWIPE < > (or TAP ◀ ▶)"
+HUD_STANDOFF,{move} TO DODGE - HOLD FIRE,In the run: the hint facing the boss,8:254x2,"{move}: SWIPE < > (or TAP ◀ ▶)"
+HUD_CAM,CAM {n},In the run: on the stairwell's security-camera picture,8:60,{n}: the camera's number
+HUD_REC,REC,"In the run: on the security-camera picture, blinking (recording)",8:30,
+TIP_TAB,TIP,The first-time tips: the card's red tab,8:60,
+TIP_CLOSE,TAP TO CLOSE,The first-time tips: at the card's foot,8:226,
+TIP_SWIPE_SIDE,SWIPE LEFT OR RIGHT,"A first-time tip (changing lane; leaving cover): its first line",8:226x2,
+TIP_LANE,TO CHANGE LANE,A first-time tip (changing lane): its second line,8:226x2,
+TIP_JUMP,SWIPE UP TO JUMP,A first-time tip,8:226x2,
+TIP_SLIDE,SWIPE DOWN TO SLIDE,A first-time tip,8:226x2,
+TIP_COVER,RUN INTO COVER TO HIDE,A first-time tip (cover): its first line,8:226x2,
+TIP_COVER_PAST,OR SWIPE EARLY TO RUN ON PAST,A first-time tip (cover): its second line,8:226x2,
+TIP_LEAVE_COVER,TO LEAVE COVER,A first-time tip (leaving cover): its second line,8:226x2,
+TIP_FIRE,HOLD FIRE TO SHOOT,A first-time tip (FIRE): its first line,8:226x2,FIRE is the trigger button
+TIP_FIRE_AIMS,IT AIMS FOR YOU,A first-time tip (FIRE; AIM: AUTO): its second line,8:226x2,
+TIP_TRIGGER,SETTINGS: TRIGGER LEFT OR RIGHT,"A first-time tip (FIRE): its last line (SETTINGS, TRIGGER: the setting's names)",8:226x2,"SETTINGS and TRIGGER are what SETTINGS calls them"
+TIP_FIRE_TAP,TAP AN ENEMY TO TARGET IT,A first-time tip (FIRE; AIM: TAP ONLY): its first line,8:226x2,
+TIP_FIRE_TAP_SHOOT,HOLD FIRE TO SHOOT IT,A first-time tip (FIRE; AIM: TAP ONLY): its second line,8:226x2,
+TIP_FIRE_OR_TAP,"IT AIMS, OR TAP AN ENEMY",A first-time tip (FIRE; AIM: AUTO + TAP): its second line,8:226x2,
+TIP_ALERT,TRIPWIRES RAISE THE ALERT,A first-time tip (the alert): its first line,8:226x2,
+TIP_ALERT_JUMP,JUMP THEM TO STAY QUIET,A first-time tip (the alert): its second line,8:226x2,
+TIP_ALERT_BOXES,SHOOT ALARM BOXES TO LOWER IT,A first-time tip (the alert): its third line,8:226x2,
+TIP_DOORS_OPEN,ARROWS: THE DOOR IS OPEN,A first-time tip (the doors): its first line,8:226x2,
+TIP_DOORS_LOCKED,PADLOCK: IT'S LOCKED,A first-time tip (the doors): its second line,8:226x2,
+TIP_DOORS_SIDE,OUTER LANES TAKE THE SIDE DOORS,A first-time tip (the doors): its third line,8:226x2,
+TIP_TAP_SIDE,TAP ◀ OR ▶,"A first-time tip with MOVE on BUTTONS (changing lane; leaving cover): its first line",8:226x2,◀ ▶ are the on-screen buttons' arrows: keep them
+TIP_TAP_JUMP,TAP ▲ TO JUMP,A first-time tip with MOVE on BUTTONS,8:226x2,▲ is the jump button's arrow: keep it
+TIP_TAP_SLIDE,TAP ▼ TO SLIDE,A first-time tip with MOVE on BUTTONS,8:226x2,▼ is the slide button's arrow: keep it
+TIP_COVER_TAP_PAST,OR TAP ◀ ▶ EARLY TO RUN ON PAST,A first-time tip with MOVE on BUTTONS (cover): its second line,8:226x2,◀ ▶ are the on-screen buttons' arrows: keep them
+BRIEF_TAG,MISSION BRIEFING,The briefing: the red tag top left,tag,
+BRIEF_SKIP,SKIP,"The briefing and the end conversations: the button top right (SKIP ▶▶)",8:66,
+BRIEF_SIGNAL_LOST,SIGNAL LOST,"The end conversation when CROSS is killed: across his card, blinking",8:94,
+BRIEF_TAP,TAP,"The briefing: under a line once it's all there (tap for the next)",8:180,
+BRIEF_TAP_CONTINUE,TAP TO CONTINUE,"The briefing: under its first line once it's all there",8:180,
+BRIEF_TAP_END,TAP TO END,"The briefing: under its last line",8:180,
+BRIEF_TAP_DEBRIEF,TAP FOR DEBRIEF,"An end conversation: under its last line",8:180,
+M1_BRIEF_01,CROSS! VORHALT'S SELLING A MUSEUM'S ALARM PLANS TO A GANG OF ART THIEVES. GO AND GET THEM!,"Mission 1's briefing, line 1 (BISHOP, the General)",brief,
+M1_BRIEF_02,"HE'S ALREADY GOT THEM, GENERAL. HE'S RUNNING FOR THE CHOPPER.","Mission 1's briefing, line 2 (VESPER, the briefer)",brief,
+M1_BRIEF_03,"THAT'S MY BOY! AND THAT CHOPPER'S ON THE METER, SON. FUEL DOESN'T GROW ON TREES.","Mission 1's briefing, line 3 (BISHOP)",brief,
+M1_BRIEF_04,IT COMES OUT OF THE COFFEE MACHINE BUDGET. WHICH IS WHY WE DON'T HAVE A COFFEE MACHINE.,"Mission 1's briefing, line 4 (VESPER)",brief,
+M1_BRIEF_05,ONE GUARD ON THE PAD. HUGE. MINIGUN. SKULL ON HIS CHEST. NAME TAG SAYS ARDBALLS.,"Mission 1's briefing, line 5 (VESPER)",brief,
+M1_BRIEF_06,KEEP THE METER RUNNING.,"Mission 1's briefing, line 6 (CROSS)",brief,
+M1_EXTRACTED_TITLE,EXFIL COMPLETE,"Mission 1's end conversation after an escape: the red tag top left",tag,
+M1_EXTRACTED_01,"GOOD RIDDANCE, ARDBALLS! SON, ARE THE ALARM PLANS SAFE?","Mission 1, after an escape, line 1 (BISHOP)",brief,
+M1_EXTRACTED_02,NO NEED TO BE ALARMED.,"Mission 1, after an escape, line 2 (CROSS)",brief,
+M1_EXTRACTED_03,FOUR OUT OF TEN.,"Mission 1, after an escape, line 3 (VESPER)",brief,
+M1_EXTRACTED_04,FOUR? THAT'S ERNEST CROSS YOU'RE SCORING!,"Mission 1, after an escape, line 4 (BISHOP)",brief,
+M1_EXTRACTED_05,"STILL A FOUR. AND WHILE WE'RE ON NUMBERS, I'D LIKE A RAISE.","Mission 1, after an escape, line 5 (VESPER)",brief,
+M1_EXTRACTED_06,"DENIED. NOW GLIDE HOME, SON. SAVES FUEL.","Mission 1, after an escape, line 6 (BISHOP)",brief,
+M1_KILLED_TITLE,KILLED IN ACTION,"Mission 1's end conversation when CROSS is killed: the red tag top left",tag,
+M1_KILLED_01,"CROSS? CROSS, COME IN. ...HIS SIGNAL'S GONE, GENERAL.","Mission 1, CROSS killed, line 1 (VESPER)",brief,
+M1_KILLED_02,KEEP THE METER RUNNING.,"Mission 1, CROSS killed, line 2 (BISHOP)",brief,
+M1_KILLED_03,GENERAL...,"Mission 1, CROSS killed, line 3 (VESPER)",brief,
+M1_KILLED_04,ONE MORE MINUTE. I'LL PAY.,"Mission 1, CROSS killed, line 4 (BISHOP)",brief,
+M1_CAPTURED_TITLE,AGENT CAPTURED,"Mission 1's end conversation when CROSS is caught: the red tag top left",tag,
+M1_CAPTURED_01,"THEY'VE GOT HIM, GENERAL. I RANG VORHALT: ""YOUR SECRETS ARE IMPORTANT TO US. PLEASE HOLD.""","Mission 1, CROSS caught, line 1 (VESPER)",brief,
+M1_CAPTURED_02,"HOLD? ON MY PHONE BILL? ...HANG ON, THERE'S MUSIC. IT'S ACTUALLY QUITE NICE.","Mission 1, CROSS caught, line 2 (BISHOP)",brief,
+M1_CAPTURED_03,"TAKE YOUR TIME, GENERAL. I'M NOT GOING ANYWHERE.","Mission 1, CROSS caught, line 3 (CROSS)",brief,
+M1_CHOPPER_LEFT_TITLE,THE CHOPPER LEFT,"Mission 1's end conversation when the chopper went without him: the red tag top left",tag,
+M1_CHOPPER_LEFT_01,"THE CHOPPER'S GONE, GENERAL. YOUR MINUTES RAN OUT.","Mission 1, the chopper gone, line 1 (VESPER)",brief,
+M1_CHOPPER_LEFT_02,ALREADY? I PAID FOR MINUTES! PLURAL!,"Mission 1, the chopper gone, line 2 (BISHOP)",brief,
+M1_CHOPPER_LEFT_03,AND YOU SPENT THE TOP-UP ON CIGARS.,"Mission 1, the chopper gone, line 3 (VESPER)",brief,
+M1_CHOPPER_LEFT_04,I'LL GET THE BUS.,"Mission 1, the chopper gone, line 4 (CROSS)",brief,
+M1_CHOPPER_LEFT_05,"PAY YOUR OWN FARE, SON.","Mission 1, the chopper gone, line 5 (BISHOP)",brief,
+CREDITS_SUB,HOT EXFIL DEMO,CREDITS: under the title,8:222,HOT EXFIL is the game's name: keep it
+CREDITS_BY,A GAME BY,CREDITS: over the maker's name,8:254,
+CREDITS_MADE_WITH,MADE WITH,CREDITS: over GODOT ENGINE (the engine's name),8:254,
+CREDITS_MIT,MIT LICENCE: SEE LICENCES,CREDITS: under the engine's name and website,8:254,"LICENCES is the button's name"
+CREDITS_IN_CODE_WHAT,"LEVELS, TEXTURES, SOUND, MUSIC",CREDITS: over MADE IN CODE,8:254,
+CREDITS_IN_CODE,MADE IN CODE,"CREDITS: big letters",16:240,
+CREDITS_BLENDER,CHARACTERS MADE WITH BLENDER,CREDITS: under MADE IN CODE (Blender: a 3D program's name),8:254,
+CREDITS_LICENCES,LICENCES,"CREDITS: a button; the licences' title (big letters)",8:136,The licence texts themselves stay in English
+CREDITS_ABOUT,ABOUT THE DEMO,CREDITS: a button (the end-of-demo screen),8:136,
+LICENCES_SUB,GODOT ENGINE + THIRD PARTIES,LICENCES: under the title,8:222,
+DEMO_THANKS,THANKS FOR PLAYING,"The end-of-demo screen: the title, big letters",16:240,
+DEMO_THE_DEMO,THE HOT EXFIL DEMO,The end-of-demo screen: under the title,8:222,HOT EXFIL is the game's name: keep it
+DEMO_MORE,MORE MISSIONS ARE ON THE WAY:,The end-of-demo screen: over the list of missions to come,8:254,
+DEMO_JOBS,EIGHT MORE JOBS FOR CONDOR,The end-of-demo screen: over the list of missions to come,8:254,CONDOR is the agency's name: keep it
+DEMO_SOON,SOON,The end-of-demo screen: by each mission to come,8:60,
+DEMO_FOLLOW,FOLLOW THE GAME:,The end-of-demo screen: over where to follow it,8:254,
+IOS_ADD,ADD TO HOME SCREEN,"iPhone, in Safari: the tip on the main menu, its headline",8:222,"What Safari's share menu calls it (Zum Home-Bildschirm in German Safari)"
+IOS_KEEP,TO KEEP YOUR PROGRESS,"iPhone, in Safari: the tip on the main menu, its second line",8:234,
+IOS_TAP,TAP,"iPhone, in Safari: the tip's last line, before the share icon",8:60,"The last line reads: TAP [share icon] THEN ADD TO HOME SCREEN"
+IOS_THEN,THEN ADD TO HOME SCREEN,"iPhone, in Safari: the tip's last line, after the share icon",8:200,"The last line reads: TAP [share icon] THEN ADD TO HOME SCREEN"

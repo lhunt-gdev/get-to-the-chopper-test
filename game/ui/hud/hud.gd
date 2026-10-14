@@ -13,7 +13,8 @@ const SIDE_COLORS := {"left": Color("d9a032"), "straight": Color("a8a898"), "rig
 const SIDE_DIRS := {"left": -1, "straight": 0, "right": 1}
 ## Height of the cinema bars during the opening pan (pixels at 270x480).
 const LETTERBOX := 44.0
-const ALERT_NAMES := {1: "SNEAKING", 2: "CAUTION", 3: "ALERT"}
+## The alert levels' ids of their words (Tally.alert_name).
+const ALERT_NAMES := {1: "HUD_ALERT_1", 2: "HUD_ALERT_2", 3: "HUD_ALERT_3"}
 const ALERT_COLORS := {1: UiKit.GREEN, 2: UiKit.AMBER, 3: UiKit.RED}
 
 var _status: StatusPanel
@@ -102,8 +103,10 @@ class StatusPanel extends Control:
 		var f := UiKit.font()
 		# LIFE
 		UiKit.panel(self, Rect2(0, 0, 92, 16), UiKit.TEAL, UiKit.PANEL, 4.0)
-		draw_string(f, Vector2(6, 11), "LIFE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.TEAL)
-		var bar := Rect2(32, 4, 56, 8)
+		var life := L10n.t("HUD_LIFE")
+		draw_string(f, Vector2(6, 11), life, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.TEAL)
+		var from := maxf(32.0, 6.0 + UiKit.text_w(life) + 2.0)  # (the bar gives up room to a longer word)
+		var bar := Rect2(from, 4, 88.0 - from, 8)
 		draw_rect(bar, UiKit.INK)
 		var seg_w := (bar.size.x - 2.0 - (hp_total - 1)) / maxf(hp_total, 1)
 		for i in hp_total:
@@ -118,9 +121,12 @@ class StatusPanel extends Control:
 		# Alert box
 		var ac: Color = ALERT_COLORS.get(alert, UiKit.GREEN)
 		var pulse := 0.65 + 0.35 * sin(_t * 8.0) if alert >= 3 else 1.0
-		UiKit.panel(self, Rect2(0, 19, 74, 16), Color(ac, pulse), Color(ac.darkened(0.8), 0.9), 4.0)
-		draw_string(f, Vector2(6, 30), ALERT_NAMES.get(alert, "ALERT"), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(ac, pulse))
-		draw_string(f, Vector2(62, 30), str(alert), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
+		# (wider for a longer word, its number after it)
+		var word := Tally.alert_name(alert)
+		var num_x := maxf(62.0, 6.0 + UiKit.text_w(word) + 4.0)
+		UiKit.panel(self, Rect2(0, 19, num_x + 12.0, 16), Color(ac, pulse), Color(ac.darkened(0.8), 0.9), 4.0)
+		draw_string(f, Vector2(6, 30), word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(ac, pulse))
+		draw_string(f, Vector2(num_x, 30), str(alert), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
 
 
 ## Under the clock: a codec-style message box. Text types out; persistent messages blink.
@@ -252,10 +258,14 @@ class RearMonitor extends Control:
 		var f := UiKit.font()
 		if fmod(_t, 1.0) < 0.6:
 			draw_string(f, Vector2(r.position.x + 5, r.position.y + 10), "●", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED)  # REC
-		draw_string(f, Vector2(r.position.x + 13, r.position.y + 10), "REAR CAM", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
-		# How many are still after you (up here: the picture covers anything drawn under it).
-		var label := "SQUAD %d" % chasing if chasing > 0 else "CLEAR"
-		draw_string(f, Vector2(r.end.x - 6 - label.length() * 6, r.position.y + 10), label,
+		# How many are still after you (up here: the picture covers anything drawn under it); REAR CAM
+		# beside the REC dot, if there's room for both.
+		var label := L10n.f("HUD_SQUAD", {"n": chasing}) if chasing > 0 else L10n.t("HUD_CLEAR")
+		var cam := L10n.t("HUD_REAR_CAM")
+		var lw := UiKit.text_w(label)
+		if 13.0 + UiKit.text_w(cam) + 6.0 + lw + 6.0 <= r.size.x:
+			draw_string(f, Vector2(r.position.x + 13, r.position.y + 10), cam, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.PAPER)
+		draw_string(f, Vector2(r.end.x - 6 - lw, r.position.y + 10), label,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.RED if chasing > 0 else UiKit.GREEN)
 
 	## Red tracking brackets over the guards, sized by how close they are (the footage alone is
@@ -306,8 +316,10 @@ class BossBar extends Control:
 		var low := fraction <= 0.25
 		var c := UiKit.PAPER if _flash > 0.0 else (UiKit.RED if not low or fmod(_t, 0.4) < 0.24 else UiKit.AMBER)
 		UiKit.panel(self, r, c, UiKit.PANEL, 3.0)
-		draw_string(UiKit.font(), Vector2(r.position.x + 7, r.position.y + 11), "BOSS", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c)
-		var bar := Rect2(r.position.x + 38, r.position.y + 5, 154, 6)
+		var word := L10n.t("HUD_BOSS")
+		draw_string(UiKit.font(), Vector2(r.position.x + 7, r.position.y + 11), word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c)
+		var from := maxf(38.0, 7.0 + UiKit.text_w(word) + 4.0)  # (the bar gives up room to a longer word)
+		var bar := Rect2(r.position.x + from, r.position.y + 5, 192.0 - from, 6)
 		draw_rect(bar, UiKit.INK)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)), c)
 		draw_rect(bar, c.darkened(0.4), false, 1.0)
@@ -341,8 +353,10 @@ class RunnerBar extends Control:
 		var hot := fraction >= 0.7
 		var c := UiKit.RED if hot and fmod(_t, 0.4) < 0.22 else UiKit.AMBER
 		UiKit.panel(self, r, c, UiKit.PANEL, 3.0)
-		draw_string(UiKit.font(), Vector2(r.position.x + 7, r.position.y + 10), "ALARM", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c)
-		var bar := Rect2(r.position.x + 42, r.position.y + 4, 74, 6)
+		var word := L10n.t("HUD_ALARM")
+		draw_string(UiKit.font(), Vector2(r.position.x + 7, r.position.y + 10), word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c)
+		var from := maxf(42.0, 7.0 + UiKit.text_w(word) + 4.0)  # (the bar gives up room to a longer word)
+		var bar := Rect2(r.position.x + from, r.position.y + 4, 116.0 - from, 6)
 		draw_rect(bar, UiKit.INK)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)), c)
 		draw_rect(bar, c.darkened(0.4), false, 1.0)
@@ -593,6 +607,7 @@ static func route_prompt(label: String, dir: int) -> String:
 
 
 func _ready() -> void:
+	auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED  # (its words are put in translated: L10n)
 	_status = StatusPanel.new()
 	add_child(_status)
 	_junction = RichTextLabel.new()
@@ -664,7 +679,7 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 	_cctv_mat.set_shader_parameter("time", Time.get_ticks_msec() / 1000.0)
 	var t := int(seconds)
 	_cctv_label.text = "%s\n03:%02d:%02d:%02d" % [cam, 14 + t / 60, t % 60, int(fmod(seconds, 1.0) * 24.0)]
-	_cctv_rec.text = "● REC" if fmod(seconds, 1.0) < 0.6 else ""
+	_cctv_rec.text = "● " + L10n.t("HUD_REC") if fmod(seconds, 1.0) < 0.6 else ""
 
 
 var _grade: ColorRect
@@ -738,15 +753,18 @@ func show_replay(on: bool) -> void:
 	if _replay == null:
 		if not on:
 			return
-		_replay = UiKit.label("REPLAY", 16, UiKit.RED, HORIZONTAL_ALIGNMENT_CENTER)
+		_replay = UiKit.label(L10n.t("HUD_REPLAY"), 16, UiKit.RED, HORIZONTAL_ALIGNMENT_CENTER)
 		_replay.set_anchors_preset(Control.PRESET_TOP_WIDE)
 		_replay.offset_top = 14
 		add_child(_replay)
-		_skip = UiKit.label("TAP TO SKIP", 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER)
+		_skip = UiKit.label(L10n.t("HUD_TAP_TO_SKIP"), 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER)
 		_skip.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 		_skip.offset_top = -26
 		_skip.offset_bottom = -14
 		add_child(_skip)
+	if on:
+		_replay.text = L10n.t("HUD_REPLAY")
+		_skip.text = L10n.t("HUD_TAP_TO_SKIP")
 	_replay.visible = on
 	_skip.visible = on
 
@@ -780,7 +798,7 @@ func redraw_buttons() -> void:
 	if _pad:
 		_pad.queue_redraw()
 	if _area:
-		_area.offset_top = area_top(get_viewport().get_visible_rect().size, _tuning)
+		_area.offset_top = area_top(get_viewport().get_visible_rect().size, _tuning) - _area.text.count("\n") * AREA_H
 
 
 ## The button pad (SwipeInput presses it).
@@ -802,17 +820,28 @@ static func area_top(screen: Vector2, t: Tuning) -> float:
 	return minf(AREA_TOP, up.y - up.z * SwipeInput.TOUCH_REACH - AREA_CLEAR - AREA_H - screen.y)
 
 
+## The room across the screen for the cover hint, the opening pan's title (big letters; a longer one
+## in small ones) and an area's name (big letters, from AREA_X; a longer one on two lines, the second
+## where the first would be) (px).
+const HINT_W := 254.0
+const TITLE_W := 254.0
+const AREA_X := 22.0
+const AREA_W := 240.0
+
+
 ## MGS-style location caption: the area's name types out bottom left, then fades.
 func show_area(area_name: String) -> void:
 	if _area == null:
 		_area = UiKit.label("", 16, Color("e8f0e0"))
 		_area.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-		_area.offset_left = 22
+		_area.offset_left = AREA_X
+		_area.add_theme_constant_override("line_spacing", 0)
 		add_child(_area)
-	_area.offset_top = area_top(get_viewport().get_visible_rect().size, _tuning)
+	var lines := UiKit.wrap(area_name, AREA_W, 16)
+	_area.offset_top = area_top(get_viewport().get_visible_rect().size, _tuning) - (lines.size() - 1) * AREA_H
 	if _area_tween:
 		_area_tween.kill()
-	_area.text = area_name
+	_area.text = "\n".join(lines)
 	_area.visible_ratio = 0.0
 	_area.modulate.a = 1.0
 	_area_tween = create_tween()
@@ -971,8 +1000,9 @@ func set_paused(on: bool) -> void:
 ## The hint under the clock in cover, or facing the boss (worded for the move buttons with MOVE on
 ## BUTTONS).
 func show_cover_hint(on: bool, standoff: bool = false) -> void:
-	var move := "TAP ◀ ▶" if _tuning != null and _tuning.move_buttons else "SWIPE < >"
-	_hint.text = "IN COVER - %s TO BREAK COVER" % move if on else ("%s TO DODGE - HOLD FIRE" % move if standoff else "")
+	var move := L10n.t("HUD_MOVE_TAP") if _tuning != null and _tuning.move_buttons else L10n.t("HUD_MOVE_SWIPE")
+	var text := L10n.f("HUD_IN_COVER", {"move": move}) if on else (L10n.f("HUD_STANDOFF", {"move": move}) if standoff else "")
+	_hint.text = "\n".join(UiKit.wrap(text, HINT_W))  # (a longer one on two lines)
 	# Below the rear-view monitor while it's up (Alert 3), otherwise in its usual place.
 	_hint.offset_top = 176 if _rear and _rear.visible else 104
 
@@ -985,6 +1015,10 @@ func show_title() -> void:
 ## During the opening pan: just the mission name.
 func show_mission_title(title: String) -> void:
 	_title.text = title
+	var widest := 0.0
+	for line in title.split("\n"):
+		widest = maxf(widest, UiKit.text_w(line, 16))
+	_title.add_theme_font_size_override("font_size", 16 if widest <= TITLE_W else 8)  # (too long for big letters: small ones)
 
 
 func hide_title() -> void:
@@ -997,8 +1031,14 @@ func show_junction(options: Array[Dictionary]) -> void:
 		for o in options:
 			if RouteGraph.side_of(o) == side:
 				parts.append("[color=#%s]%s[/color]" % [side_color(side).lightened(0.3).to_html(false),
-						route_prompt(String(o.get("shown", o.get("label", o["to"]))), side_dir(side))])
+						route_prompt(way_name(String(o.get("shown", o.get("label", o["to"])))), side_dir(side))])
 	_junction.text = "[center]%s[/center]" % "    ".join(parts)
+
+
+## Where a way goes, as the prompt says it (in words: WAY_ and its label; one with none, the TEST
+## RANGE's, as its route file has it). The signs in the level keep the label as it is.
+static func way_name(label: String) -> String:
+	return L10n.t_or("WAY_" + label.to_upper().replace(" ", "_"), label)
 
 
 func clear_junction() -> void:

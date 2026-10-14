@@ -80,6 +80,32 @@ const GLYPHS := {
 	"@": [".###.", "#...#", "#.###", "#.#.#", "#.###", "#....", ".###."],
 	"[": [".###.", ".#...", ".#...", ".#...", ".#...", ".#...", ".###."],
 	"]": [".###.", "...#.", "...#.", "...#.", "...#.", "...#.", ".###."],
+	# Accented capitals (Luxembourgish: Ä Ë É È Ü Ö Ê, and Â Û Ç Î Ô for its French loanwords): the letter
+	# drawn two rows shorter (rows 2-6) under its accent (rows 0-1), so it stays in the 7-row cell; the
+	# dieresis keeps a clear row under its dots. Ç is the whole C, its cedilla under the line (rows 7-8).
+	"Ä": [".#.#.", ".....", ".###.", "#...#", "#####", "#...#", "#...#"],
+	"Â": ["..#..", ".#.#.", ".###.", "#...#", "#####", "#...#", "#...#"],
+	"Ë": [".#.#.", ".....", "#####", "#....", "####.", "#....", "#####"],
+	"É": ["...#.", "..#..", "#####", "#....", "####.", "#....", "#####"],
+	"È": [".#...", "..#..", "#####", "#....", "####.", "#....", "#####"],
+	"Ê": ["..#..", ".#.#.", "#####", "#....", "####.", "#....", "#####"],
+	"Î": ["..#..", ".#.#.", ".###.", "..#..", "..#..", "..#..", ".###."],
+	"Ö": [".#.#.", ".....", ".###.", "#...#", "#...#", "#...#", ".###."],
+	"Ô": ["..#..", ".#.#.", ".###.", "#...#", "#...#", "#...#", ".###."],
+	"Ü": [".#.#.", ".....", "#...#", "#...#", "#...#", "#...#", ".###."],
+	"Û": ["..#..", ".#.#.", "#...#", "#...#", "#...#", "#...#", ".###."],
+	"Ç": [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###.", "..#..", ".##.."],
+	# Typeset punctuation (Luxembourgish quotes „...“ and «...», the apostrophe ’, the dashes, ...).
+	"’": ["..#..", "..#..", ".#...", ".....", ".....", ".....", "....."],
+	"‘": ["...#.", "..#..", "..#..", ".....", ".....", ".....", "....."],
+	"“": ["..#.#", ".#.#.", ".#.#.", ".....", ".....", ".....", "....."],
+	"”": [".#.#.", ".#.#.", "#.#..", ".....", ".....", ".....", "....."],
+	"„": [".....", ".....", ".....", ".....", ".#.#.", ".#.#.", "#.#.."],
+	"«": [".....", "..#.#", ".#.#.", "#.#..", ".#.#.", "..#.#", "....."],
+	"»": [".....", "#.#..", ".#.#.", "..#.#", ".#.#.", "#.#..", "....."],
+	"…": [".....", ".....", ".....", ".....", ".....", ".....", "#.#.#"],
+	"–": [".....", ".....", ".....", "#####", ".....", ".....", "....."],
+	"—": [".....", ".....", ".....", "#####", ".....", ".....", "....."],
 	"●": [".....", ".###.", "#####", "#####", "#####", ".###.", "....."],
 	"▶": [".#...", ".##..", ".###.", ".####", ".###.", ".##..", ".#..."],
 	# (the move buttons' arrows, for their wording: "TAP ▲ TO JUMP")
@@ -114,18 +140,19 @@ static func font() -> FontFile:
 		var rows_art: Array = GLYPHS[ch]
 		var cx := (i % cols) * CELL.x
 		var cy := (i / cols) * CELL.y
-		for gy in 7:
+		var tall := rows_art.size()  # (7, or 9 with rows under the line: Ç's cedilla)
+		for gy in tall:
 			for gx in 5:
 				if rows_art[gy][gx] == "#":
 					img.set_pixel(cx + gx, cy + gy, Color.WHITE)
 		var codes: Array[int] = [ch.unicode_at(0)]
-		if ch.length() == 1 and ch >= "A" and ch <= "Z":
+		if ch.length() == 1 and ch.to_lower() != ch:  # (a capital: its small letter draws the same)
 			codes.append(ch.to_lower().unicode_at(0))
 		for code in codes:
 			f.set_glyph_advance(0, 8, code, Vector2(CELL.x, 0))
 			f.set_glyph_offset(0, size, code, Vector2(0, -7))
-			f.set_glyph_size(0, size, code, Vector2(5, 7))
-			f.set_glyph_uv_rect(0, size, code, Rect2(cx, cy, 5, 7))
+			f.set_glyph_size(0, size, code, Vector2(5, tall))
+			f.set_glyph_uv_rect(0, size, code, Rect2(cx, cy, 5, tall))
 			f.set_glyph_texture_idx(0, size, code, 0)
 	f.set_texture_image(0, size, 0, img)
 	f.set_cache_ascent(0, 8, 7.0)
@@ -237,6 +264,46 @@ static func label(text: String, size: int = 8, color: Color = PAPER, align: Hori
 	l.horizontal_alignment = align
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
+
+
+## Whether the pixel font has a letter for `ch` (lower case draws as upper; a space always).
+static func has_glyph(ch: String) -> bool:
+	return ch == " " or GLYPHS.has(ch) or GLYPHS.has(ch.to_upper())
+
+
+## How wide `text` is in the pixel font at `size` (px).
+static func text_w(text: String, size: int = 8) -> float:
+	return font().get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
+## The size big text (16 or 24) can have in `width` px: its own, or 8 if it doesn't fit (a longer
+## translation drops to the small letters rather than run off its place).
+static func fit_size(text: String, size: int, width: float) -> int:
+	return size if size <= 8 or text_w(text, size) <= width else 8
+
+
+## `text` broken into lines `width` px wide at `size`, at its spaces (a word too long for a line is
+## split); its line breaks kept, and its leading spaces (an indented line).
+static func wrap(text: String, width: float, size: int = 8) -> PackedStringArray:
+	var out := PackedStringArray()
+	for para in text.split("\n"):
+		var line := ""
+		var lead := para.length() - para.lstrip(" ").length()
+		for word in para.lstrip(" ").split(" ", false):
+			var with := (line + " " + word) if line != "" else " ".repeat(lead) + word
+			if line == "" or text_w(with, size) <= width:
+				line = with
+			else:
+				out.append(line)
+				line = word
+			while text_w(line, size) > width and line.length() > 1:
+				var cut := line.length() - 1
+				while cut > 1 and text_w(line.substr(0, cut), size) > width:
+					cut -= 1
+				out.append(line.substr(0, cut))
+				line = line.substr(cut)
+		out.append(line)
+	return out
 
 
 ## A small padlock (5 x 7 px, like a letter; `scale` times that, like the 16 px text at 2), top left
