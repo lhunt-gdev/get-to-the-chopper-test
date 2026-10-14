@@ -674,7 +674,7 @@ func _build_settings() -> void:
 	y = _section("CONTROLS", y + gap)
 	y = _choice_row("AIM", "aim", AIM_NAMES, y)
 	y = _choice_row("TRIGGER", "fire_side", {"right": "RIGHT", "left": "LEFT"}, y)
-	y = _choice_row("SWIPE", "swipe", SWIPE_NAMES, y)
+	y = _choice_row("SWIPE SPEED", "swipe", SWIPE_NAMES, y)
 	y = _choice_row("MOVE", "controls", CONTROLS_NAMES, y)
 	y = _tips_row(y)
 	y += BUTTONS_GAP[_roomy]
