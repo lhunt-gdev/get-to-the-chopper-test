@@ -1,8 +1,10 @@
 extends SceneTree
 ## Pictures of the screens with words on them, in one language, to look at for fit (the decision log's
-## "Languages: Luxembourgish first"): the main menu, SETTINGS (its LANGUAGE row), CONTROLS, the mission
-## select, mission 1's screen, a first-time tip, the HUD in cover, the debrief, the scoreboard, the
-## name entry, the briefing, an end conversation, CREDITS and the end-of-demo screen. Run with a window
+## "Languages: Luxembourgish first"): the main menu (and with the iPhone's save tip), SETTINGS (its
+## LANGUAGE row), CONTROLS (swipes and the move buttons, each AIM), the mission select, mission 1's
+## screen, the debrief for each ending, the scoreboard, the name entry, every line of the briefing and
+## of each end conversation, CREDITS, LICENCES, the end-of-demo screen, the pause menu, every
+## first-time tip (swipes and buttons; FIRE's by AIM) and the HUD in cover and facing the boss. Run with a window
 ## (the pictures need the renderer; not --headless):
 ##   godot --path . -s res://tests/l10n/render_screens.gd -- --out=C:/somewhere --locale=xx
 ## --locale: en, lb, or xx (the pseudo-language: every string about 35% longer, in accented capitals,
@@ -59,24 +61,54 @@ func _run() -> void:
 	var debrief := {"time": 79.2, "spare": 24.6, "distance": 820, "downed": 6, "hits": 1, "run_into": 1, "alarms_set_off": 1, "alarms_stopped": 1,
 			"top_alert": 2, "levels": "MAIN", "new_areas": 2, "mission": 1, "setting": "medium", "unlocked": [[1, "hard"], [2, "easy"], [2, "medium"]],
 			"new_best": true, "was_best": 90.0, "rank": 4, "seq": 0, "new_best_score": true, "graph": graph, "visited": run, "discovered": {}}
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()  # (set straight in: never saved)
 	await _shot("main", func() -> void: fe.show_main())
+	FE.force_ios_tip = true
+	progress.ios_tip_seen = false
+	await _shot("main_ios_tip", func() -> void: fe.show_main())
+	FE.force_ios_tip = false
 	await _shot("settings", func() -> void: fe._open(FE.Screen.SETTINGS))
 	await _shot("controls", func() -> void: fe._open(FE.Screen.CONTROLS))
+	for aim in ["auto_tap", "tap"]:
+		settings._values["aim"] = aim
+		await _shot("controls_aim_" + aim, func() -> void: fe._open(FE.Screen.CONTROLS))
+	settings._values["controls"] = "buttons"
+	for aim in ["auto", "tap"]:
+		settings._values["aim"] = aim
+		await _shot("controls_buttons_aim_" + aim, func() -> void: fe._open(FE.Screen.CONTROLS))
+	settings._values = saved.duplicate()
 	await _shot("missions", func() -> void: fe._open(FE.Screen.MISSIONS))
 	await _shot("mission", func() -> void: fe.open_mission(1))
-	await _shot("debrief", func() -> void: fe.show_end(&"extracted", debrief), 2.0, func() -> void: _finish_debrief(fe))
+	for ending: String in Progress.ENDINGS:
+		var stats := debrief.duplicate()
+		if ending != "extracted":
+			stats.erase("spare")
+			stats["new_best"] = false
+			stats["unlocked"] = []
+		await _shot("debrief_" + ending, func() -> void: fe.show_end(StringName(ending), stats), 2.0, func() -> void: _finish_debrief(fe))
 	await _shot("board", func() -> void: fe.open_board(1, "medium"))
 	await _shot("name", func() -> void:
 		fe.show_end(&"extracted", debrief)
 		fe._open_name())
 	await _shot("credits", func() -> void: fe._open(FE.Screen.CREDITS))
+	await _shot("licences", func() -> void: fe._open(FE.Screen.LICENCES))
 	await _shot("demo_end", func() -> void: fe.open_demo_end())
 	await _shot("pause", func() -> void: fe.show_pause())
-	await _shot("briefing", func() -> void: fe.show_briefing(Briefing.conversation(brief)), 4.0, func() -> void: _tap_lines(fe, 3))
-	await _shot("end_talk", func() -> void: fe.show_end(&"captured", {"mission": 1, "setting": "hard"}, Briefing.conversation(brief, "captured")), 4.0,
-			func() -> void: _tap_lines(fe, 1))
+	# Every line of the briefing and of each ending's conversation.
+	var talk := Briefing.conversation(brief)
+	for i in Briefing.lines_of(talk).size():
+		await _shot("briefing_%d" % (i + 1), func() -> void: fe.show_briefing(Briefing.conversation(brief)), 3.0, func() -> void: _tap_lines(fe, i + 1))
+	for ending: String in Briefing.ENDINGS:
+		talk = Briefing.conversation(brief, ending)
+		if talk.is_empty():
+			continue
+		for i in Briefing.lines_of(talk).size():
+			await _shot("end_%s_%d" % [ending, i + 1], func() -> void: fe.show_end(StringName(ending), {"mission": 1, "setting": "hard"}, Briefing.conversation(brief, ending)),
+					3.0, func() -> void: _tap_lines(fe, i + 1))
 	fe.hide_all()
-	# The HUD: a tip's card, and the cover hint with the alert box up.
+	# The HUD: every tip's card (swipes, then the move buttons; FIRE's by AIM), the cover hint and the
+	# boss stand-off with the alert box up.
 	var hud = load("res://game/ui/hud/hud.gd").new()  # (by path: it needs the autoloads)
 	root.add_child(hud)
 	var tuning := Tuning.new()
@@ -85,11 +117,21 @@ func _run() -> void:
 	root.get_node("GameState").alert_changed.emit(2)
 	hud.show_chopper_message(L10n.t("HUD_CHOPPER_LANDED"), Color("9fd36b"), 99.0, false)
 	hud.show_area(FE.area_name(graph, &"building_main_floor"))
-	await _shot("tip", func() -> void: hud.show_tip("cover"), 1.5)
-	await _shot("hud", func() -> void:
-		hud.show_tip("")
-		hud.show_cover_hint(true)
-		hud.show_boss(0.6), 1.5)
+	for buttons in [false, true]:
+		tuning.move_buttons = buttons
+		var mode := "buttons" if buttons else "swipe"
+		for id: String in FirstTips.ORDER:
+			await _shot("tip_%s_%s" % [mode, id], func() -> void: hud.show_tip(id), 1.0)
+		for aim in ["auto_tap", "tap"]:
+			settings._values["aim"] = aim
+			await _shot("tip_%s_fire_%s" % [mode, aim], func() -> void: hud.show_tip("fire"), 1.0)
+		settings._values = saved.duplicate()
+		await _shot("hud_" + mode, func() -> void:
+			hud.show_tip("")
+			hud.show_cover_hint(true)
+			hud.show_boss(0.6), 1.5)
+		await _shot("hud_standoff_" + mode, func() -> void: hud.show_cover_hint(false, true), 1.0)
+	settings._values = saved
 	quit()
 
 

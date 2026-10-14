@@ -6512,10 +6512,13 @@ func _test_l10n_tables() -> void:
 	_check(same, "languages: each briefing line's (and tag's) English in strings.csv reads the same as its \"text\" in briefing.json")
 	var unused := ids.keys().filter(func(k: String) -> bool: return not used.has(k) and not made.has(k) and k != "LANGUAGE_NAME")
 	_check(unused.is_empty(), "languages: every id in strings.csv is used (%s)" % [unused])
-	# Godot reads them: each language's words (the English for an empty cell), the {places} filled in.
+	# Godot reads them: each language's words (the English for an empty cell: every lb id as its file has it), the {places} filled in.
 	var was := TranslationServer.get_locale()
 	TranslationServer.set_locale("lb")
-	var lb_ok := L10n.t("MENU_SETTINGS") == "SETTINGS" and L10n.t("LANGUAGE_NAME") == "LËTZEBUERGESCH"
+	var lb_ok := L10n.t("LANGUAGE_NAME") == "LËTZEBUERGESCH"
+	for row in L10n.read_table(L10n.FILES["lb"]):
+		var want := String(row["lb"]) if String(row["lb"]) != "" else String(ids[row["keys"]]["en"])
+		lb_ok = lb_ok and L10n.t(row["keys"]) == want
 	TranslationServer.set_locale("en")
 	_check(lb_ok and L10n.t("MENU_SETTINGS") == "SETTINGS" and L10n.f("MISSION_LINE", {"n": 1, "mission": "COLD CALL"}) == "MISSION 1: COLD CALL"
 			and L10n.t_or("AREA_NOWHERE", "NOWHERE") == "NOWHERE" and not L10n.has("AREA_NOWHERE") and L10n.has("MENU_SETTINGS"),
@@ -6606,9 +6609,9 @@ func _test_l10n_fit() -> void:
 
 
 ## Where strings share their room, in the language shown: the debrief's buttons, SETTINGS' rows, the
-## scoreboard's rows, the tally's rows and SCORE line, the debrief's header, the HUD's boxes, the
-## iPhone tip's lines, the mission select's rows and a mission's chips, the tips' cards, CONTROLS, the
-## briefing's top bar and SIGNAL LOST.
+## scoreboard's rows, the tally's rows and SCORE line, the debrief's header, the HUD's boxes and hint, the
+## iPhone tip's lines, the mission select's rows, the end-of-demo screen's list and a mission's chips,
+## the tips' cards, CONTROLS, the briefing's top bar and SIGNAL LOST.
 func _l10n_shared_room(lang: String, args: Dictionary) -> void:
 	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
 	var bad := []
@@ -6671,6 +6674,13 @@ func _l10n_shared_room(lang: String, args: Dictionary) -> void:
 	if 7.0 + UiKit.text_w(L10n.t("HUD_BOSS")) + 4.0 > 140.0 or 7.0 + UiKit.text_w(L10n.t("HUD_ALARM")) + 4.0 > 84.0 \
 			or 6.0 + UiKit.text_w(L10n.t("HUD_LIFE")) + 2.0 > 58.0:
 		bad.append("HUD bars")
+	# The hint under the clock (in cover, facing the boss): each of its lines (Hud.HINT_W) centred clear of
+	# the route meter at the left (its lines 228 px at most; not the pseudo-language's, made longer than any).
+	for id in ([] if lang == L10n.PSEUDO else ["HUD_IN_COVER", "HUD_STANDOFF"]):
+		for m in [L10n.t("HUD_MOVE_SWIPE"), L10n.t("HUD_MOVE_TAP")]:
+			for l in UiKit.wrap(L10n.f(id, {"move": m}), 254.0):
+				if UiKit.text_w(l) > 228.0:
+					bad.append("HUD hint " + id)
 	# The iPhone tip (254 wide): its headline and the X; TAP [share] THEN ADD TO HOME SCREEN.
 	var ios: PackedStringArray = FE.IosTip.lines()
 	if 10.0 + UiKit.text_w(ios[0]) + 6.0 > 254.0 - 16.0 or 10.0 + UiKit.text_w(ios[2] + " ") + 16.0 + UiKit.text_w(ios[3]) > 254.0 - 6.0:
@@ -6679,6 +6689,10 @@ func _l10n_shared_room(lang: String, args: Dictionary) -> void:
 	for n in Progress.MISSIONS.size():
 		if 40.0 + UiKit.text_w(FE.mission_name(n + 1)) + 6.0 > 242.0 - 10.0 - 3.0 * 13.0 - 2.0 * 3.0:
 			bad.append("mission row %d" % (n + 1))
+	# The end-of-demo screen's list (218 wide): each mission to come clear of its SOON.
+	for job: String in FE.coming_missions():
+		if 12.0 + UiKit.text_w(job) + 6.0 + UiKit.text_w(L10n.t("DEMO_SOON")) + 12.0 > 270.0 - 52.0:
+			bad.append("end-of-demo row " + job)
 	# A mission's chips (242 wide): the status clear of the best time and the score.
 	for id in ["CHIP_CLEARED", "CHIP_NOT_CLEARED"]:
 		var right := maxf(UiKit.text_w("9:59.9", 16), UiKit.text_w(L10n.f("CHIP_PTS", {"score": "999,999"})))

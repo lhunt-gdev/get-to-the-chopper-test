@@ -66,9 +66,9 @@ Conventions: snake_case files, PascalCase `class_name`s, one feature per folder 
 
 ENGLISH and LËTZEBUERGESCH (SETTINGS, LANGUAGE; at first the phone's own). Every player-facing string is looked up by its id in Godot's translation system: `L10n.t("MENU_SETTINGS")`, or a whole template with {named} places, `L10n.f("MISSION_LINE", {"n": 1, "mission": ...})` (never words glued together: word order differs). The table is `game/l10n/strings.csv` (id, English, where it shows, its room as `_fit`, a note for the translator); each language has a file of its own (`lb.csv`: id, words), an empty cell showing the English. A briefing line has a `key` in briefing.json, its English the same in strings.csv. Not translated: the cast's names, the signs in the level, players' names, numbers and times, the licence texts. A new string: add its row to strings.csv, then
 ```
-godot --headless --path . -s res://tests/l10n/review_sheet.gd -- --out=<folder> --sync
+godot --headless --path . -s res://tests/l10n/review_sheet.gd -- --sync
 ```
-puts its id in lb.csv and writes the translator's review sheet (CSV and HTML: id, English, Lëtzebuergesch so far, where it shows, the most letters it can have, the note). `tests/l10n/render_screens.gd` (with a window: `-- --out=<folder> --locale=xx --scale=2`) takes pictures of the screens in a language, `xx` being the test-only pseudo-language (every string about 35% longer, in accented capitals); `tests/l10n/glyph_sheet.gd` draws the pixel font.
+puts its id in lb.csv and rewrites the native speaker's review sheet, kept in `docs/l10n` (`lb_review.csv` and `lb_review.html`: id, English, Lëtzebuergesch, where it shows, the most letters it can have, the note; the page grouped by screen, with a how-to in both languages, the jokes and the unsure lines marked). A note starting `JOKE:` in strings.csv marks a joke (what the English joke is and what the translation does), one with `UNSURE` a line the translation isn't sure of. `tests/l10n/render_screens.gd` (with a window: `-- --out=<folder> --locale=xx --scale=2`) takes pictures of the screens in a language, `xx` being the test-only pseudo-language (every string about 35% longer, in accented capitals); `tests/l10n/glyph_sheet.gd` draws the pixel font.
 
 ## Tests
 
