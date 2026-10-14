@@ -21,6 +21,10 @@ const LABEL_W := 34.0
 const SLOPE_PX := 10.0
 const STUB_PX := 9.0
 const TIER_NAMES := {1: "ROOF", 0: "MAIN", -1: "BELOW"}
+## Each level's id of its words (L10n): the map's names on the left, and the tally's ROUTE.
+const TIER_IDS := {"ROOF": "TIER_ROOF", "MAIN": "TIER_MAIN", "BELOW": "TIER_BELOW"}
+## The left margin this map has (LABEL_W, or wider for a longer name).
+var _label_w := LABEL_W
 
 const SKULL := [".#####.", "#######", "#..#..#", "#..#..#", "#######", ".##.##.", ".#.#.#."]
 const CHOPPER := ["###########", ".....#.....", "..#####...#", ".##########", ".#####.....", "..#...#....", ".#######..."]
@@ -181,6 +185,19 @@ static func levels_text(g: RouteGraph, run: Array[StringName]) -> String:
 	return " > ".join(parts)
 
 
+## A level's name (1 ROOF, 0 MAIN, -1 BELOW), in words.
+static func tier_name(tier: int) -> String:
+	return L10n.t(TIER_IDS[TIER_NAMES.get(tier, "MAIN")])
+
+
+## A run's levels (levels_text: "MAIN > ROOF"), in words.
+static func levels_shown(levels: String) -> String:
+	var parts := PackedStringArray()
+	for part in levels.split(" > "):
+		parts.append(L10n.t_or(TIER_IDS.get(part, ""), part) if TIER_IDS.has(part) else part)
+	return " > ".join(parts)
+
+
 ## The ways not taken: [from, to] for each way off an area seen in full (`seen`) into one never
 ## reached (not in `reached`: every area ever reached, this run's included).
 static func locked_ways(g: RouteGraph, seen_full: Dictionary, reached: Dictionary) -> Array:
@@ -199,19 +216,22 @@ static func locked_ways(g: RouteGraph, seen_full: Dictionary, reached: Dictionar
 # --- Drawing ------------------------------------------------------------------------------
 
 func _px(p: Vector2) -> Vector2:
-	return Vector2(LABEL_W + p.x * _scale, (1.0 - p.y) * TIER_GAP + 4.0).round()
+	return Vector2(_label_w + p.x * _scale, (1.0 - p.y) * TIER_GAP + 4.0).round()
 
 
 func _draw() -> void:
 	if graph == null:
 		return
-	_scale = (size.x - LABEL_W - 4.0) / _far
 	var f := UiKit.font()
+	_label_w = LABEL_W
+	for tier in TIER_NAMES:
+		_label_w = maxf(_label_w, UiKit.text_w(tier_name(tier)) + 4.0)
+	_scale = (size.x - _label_w - 4.0) / _far
 	# The levels: a dotted guide each, named on the left.
 	for tier in [1, 0, -1]:
 		var y := _px(Vector2(0, tier)).y
-		draw_string(f, Vector2(0, y + 3), TIER_NAMES[tier], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
-		var x := LABEL_W
+		draw_string(f, Vector2(0, y + 3), tier_name(tier), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiKit.DIM)
+		var x := _label_w
 		while x < size.x:
 			draw_rect(Rect2(x, y, 1, 1), Color(UiKit.TEAL_DIM, 0.6))
 			x += 4.0

@@ -16,6 +16,13 @@ const MESSAGES := {
 	Stage.LIFTING_OFF: "CHOPPER LIFTING OFF",
 	Stage.GONE: "",
 }
+## Each stage's message as the HUD shows it (the id of its words: L10n; MESSAGES are for the run's log).
+const MESSAGE_IDS := {
+	Stage.INBOUND: "HUD_CHOPPER_INBOUND",
+	Stage.LANDED: "HUD_CHOPPER_LANDED",
+	Stage.LIFTING_OFF: "HUD_CHOPPER_LIFTING_OFF",
+	Stage.GONE: "",
+}
 
 @export var tuning: Tuning
 

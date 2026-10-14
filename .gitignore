@@ -37,3 +37,5 @@ art_source/boss/boss.glb
 art_source/boss/work/
 art_source/dog/dog.glb
 art_source/dog/work/
+# The translations Godot imports from game/l10n's CSVs (regenerated on import)
+game/l10n/*.translation

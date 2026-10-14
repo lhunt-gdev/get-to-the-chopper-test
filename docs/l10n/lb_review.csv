@@ -1,0 +1,274 @@
+﻿key,English,Lëtzebuergesch,where it appears,max letters,note
+LANGUAGE_NAME,ENGLISH,LËTZEBUERGESCH,SETTINGS' LANGUAGE: the language's own name (filled in already: it is the choice SETTINGS shows),16,Never translated: each language is named in its own words
+MENU_CLASSIFIED,// CLASSIFIED: EYES ONLY,// STRENG GEHEIM: NËMME FIR ÄR AEN,Main menu: the red tag over the logo,42,"LB: ""Streng geheim: nëmme fir Är Aen"" (top secret: for your eyes only)."
+MISSION_LINE,MISSION {n}: {mission},MISSIOUN {n}: {mission},Main menu: under the logo; HIGH SCORES: under the title,37,"{n}: the mission's number (1, or 01); {mission}: its name"
+MISSION_N,MISSION {n},MISSIOUN {n},"The opening pan: over the mission's name, big letters",21 in big letters (up to 42: then in small ones),{n}: the mission's number
+MENU_MISSION_SELECT,MISSION SELECT,MISSIOUN WIELEN,Main menu button; the mission select's title (big letters),22,
+MENU_HIGH_SCORES,HIGH SCORES,KLASSEMENT,Main menu button; the scoreboard's title (big letters),22,
+MENU_SETTINGS,SETTINGS,ASTELLUNGEN,Main menu and pause menu button; the settings' title (big letters),22,
+MENU_CONTROLS,CONTROLS,STEIERUNG,Main menu and pause menu button; the controls' title (big letters); a SETTINGS section,22,"LB, UNSURE: ""Steierung"" (controls) is not in lod.lu on its own (only ""Fernsteierung""); ""Bedienung"" would be the alternative. Also the name of a SETTINGS section."
+MENU_CREDITS,CREDITS,CREDITS,Main menu: the small button under the others; the credits' title (big letters),10,"LB, KEPT IN ENGLISH: CREDITS, as games and films in Luxembourg usually show it (only 10 letters of room)."
+MENU_DEMO,DEMO,DEMO,Main menu: at the foot,42,
+COMMON_BACK,BACK,ZERÉCK,A button on most screens,14,
+COMMON_BOARD,BOARD,KLASSEMENT,"A button: a mission's screen, the debrief (the scoreboard)",14,"On the debrief it shares a row with RETRY and MAIN MENU. LB: ""Klassement"" (ranking, league table: lod.lu) for the scoreboard, as on the main menu's HIGH SCORES."
+COMMON_CONTINUE,CONTINUE,WEIDER,The end-of-demo screen's button,22,
+PAUSE_TITLE,PAUSED,PAUS,"The pause menu's title, big letters",20 in big letters (up to 40: then in small ones),
+PAUSE_SUB,MISSION ON HOLD,MISSIOUN AN DER SCHWIEF,The pause menu: under the title,37,"LB: ""an der Schwief"" = on hold, pending (lod.lu)."
+PAUSE_RESUME,RESUME,WEIDERSPILLEN,Pause menu button,22,
+PAUSE_QUIT,QUIT TO MENU,ZERÉCK AN DE MENÜ,Pause menu button,22,
+CONTROLS_SUB,FIELD MANUAL,UWEISUNGE FIR DEN TERRAIN,CONTROLS: under the title,37,"LB: ""Uweisunge fir den Terrain"": instructions for the field."
+CONTROLS_SWIPE_LR,SWIPE < >,WËSCHEN < >,"CONTROLS: what you do (left column); also indented, for leaving cover","16 a line, 2 lines at most","LB: swipe = ""wëschen"" (to wipe) everywhere; ""swipen"" is also in lod.lu if players say that."
+CONTROLS_DODGE,DODGE A LANE,SPUER WIESSELEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_SWIPE_UP,SWIPE UP,EROP WËSCHEN,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_JUMP,JUMP,SPRANGEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_SWIPE_DOWN,SWIPE DOWN,EROF WËSCHEN,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_SLIDE,SLIDE,RUTSCHEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_TAP_LR,TAP ◀ ▶,◀ ▶ DRÉCKEN,"CONTROLS with MOVE on BUTTONS: what you do (left column); also indented, for leaving cover","16 a line, 2 lines at most",◀ ▶ are the on-screen buttons' arrows: keep them
+CONTROLS_TAP_UP,TAP ▲,▲ DRÉCKEN,CONTROLS with MOVE on BUTTONS: what you do (left column),"16 a line, 2 lines at most",▲ is the jump button's arrow: keep it
+CONTROLS_TAP_DOWN,TAP ▼,▼ DRÉCKEN,CONTROLS with MOVE on BUTTONS: what you do (left column),"16 a line, 2 lines at most",▼ is the slide button's arrow: keep it
+CONTROLS_OR_SWIPE,OR SWIPE,ODER WËSCHEN,CONTROLS with MOVE on BUTTONS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_SAME_MOVES,THE SAME MOVES,ALLES WÉI UEWEN,CONTROLS with MOVE on BUTTONS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_TAP_ENEMY,TAP ENEMY,FEIND DRÉCKEN,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_TARGET_IT,TARGET IT,ALS ZIL HUELEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_HOLD_FIRE,HOLD FIRE,AUSLÉISER HALEN,CONTROLS: what you do (left column),"16 a line, 2 lines at most","FIRE is the trigger button. LB: FIRE (the trigger button: it has no word on it) is ""den Ausléiser"" (the trigger) everywhere, as SETTINGS' TRIGGER row."
+CONTROLS_SHOOT_TARGET,SHOOT THE TARGET,OP D’ZIL SCHÉISSEN,CONTROLS (AIM: TAP ONLY): what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_SHOOT_AUTO,SHOOT (AUTO-AIM),SCHÉISSEN (AUTOZIL),CONTROLS: what it does (right column),"19 a line, 2 lines at most","LB, UNSURE: ""Autozil"" is made up (auto-aim); something better welcome (19 letters a line)."
+CONTROLS_RUN_INTO_COVER,RUN INTO COVER,AN D’DECKUNG LAFEN,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_HIDE,HIDE BEHIND IT,SECH VERSTOPPEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_LEAVE_COVER,LEAVE COVER,DECKUNG VERLOOSSEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_OUTER_LANES,OUTER LANES,BAUSSESPUEREN,CONTROLS: what you do (left column),"16 a line, 2 lines at most","LB, UNSURE: ""Baussespueren"" (outer lanes) is a made compound; ""Spuer"" = lane (lod.lu)."
+CONTROLS_SIDE_EXITS,TAKE SIDE EXITS,SÄITENDIEREN HUELEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_TRIPWIRES,TRIPWIRES,STOLPERDRÉIT,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_RAISE_ALERT,RAISE THE ALERT,ALARM GËTT HÉIJER,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_ALARM_BOXES,ALARM BOXES,ALARMKËSCHTEN,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_ALERT_DOWN,SHOOT: ALERT DOWN,SCHÉISS: ALARM EROF,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+CONTROLS_CHOPPER,THE CHOPPER,DEN HELIKOPTER,CONTROLS: what you do (left column),"16 a line, 2 lines at most",
+CONTROLS_REACH,REACH IT IN TIME,RECHTZÄITEG ERREECHEN,CONTROLS: what it does (right column),"19 a line, 2 lines at most",
+SETTINGS_SUB,AGENT PREFERENCES,WÉI DEN AGENT ET GÄR HUET,SETTINGS: under the title,37,"LB: ""Wéi den Agent et gär huet"" (how the agent likes it): a friendlier take on AGENT PREFERENCES."
+SETTINGS_AUDIO,AUDIO,AUDIO,SETTINGS: a section,33,"LB, KEPT IN ENGLISH: AUDIO (the section; its SOUND row is TOUN)."
+SETTINGS_DISPLAY,DISPLAY,BILDSCHIERM,SETTINGS: a section,33,
+SETTINGS_LANGUAGE,LANGUAGE,SPROOCH,SETTINGS: a row (its choices are each language's own name and are never translated),14,
+SETTINGS_SOUND,SOUND,TOUN,SETTINGS: a row (ON / OFF),26,
+SETTINGS_MASTER,MASTER,LAUTSTÄERKT,SETTINGS: a volume slider's row (the overall volume),18,
+SETTINGS_MUSIC,MUSIC,MUSEK,SETTINGS: a volume slider's row,18,
+SETTINGS_EFFECTS,EFFECTS,EFFETEN,SETTINGS: a volume slider's row (sound effects),18,
+SETTINGS_AMBIENCE,AMBIENCE,AMBIANCE,SETTINGS: a volume slider's row (background sound),18,
+SETTINGS_BRIGHTNESS,BRIGHTNESS,HELLEGKEET,SETTINGS: a slider's row,18,"LB, UNSURE: ""Hellegkeet"" is not in lod.lu; please check (or ""Liicht"")."
+SETTINGS_SCREEN_SHAKE,SCREEN SHAKE,BILDSCHIERM RËSELEN,SETTINGS: a row (ON / OFF),26,
+SETTINGS_RETRO_FILTER,RETRO FILTER,RETRO-FILTER,SETTINGS: a row (ON / OFF; the old-TV colour filter),26,
+SETTINGS_BLOOD,BLOOD,BLUTT,SETTINGS: a row (ON / OFF),26,
+SETTINGS_AIM,AIM,ZILEN,"SETTINGS: a row (AUTO, AUTO + TAP, TAP ONLY)",18,The row's name and its choice share the row
+SETTINGS_TRIGGER,TRIGGER,AUSLÉISER,SETTINGS: a row (which side the FIRE trigger is on),18,The row's name and its choice share the row
+SETTINGS_SWIPE_SPEED,SWIPE SPEED,WËSCHTEMPO,"SETTINGS: a row (how fast a swipe has to be: LOW, MEDIUM, HIGH)",18,The row's name and its choice share the row
+SETTINGS_MOVE,MOVE,BEWEEGEN,"SETTINGS: a row (SWIPE, or BUTTONS: on-screen buttons)",18,The row's name and its choice share the row
+SETTINGS_TIPS,TIPS,TIPPS,"SETTINGS: a row (the first-time tips: SHOW AGAIN, ON / OFF)",12,"Shares its row with SHOW AGAIN and ON / OFF. LB: ""Tipps"" (lod.lu gives Tippen/Tipps): Tipps, so it is not read as the verb ""tippen""."
+SETTINGS_ON,ON,UN,SETTINGS: a switch,6,
+SETTINGS_OFF,OFF,AUS,SETTINGS: a switch,6,
+SETTINGS_SHOW_AGAIN,SHOW AGAIN,NEI WEISEN,SETTINGS' TIPS row: a button (every tip shows again),16,
+SETTINGS_DONE,DONE,GEMAACH,SETTINGS' TIPS row: SHOW AGAIN once pressed,16,
+SETTINGS_RESET,RESET,ZERÉCKSETZEN,SETTINGS: a button (every setting back to how it was),14,"LB, UNSURE: ""zerécksetzen"" is in lod.lu as ""put back""; fine for a reset button?"
+AIM_AUTO,AUTO,AUTO,SETTINGS' AIM: a choice (FIRE aims itself),16,
+AIM_AUTO_TAP,AUTO + TAP,AUTO + DRÉCKEN,"SETTINGS' AIM: a choice (FIRE aims itself, or tap an enemy)",16,
+AIM_TAP,TAP ONLY,NËMMEN DRÉCKEN,SETTINGS' AIM: a choice (tap an enemy to aim at it),16,
+TRIGGER_RIGHT,RIGHT,RIETS,SETTINGS' TRIGGER: a choice,16,
+TRIGGER_LEFT,LEFT,LÉNKS,SETTINGS' TRIGGER: a choice,16,
+SWIPE_LOW,LOW,NIDDREG,SETTINGS' SWIPE SPEED: a choice (not the difficulty),16,
+SWIPE_MEDIUM,MEDIUM,MËTTEL,SETTINGS' SWIPE SPEED: a choice (not the difficulty),16,
+SWIPE_HIGH,HIGH,HÉICH,SETTINGS' SWIPE SPEED: a choice (not the difficulty),16,
+MOVE_SWIPE,SWIPE,WËSCHEN,SETTINGS' MOVE: a choice (moves by swiping),16,
+MOVE_BUTTONS,BUTTONS,TASTEN,SETTINGS' MOVE: a choice (on-screen move buttons too),16,"LB, UNSURE: ""Tasten"" (keys) for the on-screen buttons; ""Knäppercher"" or ""Buttonen"" (lod.lu has ""Button"" for a screen button) are the alternatives."
+MISSIONS_SUB,CONDOR JOB SHEET,OPTRAGSLËSCHT VU CONDOR,The mission select: under the title,37,CONDOR is the agency's name: keep it
+COMING_SOON,COMING SOON,GESCHWËNN,The mission select: a mission not made yet; a mission's screen,20,"LB: ""Geschwënn"" alone (soon): ""Kënnt geschwënn"" pushed the longer mission names onto two lines."
+MISSION_NAME_COLD_CALL,COLD CALL,KALEN URUFF,"Mission 1's name: the mission select, its screen's title (big letters), the debrief, the boards, the opening pan (big letters)",23,"JOKE: A sales ""cold call"". ""Kalen Uruff"" is word for word (a cold phone call); Luxembourgish has no sales sense for it. Better title welcome."
+MISSION_NAME_SHORT_LEASH,SHORT LEASH,KUERZ LÉNGT,"Mission 2's name: the mission select, the end-of-demo screen",23,"JOKE: Mission 2 has guard dogs: ""on a short leash"". From ""un der kuerzer Léngt halen"" (Léngt = dog lead, lod.lu); shortened to ""Kuerz Léngt"" to fit the end-of-demo list (19 letters there)."
+MISSION_NAME_DEAD_AIR,DEAD AIR,FUNKSTËLLT,"Mission 3's name: the mission select, the end-of-demo screen",23,"JOKE: Radio ""dead air"" (mission 3 is about radio tapes). ""Funkstëllt"" = radio silence."
+MISSION_NAME_NOTHING_TO_DECLARE,NOTHING TO DECLARE,ZOLLFRÄI,"Mission 4's name: the mission select, the end-of-demo screen",23,"JOKE: The customs phrase (mission 4: smugglers, the port's scanners). ""Näischt ze deklaréieren"" was too long for the end-of-demo list (19 letters there), so ""Zollfräi"" (duty-free)."
+MISSION_NAME_SEA_LEGS,SEA LEGS,SÉIKRANK,"Mission 5's name: the mission select, the end-of-demo screen",23,"JOKE: ""Sea legs"" (getting used to a boat; mission 5: pirates). ""Séikrank"" (seasick)."
+MISSION_NAME_FIRE_SALE,FIRE SALE,TOTALAUSVERKAF,"Mission 6's name: the mission select, the end-of-demo screen",23,"JOKE: A ""fire sale"" (VORHALT's stock sold off cheap). ""Totalausverkaf"" (clearance sale); the fire pun is lost."
+MISSION_NAME_GLASS_HOUSE,GLASS HOUSE,GLASHAUS,"Mission 7's name: the mission select, the end-of-demo screen",23,"JOKE: ""Glass house"" (people in glass houses...): ""Glashaus"" works the same way."
+MISSION_NAME_LIGHTS_OUT,LIGHTS OUT,LIICHT AUS,"Mission 8's name: the mission select, the end-of-demo screen",23,"LB: ""Liicht aus"", word for word."
+MISSION_NAME_HOT_EXFIL,HOT EXFIL,HOT EXFIL,"Mission 9's name (also the game's): the mission select, the end-of-demo screen",23,The game's name: kept as HOT EXFIL in every language.
+MISSION_PICK,MISSION {n}: PICK YOUR DIFFICULTY,MISSIOUN {n}: WIEL DÄIN NIVEAU,A mission's screen: under the title,"37 a line, 2 lines at most",{n}: the mission's number (01)
+MISSION_BEST_NOTE,"BEST: FASTEST EXTRACTION, TOP SCORE","BESCHT: AM SCHNELLSTEN ERAUS, DÉI MEESCHT PUNKTEN",A mission's screen: under its three difficulties (what BEST means),"42 a line, 2 lines at most",
+SETTING_EASY,EASY,LIICHT,"A difficulty: a mission's screen (big letters), the boards' tabs, the debrief",11,
+SETTING_MEDIUM,MEDIUM,MËTTEL,"A difficulty: a mission's screen (big letters), the boards' tabs, the debrief",11,
+SETTING_HARD,HARD,SCHWÉIER,"A difficulty: a mission's screen (big letters), the boards' tabs, the debrief",11,
+SETTING_EASY_LETTER,E,L,The mission select: EASY's one letter (by its best time and on its mark),1,"One letter. LB: L, M, S: Liicht, Mëttel, Schwéier."
+SETTING_MEDIUM_LETTER,M,M,The mission select: MEDIUM's one letter (by its best time and on its mark),1,One letter
+SETTING_HARD_LETTER,H,S,The mission select: HARD's one letter (by its best time and on its mark),1,One letter
+CHIP_CLEARED,CLEARED,GESCHAFFT,A mission's screen: a difficulty got out of,21,
+CHIP_NOT_CLEARED,NOT CLEARED YET,NACH NET GESCHAFFT,A mission's screen: a difficulty not got out of yet,21,
+CHIP_CLEAR_TO_UNLOCK,CLEAR {setting} TO UNLOCK,ÉISCHT {setting} SCHAFFEN,A mission's screen: a locked difficulty,30,{setting}: the difficulty before it (EASY or MEDIUM)
+CHIP_LOCKED,LOCKED,GESPÄERT,A mission's screen: a locked difficulty,30,
+CHIP_BEST,BEST,BESCHT,A mission's screen: over the best time,10,
+CHIP_PTS,{score} PTS,{score} PKT,A mission's screen: the top score (PTS: points),18,{score}: the score (or --). LB: PKT = Punkten (points).
+NEW_ENTRY,NEW ENTRY #{rank},TOP 10: PLAZ #{rank},The name entry's title (big letters); under the debrief's SCORE,33,"{rank}: the place on the scoreboard (1-10). LB: ""Top 10: Plaz #4"" kept short so it stays in the title's big letters (16 of them)."
+NAME_ENTER,ENTER YOUR NAME,GËFF DÄIN NUMM AN,The name entry: under the title,37,
+KEY_SPACE,SP,SP,The name entry: the space key,5,"LB, KEPT IN ENGLISH: SP (5 letters of room: ""Espace"" does not fit)."
+KEY_DEL,DEL,LÄSCH,The name entry: the delete key,5,
+KEY_OK,OK,OK,The name entry: the key that saves the name,10,
+END_EXTRACTED,EXFIL COMPLETE,EXFIL GESCHAFFT,The debrief's title for an escape (big letters); the scoreboard's rows,23,"LB, KEPT IN ENGLISH: EXFIL (as in the game's name) + ""geschafft"" (done)."
+END_EXTRACTED_SUB,EXTRACTED BY CHOPPER,VUM HELIKOPTER OFGEHOLL,The debrief: under the title,39,
+END_KILLED,KILLED IN ACTION,AM ASAZ GEFALEN,The debrief's title when CROSS is killed (big letters); the scoreboard's rows,23,"LB: ""gefalen"" = fallen in battle (lod.lu)."
+END_KILLED_SUB,AGENT DOWN,AGENT AM BUEDEM,The debrief: under the title,39,
+END_CAPTURED,AGENT CAPTURED,AGENT GEFAANGEN,The debrief's title when CROSS is caught (big letters); the scoreboard's rows,23,
+END_CAPTURED_SUB,TAKEN BY THE ENEMY,VUM FEIND ERWËSCHT,The debrief: under the title,39,
+END_CHOPPER_LEFT,THE CHOPPER LEFT,HELIKOPTER ASS FORT,The debrief's title when the chopper went without him (big letters); the scoreboard's rows,23,
+END_DEAD_END,NO WAY THROUGH,KEE WEE DUERCH,The debrief's title for a dead end (big letters); the scoreboard's rows,23,
+END_MISSION_FAILED,MISSION FAILED,MISSIOUN GESCHEITERT,The debrief: under the title (the chopper left; a dead end),39,
+DEBRIEF_HEADER,DEBRIEF,BILAN,The debrief: the panel's heading (the mission and difficulty across from it),12,"LB: ""Bilan"" (the French word Luxembourg uses for a review), as BRIEF_TAP_DEBRIEF."
+DEBRIEF_NEW_BEST_TIME,NEW BEST TIME,NEI BESCHTZÄIT,The debrief: under the buttons,"41 a line, 2 lines at most",
+DEBRIEF_NEW_BEST_TIME_WAS,NEW BEST TIME - WAS {time},NEI BESCHTZÄIT - VIRDRUN {time},The debrief: under the buttons,"41 a line, 2 lines at most",{time}: the old best (1:30.2)
+DEBRIEF_UNLOCKED,{setting} UNLOCKED,{setting} FRÄIGESCHALT,The debrief: under the buttons,"41 a line, 2 lines at most",{setting}: a difficulty (MEDIUM)
+DEBRIEF_UNLOCKED_NEXT,MISSION {n}: {settings} UNLOCKED,MISSIOUN {n}: {settings} FRÄIGESCHALT,The debrief: under the buttons,"41 a line, 2 lines at most",{n}: the next mission's number; {settings}: its difficulties (EASY + MEDIUM)
+DEBRIEF_RETRY,RETRY,NACH EMOL,The debrief: a button,12,Shares a row with BOARD and MAIN MENU
+DEBRIEF_MAIN_MENU,MAIN MENU,HAAPTMENÜ,The debrief: a button,12,Shares a row with RETRY and BOARD
+TALLY_TIME,TIME,ZÄIT,The debrief's tally: a row,25,
+TALLY_DISTANCE,DISTANCE,DISTANZ,The debrief's tally: a row,25,
+TALLY_SPARE,CHOPPER TO SPARE,HELI-ZÄIT IWWREG,The debrief's tally: a row (how long the chopper would still have waited),25,
+TALLY_DOWNED,ENEMIES DOWN,FEINDEN AM BUEDEM,The debrief's tally: a row,25,
+TALLY_HITS,HITS TAKEN,TREFFER KRITT,The debrief's tally: a row,25,
+TALLY_RUN_INTO,THINGS RUN INTO,HINDERNISSER GETRAFF,The debrief's tally: a row (obstacles he ran into),25,"LB, UNSURE: plural ""Hindernisser""?"
+TALLY_SET_OFF,ALARMS SET OFF,ALARMER AUSGELÉIST,The debrief's tally: a row,25,
+TALLY_STOPPED,ALARMS STOPPED,ALARMER GESTOPPT,The debrief's tally: a row,25,
+TALLY_TOP_ALERT,HIGHEST ALERT,HÉCHSTEN ALARM,The debrief's tally: a row,25,
+TALLY_ROUTE,ROUTE,WEE,The debrief's tally: a row (the levels he went through: MAIN > ROOF),25,
+TALLY_NEW_AREAS,NEW AREAS FOUND,NEI ZONE FONNT,The debrief's tally: a row,25,
+TALLY_METRES,{n} M,{n} M,The debrief's tally: DISTANCE's value (M: metres),11,{n}: the metres
+TALLY_SCORE,SCORE,PUNKTEN,The debrief: the score's line,8,"LB: ""Punkten""; SCORE would also be understood (8 letters of room)."
+TALLY_MULT,x{n} {setting},x{n} {setting},"The debrief: by SCORE, the difficulty's multiplier (x2 MEDIUM)",16,"{n}: 1, 2 or 3; {setting}: the difficulty"
+SCORE_NEW_BEST,NEW BEST,NEIE REKORD,The debrief: under SCORE (on a red block),33,
+SCORE_NEW_BEST_RANK,NEW BEST #{rank},NEIE REKORD #{rank},The debrief: under SCORE (on a red block),33,{rank}: the place on the scoreboard
+SCORE_BEST,BEST {score},BESCHT {score},The debrief: under SCORE (his best there),33,{score}: his best score
+TIER_ROOF,ROOF,DAACH,"The debrief's route map (a level's name, left) and the tally's ROUTE",7,"LB: The three levels: Daach (roof), Rez (ground floor), Keller (underground)."
+TIER_MAIN,MAIN,REZ,"The debrief's route map (a level's name, left) and the tally's ROUTE",7,"The ground floor. LB, UNSURE: ""Rez"" for rez-de-chaussée (ground floor): only 7 letters of room. Do players say ""Rez""?"
+TIER_BELOW,BELOW,KELLER,"The debrief's route map (a level's name, left) and the tally's ROUTE",7,Underground
+AREA_MAIN_FLOOR_LOBBY,MAIN FLOOR LOBBY,ENTRÉESHALL,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,"LB, UNSURE: ""Entréeshall"" (the entrance hall); ""Lobby"" (also in lod.lu) is the alternative. Area names stay in the big letters at 17 letters or fewer."
+AREA_BUILDING_MAIN_FLOOR,BUILDING MAIN FLOOR,REZ-DE-CHAUSSÉE,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_SECURITY_WING,SECURITY WING,SÉCHERHEETSFLIGEL,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_STAFF_CANTEEN,STAFF CANTEEN,PERSONALKANTIN,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_SERVICE_TUNNEL,SERVICE TUNNEL,SERVICETUNNEL,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_BOILER_ROOM,BOILER ROOM,HEIZUNGSKELLER,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,"LB, UNSURE: ""Heizungskeller""; ""Chaufferie"" is also said."
+AREA_ROOFTOPS,ROOFTOPS,OP DEN DIECHER,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_ROOF_EDGE,ROOF EDGE,DAACHKANT,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_MAIN_FLOOR_EXIT,MAIN FLOOR EXIT,HAAPTAUSGANK,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+AREA_HELIPAD,HELIPAD,LANDEPLAZ,"Mission 1's area: its name types out bottom left as you enter it (big letters), and on the debrief",35,
+WAY_MAIN_FLOOR,MAIN FLOOR,REZ,"In the run: where a way goes, over the road as you come up to it",14,"The sign in the level stays in English. LB, UNSURE: ""Rez"" (the ground floor, as TIER_MAIN): 14 letters of room, so ""Rez-de-chaussée"" (15) does not fit."
+WAY_SECURITY,SECURITY,SÉCHERHEET,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_CANTEEN,CANTEEN,KANTIN,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_EXIT,EXIT,AUSGANK,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_HELIPAD,HELIPAD,LANDEPLAZ,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_ROOF_EDGE,ROOF EDGE,DAACHKANT,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_BOILER_ROOM,BOILER ROOM,HEIZUNGSKELLER,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_LADDER,LADDER,LEEDER,"In the run: where a way goes, over the road as you come up to it",14,The sign in the level stays in English
+WAY_UP,UP,EROP,"In the run: a way up the stairs, over the road as you come up to it",14,The sign in the level stays in English
+WAY_DOWN,DOWN,EROF,"In the run: a way down the stairs, over the road as you come up to it",14,The sign in the level stays in English
+HUD_LIFE,LIFE,LIEWEN,"In the run: top left, by the life bar",6,
+HUD_ALERT_1,SNEAKING,SCHLÄICHEN,"In the run: top left, the alert box (level 1 of 3); the debrief's HIGHEST ALERT; the scoreboard",11,
+HUD_ALERT_2,CAUTION,VIRSIICHT,"In the run: top left, the alert box (level 2 of 3); the debrief's HIGHEST ALERT; the scoreboard",11,
+HUD_ALERT_3,ALERT,ALARM,"In the run: top left, the alert box (level 3 of 3); the debrief's HIGHEST ALERT; the scoreboard",11,
+HUD_CHOPPER_INBOUND,CHOPPER INBOUND,HELIKOPTER KËNNT,In the run: the message under the clock,38,
+HUD_CHOPPER_LANDED,CHOPPER LANDED,HELIKOPTER ASS DO,In the run: the message under the clock,38,
+HUD_CHOPPER_LIFTING_OFF,CHOPPER LIFTING OFF,HELIKOPTER FLÉIT FORT,In the run: the message under the clock (blinking),38,
+HUD_STOP_RUNNER,STOP THE RUNNER,STOPP DE LEEFER,In the run: the message under the clock (a guard running for an alarm),38,
+HUD_RUNNER_DOWN,RUNNER DOWN,LEEFER AM BUEDEM,In the run: the message under the clock,38,
+HUD_ALARM_RAISED,ALARM RAISED,ALARM AUSGELÉIST,In the run: the message under the clock,38,
+HUD_SNIPER,SNIPER!,SNIPER!,In the run: the message under the clock,38,"LB, KEPT IN ENGLISH: SNIPER! (lod.lu has no word for it; ""Heckeschütz"" is German)."
+HUD_SPOTTED,SPOTTED,ENTDECKT,In the run: the message under the clock,38,
+HUD_SQUAD_TAIL,SQUAD ON YOUR TAIL,TRUPP HANNERT DIR,In the run: the message under the clock,38,
+HUD_SQUAD_FALLING_BACK,SQUAD FALLING BACK,TRUPP ZÉIT SECH ZERÉCK,In the run: the message under the clock,38,
+HUD_SQUAD_SHAKEN,SQUAD SHAKEN OFF,TRUPP OFGEHAANG,In the run: the message under the clock,38,"LB: ""ofhänken"" = to leave behind, shake off (lod.lu)."
+HUD_CAUGHT,CAUGHT,ERWËSCHT,In the run: the message under the clock,38,
+HUD_REAR_CAM,REAR CAM,RÉCKKAMERA,In the run: the rear-view monitor's label (top),10,
+HUD_SQUAD,SQUAD {n},TRUPP {n},In the run: the rear-view monitor (how many are chasing),16,{n}: how many
+HUD_CLEAR,CLEAR,FRÄI,In the run: the rear-view monitor (none chasing),8,
+HUD_BOSS,BOSS,BOSS,In the run: by the boss's health bar,8,"LB, KEPT IN ENGLISH: BOSS (lod.lu has it; ""Chef"" is the alternative)."
+HUD_ALARM,ALARM,ALARM,In the run: by the alarm runner's bar,8,
+HUD_REPLAY,REPLAY,WIDDERHUELUNG,"The boss's knockout replay: top, big letters",21 in big letters (up to 42: then in small ones),
+HUD_TAP_TO_SKIP,TAP TO SKIP,DRÉCK FIR ZE IWWERSPRANGEN,The boss's knockout replay: bottom,42,
+HUD_MOVE_SWIPE,SWIPE < >,WËSCH < >,In the run: {move} in the cover hint,14,
+HUD_MOVE_TAP,TAP ◀ ▶,DRÉCK ◀ ▶,"In the run, with MOVE on BUTTONS: {move} in the cover hint",14,◀ ▶ are the on-screen buttons' arrows: keep them
+HUD_IN_COVER,IN COVER - {move} TO BREAK COVER,AN DER DECKUNG - {move} FIR ERAUSZEKOMMEN,In the run: the hint while in cover,"42 a line, 2 lines at most",{move}: SWIPE < > (or TAP ◀ ▶)
+HUD_STANDOFF,{move} TO DODGE - HOLD FIRE,"{move} FIR AUSZEWÄICHEN, HAL DEN AUSLÉISER FIR ZE SCHÉISSEN",In the run: the hint facing the boss,"42 a line, 2 lines at most",{move}: SWIPE < > (or TAP ◀ ▶). LB: Worded so its first line stays clear of the route meter at the left (36 letters or so).
+HUD_CAM,CAM {n},KAMERA {n},In the run: on the stairwell's security-camera picture,10,{n}: the camera's number
+HUD_REC,REC,REC,"In the run: on the security-camera picture, blinking (recording)",5,"LB, KEPT IN ENGLISH: REC, as on any camera."
+TIP_TAB,TIP,TIPP,The first-time tips: the card's red tab,10,
+TIP_CLOSE,TAP TO CLOSE,DRÉCK FIR ZOUZEMAACHEN,The first-time tips: at the card's foot,37,
+TIP_SWIPE_SIDE,SWIPE LEFT OR RIGHT,WËSCH NO LÉNKS ODER RIETS,A first-time tip (changing lane; leaving cover): its first line,"37 a line, 2 lines at most",
+TIP_LANE,TO CHANGE LANE,FIR D’SPUER ZE WIESSELEN,A first-time tip (changing lane): its second line,"37 a line, 2 lines at most",
+TIP_JUMP,SWIPE UP TO JUMP,WËSCH EROP FIR ZE SPRANGEN,A first-time tip,"37 a line, 2 lines at most",
+TIP_SLIDE,SWIPE DOWN TO SLIDE,WËSCH EROF FIR ZE RUTSCHEN,A first-time tip,"37 a line, 2 lines at most",
+TIP_COVER,RUN INTO COVER TO HIDE,VERSTOPP DECH: LAF AN D’DECKUNG,A first-time tip (cover): its first line,"37 a line, 2 lines at most",
+TIP_COVER_PAST,OR SWIPE EARLY TO RUN ON PAST,ODER WËSCH FRÉI A LAF LAANSCHT,A first-time tip (cover): its second line,"37 a line, 2 lines at most",
+TIP_LEAVE_COVER,TO LEAVE COVER,FIR D’DECKUNG ZE VERLOOSSEN,A first-time tip (leaving cover): its second line,"37 a line, 2 lines at most",
+TIP_FIRE,HOLD FIRE TO SHOOT,HAL DEN AUSLÉISER FIR ZE SCHÉISSEN,A first-time tip (FIRE): its first line,"37 a line, 2 lines at most",FIRE is the trigger button
+TIP_FIRE_AIMS,IT AIMS FOR YOU,ET ZILT ELENG,A first-time tip (FIRE; AIM: AUTO): its second line,"37 a line, 2 lines at most",
+TIP_TRIGGER,SETTINGS: TRIGGER LEFT OR RIGHT,ASTELLUNGEN: AUSLÉISER LÉNKS/RIETS,"A first-time tip (FIRE): its last line (SETTINGS, TRIGGER: the setting's names)","37 a line, 2 lines at most",SETTINGS and TRIGGER are what SETTINGS calls them
+TIP_FIRE_TAP,TAP AN ENEMY TO TARGET IT,DRÉCK OP E FEIND: DAT ASS DÄIN ZIL,A first-time tip (FIRE; AIM: TAP ONLY): its first line,"37 a line, 2 lines at most",
+TIP_FIRE_TAP_SHOOT,HOLD FIRE TO SHOOT IT,HAL DEN AUSLÉISER FIR ZE SCHÉISSEN,A first-time tip (FIRE; AIM: TAP ONLY): its second line,"37 a line, 2 lines at most",
+TIP_FIRE_OR_TAP,"IT AIMS, OR TAP AN ENEMY","ET ZILT ELENG, ODER DRÉCK OP E FEIND",A first-time tip (FIRE; AIM: AUTO + TAP): its second line,"37 a line, 2 lines at most",
+TIP_ALERT,TRIPWIRES RAISE THE ALERT,STOLPERDRÉIT HIEWEN DEN ALARM,A first-time tip (the alert): its first line,"37 a line, 2 lines at most",
+TIP_ALERT_JUMP,JUMP THEM TO STAY QUIET,SPRANG DRIWWER FIR ROUEG ZE BLEIWEN,A first-time tip (the alert): its second line,"37 a line, 2 lines at most",
+TIP_ALERT_BOXES,SHOOT ALARM BOXES TO LOWER IT,SCHÉISS ALARMKËSCHTEN: DAT SENKT EN,A first-time tip (the alert): its third line,"37 a line, 2 lines at most",
+TIP_DOORS_OPEN,ARROWS: THE DOOR IS OPEN,FEILER: D’DIER ASS OP,A first-time tip (the doors): its first line,"37 a line, 2 lines at most","LB: ""Feiler"" = arrows, ""Klauschter"" = padlock (lod.lu)."
+TIP_DOORS_LOCKED,PADLOCK: IT'S LOCKED,KLAUSCHTER: D’DIER ASS ZOU,A first-time tip (the doors): its second line,"37 a line, 2 lines at most",
+TIP_DOORS_SIDE,OUTER LANES TAKE THE SIDE DOORS,BAUSSESPUEREN: DUERCH D’SÄITENDIEREN,A first-time tip (the doors): its third line,"37 a line, 2 lines at most",
+TIP_TAP_SIDE,TAP ◀ OR ▶,DRÉCK ◀ ODER ▶,A first-time tip with MOVE on BUTTONS (changing lane; leaving cover): its first line,"37 a line, 2 lines at most",◀ ▶ are the on-screen buttons' arrows: keep them
+TIP_TAP_JUMP,TAP ▲ TO JUMP,DRÉCK ▲ FIR ZE SPRANGEN,A first-time tip with MOVE on BUTTONS,"37 a line, 2 lines at most",▲ is the jump button's arrow: keep it
+TIP_TAP_SLIDE,TAP ▼ TO SLIDE,DRÉCK ▼ FIR ZE RUTSCHEN,A first-time tip with MOVE on BUTTONS,"37 a line, 2 lines at most",▼ is the slide button's arrow: keep it
+TIP_COVER_TAP_PAST,OR TAP ◀ ▶ EARLY TO RUN ON PAST,ODER DRÉCK FRÉI ◀ ▶ A LAF LAANSCHT,A first-time tip with MOVE on BUTTONS (cover): its second line,"37 a line, 2 lines at most",◀ ▶ are the on-screen buttons' arrows: keep them
+BRIEF_TAG,MISSION BRIEFING,MISSIOUNSBRIEFING,The briefing: the red tag top left,18 (up to 26: the line count beside it then makes way),
+BRIEF_SKIP,SKIP,ZUM ENN,The briefing and the end conversations: the button top right (SKIP ▶▶),11,"LB: ""Zum Enn"" (to the end): ""Iwwersprangen"" is too long for the button."
+BRIEF_SIGNAL_LOST,SIGNAL LOST,KEE SIGNAL,"The end conversation when CROSS is killed: across his card, blinking",15,
+BRIEF_TAP,TAP,DRÉCK,The briefing: under a line once it's all there (tap for the next),30,
+BRIEF_TAP_CONTINUE,TAP TO CONTINUE,DRÉCK FIR WEIDERZEMAACHEN,The briefing: under its first line once it's all there,30,
+BRIEF_TAP_END,TAP TO END,DRÉCK FIR OFZESCHLÉISSEN,The briefing: under its last line,30,
+BRIEF_TAP_DEBRIEF,TAP FOR DEBRIEF,DRÉCK FIR DE BILAN,An end conversation: under its last line,30,
+M1_BRIEF_01,CROSS! VORHALT'S SELLING A MUSEUM'S ALARM PLANS TO A GANG OF ART THIEVES. GO AND GET THEM!,CROSS! VORHALT VERKAFT D’ALARMPLÄNG VUN ENGEM MUSÉE UN ENG BAND KONSCHTDÉIF. HOL SE DIR!,"Mission 1's briefing, line 1 (BISHOP, the General)","5 rows of 39, the speaker's [NAME] included","LB: Bishop calls Cross ""du"" and ""Jong"" (son, boy); Vesper calls the General ""Dir"" and ""Generol"" (lod.lu)."
+M1_BRIEF_02,"HE'S ALREADY GOT THEM, GENERAL. HE'S RUNNING FOR THE CHOPPER.","DÉI HUET EN SCHONN, GENEROL. HIE LEEFT GRAD OP DEN HELIKOPTER ZOU.","Mission 1's briefing, line 2 (VESPER, the briefer)","5 rows of 39, the speaker's [NAME] included","LB: ""Déi huet en schonn"": he already has them."
+M1_BRIEF_03,"THAT'S MY BOY! AND THAT CHOPPER'S ON THE METER, SON. FUEL DOESN'T GROW ON TREES.","BRAVO, MÄI JONG! AN DE COMPTEUR VUM HELIKOPTER LEEFT. SPRIT WIISST NET OP DE BEEM!","Mission 1's briefing, line 3 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: ""Fuel doesn't grow on trees"" twists ""money doesn't grow on trees"". Luxembourgish has the same saying (""D'Geld wiisst net op de Beem""), so the twist carries straight over: ""Sprit wiisst net op de Beem"". ""On the meter"" (rented by the minute, like a taxi) is ""de Compteur leeft""."
+M1_BRIEF_04,IT COMES OUT OF THE COFFEE MACHINE BUDGET. WHICH IS WHY WE DON'T HAVE A COFFEE MACHINE.,DE SPRIT GEET VUM BUDGET FIR D’KAFFISMASCHINN OF. DOFIR HU MIR KENG KAFFISMASCHINN.,"Mission 1's briefing, line 4 (VESPER)","5 rows of 39, the speaker's [NAME] included","JOKE: The chopper's fuel comes out of the coffee-machine budget, so there is no coffee machine. Kept as it is."
+M1_BRIEF_05,ONE GUARD ON THE PAD. HUGE. MINIGUN. SKULL ON HIS CHEST. NAME TAG SAYS ARDBALLS.,EEN WIECHTER OP DER LANDEPLAZ. RISEG. MINIGUN. DOUDEKAPP OP DER BROSCHT. OP SENGEM NUMMSCHËLD STEET ARDBALLS.,"Mission 1's briefing, line 5 (VESPER)","5 rows of 39, the speaker's [NAME] included","JOKE: ARDBALLS (like Odd Job; ""hard balls"") is a name and stays in English: the joke is the name tag. ""Doudekapp"" = skull (and crossbones)."
+M1_BRIEF_06,KEEP THE METER RUNNING.,LOOSS DE COMPTEUR LAFEN.,"Mission 1's briefing, line 6 (CROSS)","5 rows of 39, the speaker's [NAME] included","JOKE: Cross's cool line: keep the taxi meter running (I'll be right back). Bishop says the same words when Cross dies (M1_KILLED_02), so both must stay word for word the same."
+M1_EXTRACTED_TITLE,EXFIL COMPLETE,EXFIL GESCHAFFT,Mission 1's end conversation after an escape: the red tag top left,18 (up to 26: the line count beside it then makes way),
+M1_EXTRACTED_01,"GOOD RIDDANCE, ARDBALLS! SON, ARE THE ALARM PLANS SAFE?","ÄDDI, ARDBALLS, A KOMM NET ZERÉCK! JONG, SINN D’ALARMPLÄNG A SÉCHERHEET?","Mission 1, after an escape, line 1 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: ""Good riddance, ARDBALLS!"" (a new ARDBALLS turns up every mission: the running gag). Lb: ""Äddi, Ardballs, a komm net zeréck!"" (bye, and don't come back), which sets up the next one coming back. A better Luxembourgish ""good riddance"" welcome."
+M1_EXTRACTED_02,NO NEED TO BE ALARMED.,KEE GROND FIR ALARM.,"Mission 1, after an escape, line 2 (CROSS)","5 rows of 39, the speaker's [NAME] included","JOKE: Pun: the ALARM plans, ""no need to be alarmed"". Lb: ""Kee Grond fir Alarm"" (no reason for alarm) keeps it, with ""Alarmpläng"" in the line before."
+M1_EXTRACTED_03,FOUR OUT OF TEN.,VÉIER VUN ZÉNG.,"Mission 1, after an escape, line 3 (VESPER)","5 rows of 39, the speaker's [NAME] included","JOKE: Running gag: Vesper scores Cross's one-liner out of ten, always low."
+M1_EXTRACTED_04,FOUR? THAT'S ERNEST CROSS YOU'RE SCORING!,"VÉIER? DAT ASS DEN ERNEST CROSS, DEN S DU DO BEWÄERTS!","Mission 1, after an escape, line 4 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: Bishop outraged: ""That's ERNEST Cross you're scoring!"" (Ernest sounds like ""earnest""). Lb keeps the outrage (""den Ernest Cross, deen s du do bewäerts!""); the earnest pun is lost (Lb ""eescht"" = earnest, if you find a way in)."
+M1_EXTRACTED_05,"STILL A FOUR. AND WHILE WE'RE ON NUMBERS, I'D LIKE A RAISE.",ËMMER NACH VÉIER. A WA MER SCHONN BEI DEN ZUELE SINN: ECH HÄTT GÄR MÉI PAI.,"Mission 1, after an escape, line 5 (VESPER)","5 rows of 39, the speaker's [NAME] included","JOKE: ""While we're on numbers, I'd like a raise."" Lb: ""a wa mer schonn bei den Zuele sinn: ech hätt gär méi Pai."""
+M1_EXTRACTED_06,"DENIED. NOW GLIDE HOME, SON. SAVES FUEL.","OFGELEENT. ELO SCHWIEF HEEM, JONG. DAT SPUERT SPRIT.","Mission 1, after an escape, line 6 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: The stingy General: ""glide home, saves fuel"". Lb: ""Schwief heem"" (schwiewen = glide, float), ""dat spuert Sprit""."
+M1_KILLED_TITLE,KILLED IN ACTION,AM ASAZ GEFALEN,Mission 1's end conversation when CROSS is killed: the red tag top left,18 (up to 26: the line count beside it then makes way),
+M1_KILLED_01,"CROSS? CROSS, COME IN. ...HIS SIGNAL'S GONE, GENERAL.","CROSS? CROSS, MELL DECH. ...SÄI SIGNAL ASS FORT, GENEROL.","Mission 1, CROSS killed, line 1 (VESPER)","5 rows of 39, the speaker's [NAME] included",
+M1_KILLED_02,KEEP THE METER RUNNING.,LOOSS DE COMPTEUR LAFEN.,"Mission 1, CROSS killed, line 2 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: The same words as M1_BRIEF_06 (Cross's line): Bishop keeps paying, hoping he comes back. Keep both the same."
+M1_KILLED_03,GENERAL...,GENEROL...,"Mission 1, CROSS killed, line 3 (VESPER)","5 rows of 39, the speaker's [NAME] included",
+M1_KILLED_04,ONE MORE MINUTE. I'LL PAY.,NACH ENG MINUTT. ECH BEZUELEN.,"Mission 1, CROSS killed, line 4 (BISHOP)","5 rows of 39, the speaker's [NAME] included",JOKE: The cheapest man alive offers to pay for one more minute (the sad punchline).
+M1_CAPTURED_TITLE,AGENT CAPTURED,AGENT GEFAANGEN,Mission 1's end conversation when CROSS is caught: the red tag top left,18 (up to 26: the line count beside it then makes way),
+M1_CAPTURED_01,"THEY'VE GOT HIM, GENERAL. I RANG VORHALT: ""YOUR SECRETS ARE IMPORTANT TO US. PLEASE HOLD.""","SI HUNN HIEN, GENEROL. ECH HU VORHALT UGERUFF: „ÄR GEHEIMNISSER SINN EIS WICHTEG. W.E.G. WAARDEN.“","Mission 1, CROSS caught, line 1 (VESPER)","5 rows of 39, the speaker's [NAME] included","JOKE: A phone hold message (""Your call is important to us. Please hold.""), with ""secrets"" for ""call"". Lb: ""Är Geheimnisser sinn eis wichteg. W.e.g. waarden."" If Luxembourg's hotlines say it another way, use that."
+M1_CAPTURED_02,"HOLD? ON MY PHONE BILL? ...HANG ON, THERE'S MUSIC. IT'S ACTUALLY QUITE NICE.","WAARDEN? OP MENG TELEFONSRECHNUNG? ...MOMENT, DO LEEFT MUSEK. DÉI ASS EIGENTLECH GANZ FLOTT.","Mission 1, CROSS caught, line 2 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: The stingy General: being on hold costs him on his phone bill... then he likes the hold music (""flott"" = nice)."
+M1_CAPTURED_03,"TAKE YOUR TIME, GENERAL. I'M NOT GOING ANYWHERE.","HUELT IECH ZÄIT, GENEROL. ECH GINN NÉIERENS HIN.","Mission 1, CROSS caught, line 3 (CROSS)","5 rows of 39, the speaker's [NAME] included","JOKE: Cross deadpan: he's been caught, so he isn't going anywhere."
+M1_CHOPPER_LEFT_TITLE,THE CHOPPER LEFT,HELIKOPTER ASS FORT,Mission 1's end conversation when the chopper went without him: the red tag top left,18 (up to 26: the line count beside it then makes way),
+M1_CHOPPER_LEFT_01,"THE CHOPPER'S GONE, GENERAL. YOUR MINUTES RAN OUT.","DEN HELIKOPTER ASS FORT, GENEROL. ÄR MINUTTE SINN ERIWWER.","Mission 1, the chopper gone, line 1 (VESPER)","5 rows of 39, the speaker's [NAME] included",JOKE: The chopper is rented by the minute; his minutes ran out.
+M1_CHOPPER_LEFT_02,ALREADY? I PAID FOR MINUTES! PLURAL!,ELO SCHONN? ECH HU MINUTTE BEZUELT! MEERZAL!,"Mission 1, the chopper gone, line 2 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: ""I paid for minutes! Plural!"" Lb: ""Meerzal!"" (lod.lu's word for plural; ""Pluriel"" also)."
+M1_CHOPPER_LEFT_03,AND YOU SPENT THE TOP-UP ON CIGARS.,AN DIR HUTT D’SUE FIR D’VERLÄNGERUNG AN ZIGAREN INVESTÉIERT.,"Mission 1, the chopper gone, line 3 (VESPER)","5 rows of 39, the speaker's [NAME] included","JOKE: He spent the top-up (the money for more minutes) on cigars. Lb: ""d'Sue fir d'Verlängerung an Zigaren investéiert""."
+M1_CHOPPER_LEFT_04,I'LL GET THE BUS.,ECH HUELEN DE BUS.,"Mission 1, the chopper gone, line 4 (CROSS)","5 rows of 39, the speaker's [NAME] included","JOKE: Cross: ""I'll get the bus."" (Leads into the next line.)"
+M1_CHOPPER_LEFT_05,"PAY YOUR OWN FARE, SON.","GUTT IDDI, JONG. DE BUS ASS JO GRATIS!","Mission 1, the chopper gone, line 5 (BISHOP)","5 rows of 39, the speaker's [NAME] included","JOKE: English: ""Pay your own fare, son."" Adapted for Luxembourg, where the buses are free (since 2020): the General is delighted, ""Gutt Iddi, Jong. De Bus ass jo gratis!"" (good idea, son, the bus is free!): the stinginess lands as relief it costs him nothing."
+CREDITS_SUB,HOT EXFIL DEMO,HOT EXFIL DEMO,CREDITS: under the title,37,HOT EXFIL is the game's name: keep it
+CREDITS_BY,A GAME BY,E SPILL VUN,CREDITS: over the maker's name,42,
+CREDITS_MADE_WITH,MADE WITH,GEMAACH MAT,CREDITS: over GODOT ENGINE (the engine's name),42,
+CREDITS_MIT,MIT LICENCE: SEE LICENCES,MIT-LIZENZ: KUCK LIZENZEN,CREDITS: under the engine's name and website,42,LICENCES is the button's name
+CREDITS_IN_CODE_WHAT,"LEVELS, TEXTURES, SOUND, MUSIC","LEVELEN, TEXTUREN, TOUN, MUSEK",CREDITS: over MADE IN CODE,42,"LB: ""Levelen"" (as players say); ""Niveauen"" is the alternative."
+CREDITS_IN_CODE,MADE IN CODE,AM CODE GEMAACH,CREDITS: big letters,20 in big letters (up to 40: then in small ones),
+CREDITS_BLENDER,CHARACTERS MADE WITH BLENDER,FIGURE MAT BLENDER GEMAACH,CREDITS: under MADE IN CODE (Blender: a 3D program's name),42,
+CREDITS_LICENCES,LICENCES,LIZENZEN,CREDITS: a button; the licences' title (big letters),22,The licence texts themselves stay in English
+CREDITS_ABOUT,ABOUT THE DEMO,IWWER D’DEMO,CREDITS: a button (the end-of-demo screen),22,
+LICENCES_SUB,GODOT ENGINE + THIRD PARTIES,GODOT ENGINE + DRËTTPERSOUNEN,LICENCES: under the title,37,"LB, UNSURE: ""Drëttpersounen"" (lod.lu's ""third party"") for the third-party licences."
+DEMO_THANKS,THANKS FOR PLAYING,MERCI FIRS SPILLEN,"The end-of-demo screen: the title, big letters",20 in big letters (up to 40: then in small ones),
+DEMO_THE_DEMO,THE HOT EXFIL DEMO,D’HOT EXFIL DEMO,The end-of-demo screen: under the title,37,HOT EXFIL is the game's name: keep it
+DEMO_MORE,MORE MISSIONS ARE ON THE WAY:,MÉI MISSIOUNE SINN ËNNERWEE:,The end-of-demo screen: over the list of missions to come,42,
+DEMO_JOBS,EIGHT MORE JOBS FOR CONDOR,AACHT NEI OPTRÄG FIR CONDOR,The end-of-demo screen: over the list of missions to come,42,CONDOR is the agency's name: keep it
+DEMO_SOON,SOON,GESCHWËNN,The end-of-demo screen: by each mission to come,10,
+DEMO_FOLLOW,FOLLOW THE GAME:,FOLLEG DEM SPILL:,The end-of-demo screen: over where to follow it,42,"LB: ""Folleg dem Spill"" (as on social media)."
+IOS_ADD,ADD TO HOME SCREEN,„ZUM HOME-BILDSCHIRM“,"iPhone, in Safari: the tip on the main menu, its headline",37,"What Safari's share menu calls it (Zum Home-Bildschirm in German Safari). LB: Kept in German spelling on purpose (""Zum Home-Bildschirm""): iOS has no Luxembourgish, so most players' Safari is in German (or French: ""Sur l'écran d'accueil""). It quotes the menu item they will see."
+IOS_KEEP,TO KEEP YOUR PROGRESS,FIR DÄI SPILLSTAND ZE HALEN,"iPhone, in Safari: the tip on the main menu, its second line",39,
+IOS_TAP,TAP,DRÉCK,"iPhone, in Safari: the tip's last line, before the share icon",10,The last line reads: TAP [share icon] THEN ADD TO HOME SCREEN
+IOS_THEN,THEN ADD TO HOME SCREEN,AN DANN „ZUM HOME-BILDSCHIRM“,"iPhone, in Safari: the tip's last line, after the share icon",33,The last line reads: TAP [share icon] THEN ADD TO HOME SCREEN. LB: The last line reads: DRÉCK [share icon] AN DANN „ZUM HOME-BILDSCHIRM“ (see IOS_ADD).

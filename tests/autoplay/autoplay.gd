@@ -874,7 +874,7 @@ func _watch_talk() -> void:
 			# The debrief as the conversation closes, its title, the ambience back, the sting now.
 			if int(t["closed_f"]) < 0 or f - int(t["closed_f"]) > 2:
 				_talk_bad(t, "debrief-not-as-it-closed")
-			var want_title := String((fe.get_script() as GDScript).get_script_constant_map()["END_TITLES"][StringName(t["reason"])][0])
+			var want_title := L10n.t((fe.get_script() as GDScript).get_script_constant_map()["END_TITLES"][StringName(t["reason"])][0])  # (its words)
 			if not fe.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == want_title):
 				_talk_bad(t, "no-debrief-title")
 			if _level._audio._amb_duck != 0.0:

@@ -519,7 +519,7 @@ func _ready() -> void:
 	_frontend = Frontend.new()
 	_frontend.name = "Frontend"
 	add_child(_frontend)
-	_frontend.mission_title = String(_graph.mission().get("title", "MISSION 1"))
+	_frontend.mission = _graph.mission()
 	_briefing = Briefing.load_file(BRIEFING_PATH)
 	for problem in Briefing.problems(_briefing):
 		push_error("briefing.json: " + problem)
@@ -691,7 +691,7 @@ func _begin_intro() -> void:
 	_intro_left = tuning.intro_pan_time
 	_pan_sway = IntroCamera.sway(_menu_t)
 	_player.intro_pan = 0.0  # (his ready stance settles, then sets for the run as the camera comes round)
-	_hud.show_mission_title(String(_graph.mission().get("title", "")))
+	_hud.show_mission_title(Frontend.mission_title_of(_graph.mission()))
 
 
 func _pause() -> void:
@@ -974,7 +974,7 @@ func _update_environment(delta: float) -> void:
 	_env.fog_light_color = _env.fog_light_color.lerp(fog_color, k)
 	# In a stairwell the view is the stairwell's security camera.
 	var seg_here := _segment_at(_player.distance_run())
-	_hud.set_cctv(in_stairwell(), "CAM %02d" % (absi(hash(seg_here["id"])) % 40 + 1), _clock.elapsed)
+	_hud.set_cctv(in_stairwell(), L10n.f("HUD_CAM", {"n": "%02d" % (absi(hash(seg_here["id"])) % 40 + 1)}), _clock.elapsed)
 	_audio.set_cctv(in_stairwell())
 	_audio.set_area(String(_graph.node_data(seg_here["id"]).get("theme", "office")) if _player.distance_run() >= 0.0 else "office")
 	_sky.global_position = _camera.global_position
@@ -1002,13 +1002,13 @@ func _on_chopper_stage(stage: ExtractionClock.Stage) -> void:
 	match stage:
 		ExtractionClock.Stage.INBOUND:
 			_audio.play("squelch", -4.0, 0.0, "UI")
-			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("f0e8c8"), tuning.chopper_message_time, false)
+			_hud.show_chopper_message(L10n.t(ExtractionClock.MESSAGE_IDS[stage]), Color("f0e8c8"), tuning.chopper_message_time, false)
 		ExtractionClock.Stage.LANDED:
 			_audio.play("squelch", -4.0, 0.0, "UI")
-			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("9fd36b"), tuning.chopper_message_time, false)
+			_hud.show_chopper_message(L10n.t(ExtractionClock.MESSAGE_IDS[stage]), Color("9fd36b"), tuning.chopper_message_time, false)
 		ExtractionClock.Stage.LIFTING_OFF:
 			_warn_lift_off()
-			_hud.show_chopper_message(ExtractionClock.MESSAGES[stage], Color("ff4b3a"), 0.0, true)
+			_hud.show_chopper_message(L10n.t(ExtractionClock.MESSAGE_IDS[stage]), Color("ff4b3a"), 0.0, true)
 			for c in get_tree().get_nodes_in_group("chopper"):
 				var lift: Tween = c.create_tween()
 				lift.tween_property(c, "position:y", c.position.y + 2.5, _clock.gone_at - _clock.lifts_at)
@@ -1737,8 +1737,9 @@ func _on_node_entered(id: StringName) -> void:
 	var area := _graph.display_name(id)
 	if area != _last_area:  # MGS-style location caption
 		_last_area = area
-		_hud.show_area(area)
-		_audio.type_ticks(area.length(), 0.04)
+		var shown := Frontend.area_name(_graph, id)
+		_hud.show_area(shown)
+		_audio.type_ticks(shown.length(), 0.04)
 	var seg: Dictionary = _segments.back()
 	if seg["id"] != _runner.current or not _turns(seg["edge"]):
 		return
@@ -1801,7 +1802,7 @@ func _connect_security(sec: SecurityTrooper, road: float) -> void:
 		sec.reparent(_world)  # he outruns the area he stood in
 		RunLog.record_event("runner_spotted", {"node": _runner.current})
 		_audio.play_at("spotted", head.call(), -3.0)
-		_hud.show_chopper_message("STOP THE RUNNER", Color("ffb347"), 3.0, false)
+		_hud.show_chopper_message(L10n.t("HUD_STOP_RUNNER"), Color("ffb347"), 3.0, false)
 		_hud.show_runner(0.0))
 	sec.wounded.connect(func() -> void: _audio.play_at("hit", head.call(), 0.0, 0.08))
 	sec.knocked_down.connect(func() -> void:
@@ -1814,11 +1815,11 @@ func _connect_security(sec: SecurityTrooper, road: float) -> void:
 				_audio.play_at("fall", sec.global_position, -2.0, 0.05))
 		if sec.alarm_at > 0.0:  # he was on his way
 			_hud.show_runner(-1.0)
-			_hud.show_chopper_message("RUNNER DOWN", Color("9fd36b"), 2.5, false))
+			_hud.show_chopper_message(L10n.t("HUD_RUNNER_DOWN"), Color("9fd36b"), 2.5, false))
 	sec.raised.connect(func() -> void:
 		RunLog.record_event("runner_alarm", {"node": _runner.current})
 		_hud.show_runner(-1.0)
-		_hud.show_chopper_message("ALARM RAISED", Color("ff4b3a"), 2.5, false)
+		_hud.show_chopper_message(L10n.t("HUD_ALARM_RAISED"), Color("ff4b3a"), 2.5, false)
 		_build_runner_alarm(sec, road)
 		GameState.raise_alert())
 
@@ -9975,7 +9976,7 @@ func _update_snipers(delta: float) -> void:
 ## A sniper's laser has come on, following you.
 func _on_sniper_tracking() -> void:
 	RunLog.record_event("sniper", {"node": _runner.current})
-	_hud.show_chopper_message("SNIPER!", Color("ffb347"), 1.6, false)
+	_hud.show_chopper_message(L10n.t("HUD_SNIPER"), Color("ffb347"), 1.6, false)
 	_audio.play("sniper_aim", -4.0, 0.0)
 
 
@@ -10015,7 +10016,7 @@ func _sparks(where: Vector3) -> void:
 func _on_searchlight_spotted(light: Searchlight) -> void:
 	RunLog.record_event("searchlight", {"node": _runner.current})
 	_audio.play_at("spotted", light.global_position + Vector3.UP * 1.5, -2.0)
-	_hud.show_chopper_message("SPOTTED", Color("ff4b3a"), 2.0, false)
+	_hud.show_chopper_message(L10n.t("HUD_SPOTTED"), Color("ff4b3a"), 2.0, false)
 	GameState.raise_alert()
 
 
@@ -10035,7 +10036,7 @@ func _spawn_squad() -> void:
 		_squad.append(g)
 	RunLog.record_event("squad", {"node": _runner.current, "size": tuning.lane_count})
 	_audio.play("squelch", -4.0, 0.0, "UI")
-	_hud.show_chopper_message("SQUAD ON YOUR TAIL", Color("ff4b3a"), 3.0, false)
+	_hud.show_chopper_message(L10n.t("HUD_SQUAD_TAIL"), Color("ff4b3a"), 3.0, false)
 	_set_rear_cctv(true)
 
 
@@ -10048,7 +10049,7 @@ func _squad_fall_back() -> void:
 			g.give_up()
 			any = true
 	if any and GameState.run_active:
-		_hud.show_chopper_message("SQUAD FALLING BACK", Color("9fd36b"), 2.5, false)
+		_hud.show_chopper_message(L10n.t("HUD_SQUAD_FALLING_BACK"), Color("9fd36b"), 2.5, false)
 	get_tree().create_timer(2.5).timeout.connect(func() -> void:
 		if not _squad_on:
 			_set_rear_cctv(false))
@@ -10105,7 +10106,7 @@ func _update_squad(delta: float) -> void:
 	if chasing == 0 and _squad_on and not _squad_shaken:
 		# Every one of them ran into cover. (No new squad until alert drops and comes back to 3.)
 		_squad_shaken = true
-		_hud.show_chopper_message("SQUAD SHAKEN OFF", Color("9fd36b"), 2.5, false)
+		_hud.show_chopper_message(L10n.t("HUD_SQUAD_SHAKEN"), Color("9fd36b"), 2.5, false)
 		get_tree().create_timer(2.5).timeout.connect(func() -> void:
 			if _squad_shaken:
 				_set_rear_cctv(false))
@@ -10178,7 +10179,7 @@ func _caught_by_squad() -> void:
 	RunLog.record_event("squad_caught", {"node": _runner.current})
 	Engine.time_scale = 1.0
 	_hud.clear_junction()
-	_hud.show_chopper_message("CAUGHT", Color("ff4b3a"), 3.0, false)
+	_hud.show_chopper_message(L10n.t("HUD_CAUGHT"), Color("ff4b3a"), 3.0, false)
 	_player.in_cover = false
 	_player.surrender()
 	_place_player()

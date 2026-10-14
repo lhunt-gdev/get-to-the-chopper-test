@@ -45,6 +45,12 @@ window/handheld/orientation=1
 
 pointing/emulate_touch_from_mouse=true
 
+[internationalization]
+
+; The languages (game/l10n: L10n). English is the source and the fallback.
+locale/translations=PackedStringArray("res://game/l10n/strings.en.translation", "res://game/l10n/lb.lb.translation")
+locale/fallback="en"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

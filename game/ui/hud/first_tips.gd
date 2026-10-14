@@ -34,33 +34,33 @@ extends RefCounted
 
 ## The tips, in the order they're picked when two could show at once.
 const ORDER := ["fire", "lane", "jump", "slide", "alert", "cover", "cover_out", "doors"]
-## Each one's lines (the first is its headline) and its gesture icon.
+## Each one's lines (the ids of their words: L10n; the first is its headline) and its gesture icon.
 const TIPS := {
-	"lane": {"lines": ["SWIPE LEFT OR RIGHT", "TO CHANGE LANE"], "icon": "swipe_side"},
-	"jump": {"lines": ["SWIPE UP TO JUMP"], "icon": "swipe_up"},
-	"slide": {"lines": ["SWIPE DOWN TO SLIDE"], "icon": "swipe_down"},
-	"cover": {"lines": ["RUN INTO COVER TO HIDE", "OR SWIPE EARLY TO RUN ON PAST"], "icon": "cover"},
-	"cover_out": {"lines": ["SWIPE LEFT OR RIGHT", "TO LEAVE COVER"], "icon": "swipe_side"},
-	"fire": {"lines": ["HOLD FIRE TO SHOOT", "IT AIMS FOR YOU", "SETTINGS: TRIGGER LEFT OR RIGHT"], "icon": "hold"},
-	"alert": {"lines": ["TRIPWIRES RAISE THE ALERT", "JUMP THEM TO STAY QUIET", "SHOOT ALARM BOXES TO LOWER IT"], "icon": "wire"},
-	"doors": {"lines": ["ARROWS: THE DOOR IS OPEN", "PADLOCK: IT'S LOCKED", "OUTER LANES TAKE THE SIDE DOORS"], "icon": "doors"},
+	"lane": {"lines": ["TIP_SWIPE_SIDE", "TIP_LANE"], "icon": "swipe_side"},
+	"jump": {"lines": ["TIP_JUMP"], "icon": "swipe_up"},
+	"slide": {"lines": ["TIP_SLIDE"], "icon": "swipe_down"},
+	"cover": {"lines": ["TIP_COVER", "TIP_COVER_PAST"], "icon": "cover"},
+	"cover_out": {"lines": ["TIP_SWIPE_SIDE", "TIP_LEAVE_COVER"], "icon": "swipe_side"},
+	"fire": {"lines": ["TIP_FIRE", "TIP_FIRE_AIMS", "TIP_TRIGGER"], "icon": "hold"},
+	"alert": {"lines": ["TIP_ALERT", "TIP_ALERT_JUMP", "TIP_ALERT_BOXES"], "icon": "wire"},
+	"doors": {"lines": ["TIP_DOORS_OPEN", "TIP_DOORS_LOCKED", "TIP_DOORS_SIDE"], "icon": "doors"},
 }
 
 ## FIRE's lines by SETTINGS' AIM ("auto", "auto_tap", "tap"), as CONTROLS words it: TIPS' own are AUTO's.
 const FIRE_BY_AIM := {
-	"tap": ["TAP AN ENEMY TO TARGET IT", "HOLD FIRE TO SHOOT IT", "SETTINGS: TRIGGER LEFT OR RIGHT"],
-	"auto_tap": ["HOLD FIRE TO SHOOT", "IT AIMS, OR TAP AN ENEMY", "SETTINGS: TRIGGER LEFT OR RIGHT"],
+	"tap": ["TIP_FIRE_TAP", "TIP_FIRE_TAP_SHOOT", "TIP_TRIGGER"],
+	"auto_tap": ["TIP_FIRE", "TIP_FIRE_OR_TAP", "TIP_TRIGGER"],
 }
 
 ## The moves' lines and icons with SETTINGS' MOVE on BUTTONS (the on-screen move buttons), as CONTROLS
 ## words it: TIPS' own are SWIPE's. (Swipes still work: these teach the buttons.) Each one's card rings
 ## its buttons on the screen (BUTTONS_FOR).
 const BY_BUTTONS := {
-	"lane": {"lines": ["TAP ◀ OR ▶", "TO CHANGE LANE"], "icon": "tap_side"},
-	"jump": {"lines": ["TAP ▲ TO JUMP"], "icon": "tap_up"},
-	"slide": {"lines": ["TAP ▼ TO SLIDE"], "icon": "tap_down"},
-	"cover": {"lines": ["RUN INTO COVER TO HIDE", "OR TAP ◀ ▶ EARLY TO RUN ON PAST"], "icon": "cover"},
-	"cover_out": {"lines": ["TAP ◀ OR ▶", "TO LEAVE COVER"], "icon": "tap_side"},
+	"lane": {"lines": ["TIP_TAP_SIDE", "TIP_LANE"], "icon": "tap_side"},
+	"jump": {"lines": ["TIP_TAP_JUMP"], "icon": "tap_up"},
+	"slide": {"lines": ["TIP_TAP_SLIDE"], "icon": "tap_down"},
+	"cover": {"lines": ["TIP_COVER", "TIP_COVER_TAP_PAST"], "icon": "cover"},
+	"cover_out": {"lines": ["TIP_TAP_SIDE", "TIP_LEAVE_COVER"], "icon": "tap_side"},
 }
 const BUTTONS_FOR := {
 	"lane": [Vector2i.LEFT, Vector2i.RIGHT], "jump": [Vector2i.UP], "slide": [Vector2i.DOWN], "cover_out": [Vector2i.LEFT, Vector2i.RIGHT],
@@ -116,9 +116,14 @@ static func pick(s: Dictionary) -> String:
 	return ""
 
 
-## Tip `id`'s lines (the first its headline), with SETTINGS' AIM `aim` (FIRE's follows it) and MOVE
-## on BUTTONS or not (`buttons`: the moves' follow it).
+## Tip `id`'s lines (in words; the first its headline), with SETTINGS' AIM `aim` (FIRE's follows it)
+## and MOVE on BUTTONS or not (`buttons`: the moves' follow it).
 static func lines_of(id: String, aim: String = "auto", buttons: bool = false) -> Array:
+	return line_ids(id, aim, buttons).map(func(k: String) -> String: return L10n.t(k))
+
+
+## Tip `id`'s lines' ids (L10n), as lines_of().
+static func line_ids(id: String, aim: String = "auto", buttons: bool = false) -> Array:
 	if id == "fire" and FIRE_BY_AIM.has(aim):
 		return FIRE_BY_AIM[aim]
 	if buttons and BY_BUTTONS.has(id):
@@ -237,6 +242,8 @@ static func ease_scale(now: float, want: float, real_dt: float) -> float:
 ## the screen, clear of the clock, the alert box, the junction's prompt and the FIRE trigger.
 class Card extends Control:
 	const W := 238.0
+	## The room for its lines (px).
+	const TEXT_W := 226.0
 	const ICON := 22.0
 	const LINE := 11.0
 	## Its top as a part of the screen's height.
@@ -265,8 +272,12 @@ class Card extends Control:
 		visible = which != ""
 		queue_redraw()
 
+	## Its lines as shown (lines_of, each one too long for the card on two).
 	func lines() -> Array:
-		return FirstTips.lines_of(id, aim, buttons)
+		var out := []
+		for line in FirstTips.lines_of(id, aim, buttons):
+			out.append_array(Array(UiKit.wrap(String(line), TEXT_W)))
+		return out
 
 	## The card's box on a screen `size` big.
 	func box(size: Vector2) -> Rect2:
@@ -290,18 +301,20 @@ class Card extends Control:
 		var a := _in
 		UiKit.panel(self, r, Color(UiKit.TEAL, a), Color(UiKit.PANEL, 0.92 * a), 6.0)
 		# The TIP tab on its top edge, like a codec frequency plate.
-		var tab := Rect2(r.position + Vector2(10, -6), Vector2(30, 11))
+		var word := L10n.t("TIP_TAB")
+		var tab := Rect2(r.position + Vector2(10, -6), Vector2(maxf(30.0, UiKit.text_w(word) + 12.0), 11))
 		draw_rect(tab, Color(UiKit.RED, a))
-		draw_string(f, tab.position + Vector2(6, 9), "TIP", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, a))
+		draw_string(f, tab.position + Vector2(6, 9), word, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiKit.INK, a))
 		var icon := Rect2(r.position.x + (r.size.x - ICON * 2.0) / 2.0, r.position.y + 8.0, ICON * 2.0, ICON)
 		draw_icon(self, FirstTips.icon_of(id, buttons), icon, _t, a)
 		var y := icon.end.y + 6.0 + 8.0
 		var ls := lines()
+		var heads := UiKit.wrap(String(FirstTips.lines_of(id, aim, buttons)[0]), TEXT_W).size() if not ls.is_empty() else 0
 		for i in ls.size():
 			var text := String(ls[i])
 			var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 			draw_string(f, Vector2(roundf(r.position.x + (r.size.x - w) / 2.0), y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
-					Color(UiKit.TEAL if i == 0 else UiKit.PAPER, a))
+					Color(UiKit.TEAL if i < heads else UiKit.PAPER, a))
 			y += LINE
 		if id == "fire" and fire_at.z > 0.0:
 			# FIRE's: rings going out round the trigger, wherever TRIGGER has put it.
@@ -317,7 +330,7 @@ class Card extends Control:
 				for k in 2:
 					var p := fmod(_t * 1.2 + k * 0.5, 1.0)
 					draw_arc(Vector2(b.x, b.y), b.z * (1.0 + 0.5 * p), 0, TAU, 24, Color(UiKit.TEAL, a * (1.0 - p)), 2.0)
-		var hint := "TAP TO CLOSE"
+		var hint := L10n.t("TIP_CLOSE")
 		var hw := f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
 		draw_string(f, Vector2(roundf(r.position.x + (r.size.x - hw) / 2.0), y + 4.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
 				Color(UiKit.DIM, 0.8 * a))
