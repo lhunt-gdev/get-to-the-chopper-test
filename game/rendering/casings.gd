@@ -19,8 +19,9 @@ signal landed
 const SHADER := preload("res://assets/shaders/psx/psx_casing.gdshader")
 ## The most in the air at once (FIRE held, a shot every fire_interval, has 3 or 4 up).
 const CAP := 8
-## Pixels to one unit of the model (it's 2 across and 3.8 long: about 6 x 11 px on the 270-wide screen).
-const PX := 2.8
+## Pixels to one unit of the model (it's 2 across and 3.8 long: about 8 x 16 px on the 270-wide screen;
+## first 2.8, about 6 x 11, which read too small).
+const PX := 4.2
 ## Where one comes from: up from the trigger's middle by this much of its radius (under the top of
 ## the guard, out of sight until it flies).
 const FROM_UP := 0.62
@@ -32,7 +33,7 @@ const GRAVITY := 1100.0
 const TUMBLE := Vector2(14.0, 22.0)
 const ROLL := Vector2(-4.0, 4.0)
 ## How far past the bottom edge it counts as gone (px: all of it off the screen).
-const GONE_BELOW := 8.0
+const GONE_BELOW := 12.0
 ## However it flies, gone after this long (s).
 const MAX_LIFE := 3.0
 
