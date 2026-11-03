@@ -116,6 +116,12 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Polish and fixes are made on the demo (`main`) first, tested and pushed, then merged into V2 (`v2`) straight after, so V2 is always the demo plus the new missions. Work only for V2 (missions 2 to 9, their art and story) is made on `v2` and never goes back to the demo. Where a demo fix touches something V2 has changed, V2 keeps its own version and gets the fix on top.
 - Polish is found by a sweep of the demo (bot playthroughs on every setting, phone-size screenshots of every screen, the web build's loading and speed, the menus and text) plus anything the user notices; each round is listed for the user to pick before it is built.
 
+### PROPOSED — Spent casings from the trigger (user, 2026-11-03; a try-out in the demo)
+- **Why (user):** "have bullet shells pop out from behind the trigger button and fall off the bottom of the screen"; "lets put the tink in and see how it sounds." If it works it goes into V2 with the rest.
+- Each shot throws a spent pistol casing out from behind the FIRE trigger, on the trigger's side (TRIGGER), tumbling end over end with a little random spin, falling off the bottom of the screen: a small 3D model drawn over the game, in live play only.
+- The casing is made in code in the PS1 style: an 8–10-sided brass cylinder with a narrower neck, a rim and a silver primer, about 40–60 triangles, a small hand-made brass texture (scuffs, a darker rim band, a highlight), in the PS1 shader.
+- A faint "tink" as each one leaves the screen, made like the game's other sounds. No on/off setting yet; decided after the user hears it.
+
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)
 - **Why (user):** "I'd like to do some localisation, translation to other languages"; "I'd like to try Luxembourgish first, if that's possible?"; "I have someone who speaks Lëtzebuergesch and they can check."
 - All player-facing text (menus, settings, tips, HUD, debrief, scoreboard, credits, the briefing and end conversations) goes through Godot's translation system from one table, English the source and the fallback. In-world signs (EXIT and the like) stay in English as scenery. The cast's names (CROSS, ARDBALLS, VESPER...) stay as they are.
