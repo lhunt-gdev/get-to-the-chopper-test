@@ -312,6 +312,8 @@ const GUARD_COLOR := Color("4a5260")
 const DEFAULT_AMBIENT := Color(0.4, 0.42, 0.44)
 ## Where the moonlight comes from (upper left, a little behind).
 const MOON_DIR := Vector3(-0.45, 1.0, 0.35)
+## How loud a spent casing's tink is (dB; the shot is -3): faint, under it (Casings).
+const CASING_TINK_DB := -15.0
 
 @export var tuning: Tuning
 
@@ -545,6 +547,8 @@ func _ready() -> void:
 	_audio.tuning = tuning
 	add_child(_audio)
 	_audio.set_world(_world)
+	# A spent casing off the bottom of the screen: a faint tink, well under the shot.
+	_hud.casing_landed.connect(func() -> void: _audio.play("casing_tink", CASING_TINK_DB, 0.08))
 	_build_snow()
 	# A faint cool fill from just behind you, so you (and what's right ahead) read in the dark.
 	var fill := Node3D.new()
