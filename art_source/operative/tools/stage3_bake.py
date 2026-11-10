@@ -200,6 +200,11 @@ if os.environ.get("FILL_MISSES") == "1":
 if os.environ.get("HEM"):
     hem = float(os.environ["HEM"])
     keep = [float(x) for x in os.environ["HEM_KEEP"].split(",")] if os.environ.get("HEM_KEEP") else None
+    # HEM_INNER="x,z,bx,bz" (m): between her legs the skirt's colour too, as under a skirt: within x of
+    # the middle up under the skirt to z (the insides of her thighs in there), and within bx of it
+    # from bz below the hem up to it (where the remesh closes the gap between her thighs just under the
+    # hem, a little rounded: the underneath of the skirt there, seen between her legs).
+    inner_x, inner_z, under_x, under_z = [float(v) for v in os.environ["HEM_INNER"].split(",")] if os.environ.get("HEM_INNER") else (0.0, 0.0, 0.0, 0.0)
     W, H = img.size
     pix = list(img.pixels)
     uvd = low.data.uv_layers.active.data
@@ -207,7 +212,7 @@ if os.environ.get("HEM"):
     side = {}  # texel -> True below the hem, False in the band above it
     for t in low.data.loop_triangles:
         cs = [low.data.vertices[i].co for i in t.vertices]
-        if max(c.z for c in cs) < hem - 0.3 or min(c.z for c in cs) > hem + 0.015:
+        if max(c.z for c in cs) < hem - 0.3 or min(c.z for c in cs) > max(hem + 0.015, inner_z):
             continue
         p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
         area = (p[1] - p[0]).cross(p[2] - p[0])
@@ -222,8 +227,13 @@ if os.environ.get("HEM"):
                 if min(w0, w1, w2) < -0.02 or not (0 <= x < W and 0 <= y < H):
                     continue
                 z = cs[0].z * w0 + cs[1].z * w1 + cs[2].z * w2
-                if hem - 0.3 <= z < hem:
+                ax = abs(cs[0].x * w0 + cs[1].x * w1 + cs[2].x * w2)
+                if hem - under_z <= z < hem and ax < under_x:
+                    side[(x, y)] = None
+                elif hem - 0.3 <= z < hem:
                     side[(x, y)] = True
+                elif hem <= z <= inner_z and ax < inner_x:
+                    side[(x, y)] = None
                 elif hem <= z <= hem + 0.015:
                     px_ = cs[0].x * w0 + cs[1].x * w1 + cs[2].x * w2
                     py_ = cs[0].y * w0 + cs[1].y * w1 + cs[2].y * w2
@@ -238,7 +248,15 @@ if os.environ.get("HEM"):
     def cool(q):  # (skirt-coloured: cooler, or much darker than her legs)
         i = (q[1] * W + q[0]) * 4
         return pix[i] < 1.4 * pix[i + 2] or luma(q) < dark
-    wrong = {q for q, below in side.items() if cool(q) == below}
+    def warm(q):
+        i = (q[1] * W + q[0]) * 4
+        return pix[i] >= 1.4 * pix[i + 2]
+    # (None: between her legs under the skirt, HEM_INNER: anything warm there, even darkened, is her leg
+    # showing; it takes the skirt's colour like the band above the hem)
+    wrong = {q for q, below in side.items() if (warm(q) if below is None else cool(q) == below)}
+    for q in side:
+        if side[q] is None:
+            side[q] = False
     src_of = {q: q for q in side if q not in wrong}
     front = list(src_of)
     while front:

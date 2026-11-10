@@ -22,9 +22,9 @@ export MIRROR_BOX="$POUCH_BOX;$SKIRT_BOX"
 # leg's colour just below it (see stage1_reduce.py; the same measures as the boxes above, plus y1).
 export TINT_BOX="0.10,0.19,-0.3,0.0,0.84,0.95"
 export TINT_FROM="0.74,0.83"
-# Her thighs parted (see stage1_reduce.py): at least 5 cm apart from 0.55 m up to her skirt's hem (the
-# source as made, before HEIGHT), so the remesh keeps her legs apart.
-export LEG_GAP="0.55,0.842,0.05"
+# Her thighs parted (see stage1_reduce.py): at least 5 cm apart from 0.55 m up under her skirt to the
+# crotch (the source as made, before HEIGHT), so the remesh keeps her legs apart.
+export LEG_GAP="0.55,0.89,0.05"
 export VOXEL=0.012  # (as Bishop's: finer, the reduced copy's remesh comes apart)
 export SPLIT_OVERLAPS=1  # (her arms hang close: unwrapped apart from her sides, see stage3_bake.py)
 export FILL_MISSES=1  # (any face the bake misses is filled from round it)
@@ -32,6 +32,7 @@ export GROW_GAPS=1  # (black gaps between islands grown over: thin black marks o
 export DROP_BITS=1  # (the remesh leaves a few loose crumbs: dropped, see stage3_bake.py)
 export HEM=0.785  # (her skirt's hem, m: the bake there is straightened, see stage3_bake.py)
 export HEM_KEEP="0.09,0.18,-0.3,0.0"  # (her side split at the front, which shows her leg: left alone)
+export HEM_INNER="0.06,0.83,0.026,0.05"  # (between her legs up under the skirt, and where her thighs close just under the hem: the skirt's dark, not her leg)
 # Her joints where the mesh can't show them (see stage4_rig.py): the crotch under her skirt at CROSS's
 # share of the height, the tops of her narrower shoulders looked for nearer the middle (m), and the
 # shoulder joint placed across by hand.

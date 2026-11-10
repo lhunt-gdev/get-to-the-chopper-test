@@ -29,9 +29,12 @@ What her build does that CROSS's doesn't (each set in `build_vesper.sh`, explain
   `DROP_BITS` (stage 3: loose crumbs the remesh leaves dropped); `GROW_GAPS` (stage 3: the black gaps
   between the texture's islands grown over, or thin black marks showed on her thighs).
 - `LEG_GAP` (stage 1): her thighs nearly touch, and the remesh webbed them into one panel from her
-  skirt down to above her knees. They're parted on the source to at least 5 cm apart from 0.55 m up to
-  the hem (the inner side of each thigh moved out, easing to nothing across it), so her legs stay
-  apart up to under the skirt and move on their own.
+  skirt down to above her knees. They're parted on the source to at least 5 cm apart from 0.55 m up
+  under the skirt to the crotch (the inner side of each thigh moved out, easing to nothing across it,
+  the gap closing over its top 4 cm), so her legs are apart right up to the hem and move on their own.
+- `HEM_INNER` (stage 3): between her legs, up under the skirt and where the remesh closes the gap
+  just under the hem, the texture takes the skirt's dark colour, so looking up between her thighs
+  it's dark, as under a skirt, not a band of leg.
 - `HEM`, `HEM_KEEP` (stages 3 and 4): her skirt is tight on her thighs, so the remesh makes them one
   surface and the bake there was ragged. The texture is straightened along the hem (skirt above, leg
   below; the side split left alone), and the skirt between her legs follows her hips, not her thighs.
