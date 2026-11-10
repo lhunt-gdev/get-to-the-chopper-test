@@ -986,13 +986,15 @@ func _foot_low(side: int) -> float:
 ## Toes kept above the floor (user: "tidy the toe dip"; the decision log's "Toes kept above the
 ## floor"). As the poses had them, his planted boot went through the floor in the run (his hips at
 ## the bottom of their bob just as his leg is straight under him) and the hands-up kneel pointed his
-## feet down into it. The kneel now lays his feet back flat (SURRENDER_ANKLE); and whatever is still
-## under the floor on a model (each boot as the model has it, see _sole) is lifted out: in the kneel
-## by pointing the foot back further (at most TOE_ROLL_KNEEL). In the run the planted knee gives a
-## little more (RUN_STANCE_BEND), and anything still under (a model with longer boots) lifts his hips
-## that much. Both follow the pose smoothly, frame to frame, and do nothing to a boot that's clear.
-const SURRENDER_ANKLE := 1.55
-const TOE_ROLL_KNEEL := 0.6
+## feet down into it. The kneel now lays his feet out straight behind him, in line with his shins, the
+## tops of his boots down on the floor (SURRENDER_ANKLE; user: "bend the foot backwards not forwards
+## and under"); and whatever is still under the floor on a model (each boot as the model has it, see
+## _sole) is lifted out: in the kneel by pointing the foot further back (at most TOE_ROLL_KNEEL). In
+## the run the planted knee gives a little more (RUN_STANCE_BEND), and anything still under (a model
+## with longer boots) lifts his hips that much. Both follow the pose smoothly, frame to frame, and do
+## nothing to a boot that's clear.
+const SURRENDER_ANKLE := -1.1
+const TOE_ROLL_KNEEL := -0.4
 ## How much more the planted leg's knee bends at the bottom of the run's stride (rad; its thigh forward
 ## and its foot back half as much each, so the boot comes straight up under his hip).
 const RUN_STANCE_BEND := 0.6
@@ -2037,7 +2039,7 @@ func _pose_surrender() -> void:
 	hips.position.y = _kneel_y  # down on a knee
 	for side in [-1, 1]:
 		knees[side].rotation.x = -1.6
-		ankles[side].rotation.x = SURRENDER_ANKLE  # (his feet laid back flat, toes out of the floor)
+		ankles[side].rotation.x = SURRENDER_ANKLE  # (his feet straight back, tops down, toes out of the floor)
 		# Arms up, each arm turned out about itself on the way (the upper arm, then the forearm: the
 		# forearm runs down its joint's frame, so it turns the same way as -UP), the elbows bending the
 		# forearms up over his head...
