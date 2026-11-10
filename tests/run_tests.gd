@@ -6929,15 +6929,24 @@ func _operative_model(path: String) -> Dictionary:
 	return out
 
 
-## Bishop and Vesper (V2; the decision log's "Bishop, a second operative" and "Vesper, a third
-## operative"): each model loads with CROSS's 19 joints, each on the same parent (so every SoldierRig
-## pose fits them, as a skin needs), within the 3,000-triangle budget, with a 512 texture; Bishop is
-## CROSS's height and Vesper 93% of it (each within 2 cm); and a SoldierRig builds and poses each.
-## Nothing in the game loads them yet.
+## CROSS's eight skins (V2; the decision log's "Eight skins for CROSS"), in game/player/skins.
+const CROSS_SKINS: Array[String] = ["shadow", "casual", "tropical", "midnight", "silent", "rebel", "future", "judge"]
+
+
+## Where an operative's model is: Bishop and Vesper in game/player, CROSS's skins in game/player/skins.
+func _operative_path(who: String) -> String:
+	return "res://game/player/%s%s.glb" % ["skins/" if CROSS_SKINS.has(who) else "", who]
+
+
+## Bishop, Vesper and CROSS's eight skins (V2; the decision log's "Bishop, a second operative", "Vesper,
+## a third operative" and "Eight skins for CROSS"): each model loads with CROSS's 19 joints, each on
+## the same parent (so every SoldierRig pose fits them, as a skin needs), within the 3,000-triangle
+## budget, with a 512 texture; Bishop and the skins are CROSS's height and Vesper 93% of it (each within
+## 2 cm); and a SoldierRig builds and poses each. Nothing in the game loads them yet.
 func _test_operative_models() -> void:
 	var cross := _operative_model("res://game/player/cross.glb")
-	for who: String in ["bishop", "vesper"]:
-		var path := "res://game/player/%s.glb" % who
+	for who: String in ["bishop", "vesper"] + CROSS_SKINS:
+		var path := _operative_path(who)
 		var m := _operative_model(path)
 		var name := who.capitalize()
 		var tall: float = cross["top"] * (0.93 if who == "vesper" else 1.0)
@@ -6954,8 +6963,8 @@ func _test_operative_models() -> void:
 
 
 ## Toes kept above the floor (the decision log's "Toes kept above the floor"): through the whole run
-## cycle and in the hands-up kneel, no vertex of CROSS's, Bishop's or Vesper's (or a guard's, in the
-## run) is more than 1 cm under the floor, skinned as the GPU skins it.
+## cycle and in the hands-up kneel, no vertex of CROSS's, Bishop's, Vesper's or any of CROSS's skins'
+## (or a guard's, in the run) is more than 1 cm under the floor, skinned as the GPU skins it.
 func _test_toes_above_floor() -> void:
 	var rig := func(who: String) -> SoldierRig:
 		match who:
@@ -6963,8 +6972,8 @@ func _test_toes_above_floor() -> void:
 				return SoldierRig.new()
 			"guard":
 				return GuardRig.new()
-		return SoldierRig.new(load("res://game/player/%s.glb" % who) as PackedScene, "", who.to_upper())
-	for who in ["cross", "guard", "bishop", "vesper"]:
+		return SoldierRig.new(load(_operative_path(who)) as PackedScene, "", who.to_upper())
+	for who in ["cross", "guard", "bishop", "vesper"] + CROSS_SKINS:
 		var worst_run := INF
 		for k in 24:
 			var r: SoldierRig = rig.call(who)
@@ -6978,7 +6987,7 @@ func _test_toes_above_floor() -> void:
 			worst_run = minf(worst_run, _lowest_vertex(r))
 			r.free()
 		_check(worst_run >= -0.01, "%s: no toe under the floor in the run (lowest %.3f m)" % [who, worst_run])
-	for who in ["cross", "bishop", "vesper"]:
+	for who in ["cross", "bishop", "vesper"] + CROSS_SKINS:
 		var c: SoldierRig = rig.call(who)
 		root.add_child(c)
 		for i in 30:
