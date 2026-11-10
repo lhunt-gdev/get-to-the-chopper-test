@@ -38,6 +38,8 @@ art_source/boss/work/
 # Bishop's, the same way (build_character.sh).
 art_source/bishop/bishop.glb
 art_source/bishop/work/
+art_source/vesper/vesper.glb
+art_source/vesper/work/
 art_source/dog/dog.glb
 art_source/dog/work/
 # The translations Godot imports from game/l10n's CSVs (regenerated on import)
