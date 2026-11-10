@@ -121,6 +121,14 @@ var _hand_mid := {}
 ## The measured gloves, per model (model path + side -> [run, palm, mid]): measured once, not for
 ## every guard on the route.
 static var _hand_cache := {}
+## Each boot as the model has it (side -> [[its rest place in the rig, [[bone, weight]...]]...]): the
+## vertices that follow its ankle, below the ankle, so its lowest can be found as it's posed (see
+## _boot_low). Measured per model (see _measure_sole), once.
+var _sole := {}
+## ...and each shin with its boot (the same, from the knee down): kneeling, it's the shin that's on the
+## floor.
+var _shin := {}
+static var _sole_cache := {}
 var _model: PackedScene
 var _lens_file := ""
 var _meshes: Array[MeshInstance3D] = []
@@ -255,6 +263,7 @@ func _build() -> void:
 	for side in [-1, 1]:
 		_measure_hand(side)
 		_ankle_rest[side] = _in_rig(ankles[side]).origin
+		_measure_sole(side)
 	# The goggles' lenses glow green.
 	var head_at := _in_rig(head).origin
 	for lens: Vector3 in _lenses():
@@ -704,6 +713,7 @@ func animate(delta: float, s: Dictionary) -> void:
 		if caught:
 			_change_begin(shown, POSE_CHANGE["surrender"], low)
 		_change_step(delta)
+		_keep_toes(true)  # (the toes out of the floor: see SURRENDER_ANKLE)
 		_apply()
 		return
 	if s.get("ready", false):
@@ -772,6 +782,10 @@ func animate(delta: float, s: Dictionary) -> void:
 	if pose == "stand":
 		_stand_step(stance_low)
 	_change_keep()
+	if pose.trim_suffix("!") == "run":
+		# (the toes out of the floor, see SURRENDER_ANKLE: after what a change eases from is kept, so a
+		# change never eases from a roll and rolls again on top)
+		_keep_toes(false, 1.0 if _launch_t < 0.0 else smoothstep(0.0, IDLE_LAUNCH_LEGS, _launch_t))
 	_aim_and_recoil(delta, s.get("aim", false))
 	if _launch_t >= 0.0:
 		_slide.position.z = maxf(_slide.position.z, _launch_slide * (1.0 - smoothstep(0.0, IDLE_LAUNCH_SLIDE, _launch_t)))
@@ -967,6 +981,128 @@ func _foot_low(side: int) -> float:
 	for p: Vector3 in SOLE:
 		low = minf(low, (flat * p).y)
 	return low
+
+
+## Toes kept above the floor (user: "tidy the toe dip"; the decision log's "Toes kept above the
+## floor"). As the poses had them, his planted boot went through the floor in the run (his hips at
+## the bottom of their bob just as his leg is straight under him) and the hands-up kneel pointed his
+## feet down into it. The kneel now lays his feet back flat (SURRENDER_ANKLE); and whatever is still
+## under the floor on a model (each boot as the model has it, see _sole) is lifted out: in the kneel
+## by pointing the foot back further (at most TOE_ROLL_KNEEL). In the run the planted knee gives a
+## little more (RUN_STANCE_BEND), and anything still under (a model with longer boots) lifts his hips
+## that much. Both follow the pose smoothly, frame to frame, and do nothing to a boot that's clear.
+const SURRENDER_ANKLE := 1.55
+const TOE_ROLL_KNEEL := 0.6
+## How much more the planted leg's knee bends at the bottom of the run's stride (rad; its thigh forward
+## and its foot back half as much each, so the boot comes straight up under his hip).
+const RUN_STANCE_BEND := 0.6
+## (how many halvings find the least roll that clears it)
+const TOE_ROLL_STEPS := 12
+
+
+## Each leg's vertices from `joint` down ("Ankle": the boot; "Knee": the shin and boot), those that
+## follow that joint at all, each with the bones it follows and how much (as the model's skin): see
+## _sole. As _measure_hand; per model, measured once.
+func _measure_leg(side: int, joint: String) -> Array:
+	var key := "%s%d%s" % [_model.resource_path, side, joint]
+	if _sole_cache.has(key):
+		return _sole_cache[key]
+	var jb := _skeleton.find_bone(joint + ("R" if side > 0 else "L"))
+	var joint_at: Vector3 = _sk_xf * (_rest[jb] as Transform3D).origin
+	var pts: Array = []
+	for mi: MeshInstance3D in _meshes:
+		if mi.skin == null or mi.mesh == null:
+			continue
+		var arr := mi.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / maxi(1, verts.size())
+		for vi in verts.size():
+			var follow: Array = []  # [bone, weight]
+			var on_joint := false
+			var at := Vector3.ZERO
+			for k in per:
+				var w := weights[vi * per + k]
+				if w <= 0.0:
+					continue
+				var bi: int = bones[vi * per + k]
+				var b := mi.skin.get_bind_bone(bi)
+				if b < 0:
+					b = _skeleton.find_bone(mi.skin.get_bind_name(bi))
+				if not _rest.has(b):
+					continue
+				at = _sk_xf * ((_rest[b] as Transform3D) * (mi.skin.get_bind_pose(bi) * verts[vi]))
+				follow.append([b, w])
+				on_joint = on_joint or (b == jb and w >= 0.2)
+			if on_joint and at.y < joint_at.y:
+				pts.append([at, follow])
+	_sole_cache[key] = pts
+	return pts
+
+
+func _measure_sole(side: int) -> void:
+	_sole[side] = _measure_leg(side, "Ankle")
+	_shin[side] = _measure_leg(side, "Knee")
+
+
+## The lowest of `pts` (as _measure_leg's) as posed now (rig units, y): skinned as the skeleton will
+## be (see _apply: each bone turned by its joint node, at the node).
+func _low_of(pts: Array) -> float:
+	var low := INF
+	var xf := {}
+	for v: Array in pts:
+		var y := 0.0
+		for bw: Array in v[1]:
+			var b: int = bw[0]
+			if not xf.has(b):
+				xf[b] = [_in_rig(_drivers[b]), _sk_xf * (_rest[b] as Transform3D).origin]
+			var d: Transform3D = xf[b][0]
+			y += float(bw[1]) * (d.basis * ((v[0] as Vector3) - (xf[b][1] as Vector3)) + d.origin).y
+		low = minf(low, y)
+	return low
+
+
+## The lowest point of one boot as the model has it, now (rig units, y).
+func _boot_low(side: int) -> float:
+	return _low_of(_sole[side])
+
+
+## Each boot still under the floor lifted out (see SURRENDER_ANKLE), no further than it must: in the
+## kneel (`kneel`) by pointing the foot back, at most TOE_ROLL_KNEEL; then (and in the run) his hips
+## lift whatever's left, kneeling his shins too.
+## `amount`: how much of it (springing into the run from his ready stance, it comes in with his legs).
+func _keep_toes(kneel: bool, amount: float = 1.0) -> void:
+	var lift := 0.0
+	for side in [-1, 1]:
+		if _boot_low(side) >= 0.0:
+			continue
+		var an: Node3D = ankles[side]
+		var a0 := an.rotation.x
+		var most := TOE_ROLL_KNEEL if kneel else 0.0
+		var put := func(u: float) -> void:
+			an.rotation.x = a0 + most * u
+		put.call(1.0)
+		if not kneel or _boot_low(side) < 0.0:
+			lift = maxf(lift, -_boot_low(side))
+			put.call(amount)
+			continue
+		var lo_u := 0.0
+		var hi_u := 1.0
+		for i in TOE_ROLL_STEPS:
+			var mid := (lo_u + hi_u) * 0.5
+			put.call(mid)
+			if _boot_low(side) >= 0.0:
+				hi_u = mid
+			else:
+				lo_u = mid
+		put.call(hi_u * amount)
+	if kneel:
+		# (kneeling, his shins are on the floor too: a model's thicker shins lift him clear)
+		for side in [-1, 1]:
+			lift = maxf(lift, -_low_of(_shin[side]))
+	if lift > 0.0:
+		hips.position.y += lift * amount
 
 
 ## Killed while his legs are part way into a new pose: they're there at once, so his death works his
@@ -1818,6 +1954,13 @@ func _pose_run() -> void:
 		leg_hips[side].rotation.x = 0.8 * r * sin(q)
 		knees[side].rotation.x = -r * (0.3 + 1.1 * maxf(0.0, cos(q)))  # folds as it swings through
 		ankles[side].rotation.x = 0.25 * r * sin(q)
+		# The planted leg gives at the knee as his weight comes onto it (the bottom of his bob), the
+		# boot set down level under his hip, not pushed through the floor: see RUN_STANCE_BEND.
+		var st := maxf(0.0, -cos(q))
+		st *= st * RUN_STANCE_BEND * r
+		leg_hips[side].rotation.x += 0.5 * st
+		knees[side].rotation.x -= st
+		ankles[side].rotation.x += 0.5 * st
 		shoulders[side].rotation.x = -0.7 * r * sin(q)  # opposite to its leg
 		shoulders[side].rotation.z = side * 0.12
 		elbows[side].rotation.x = 1.1 + 0.3 * r  # bent, pumping
@@ -1894,7 +2037,7 @@ func _pose_surrender() -> void:
 	hips.position.y = _kneel_y  # down on a knee
 	for side in [-1, 1]:
 		knees[side].rotation.x = -1.6
-		ankles[side].rotation.x = 0.5
+		ankles[side].rotation.x = SURRENDER_ANKLE  # (his feet laid back flat, toes out of the floor)
 		# Arms up, each arm turned out about itself on the way (the upper arm, then the forearm: the
 		# forearm runs down its joint's frame, so it turns the same way as -UP), the elbows bending the
 		# forearms up over his head...

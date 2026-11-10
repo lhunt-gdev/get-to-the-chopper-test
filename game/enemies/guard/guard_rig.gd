@@ -488,6 +488,8 @@ func animate(delta: float, s: Dictionary) -> void:
 	_reach_w = move_toward(_reach_w, 1.0 if s.has("reach") else 0.0, delta * 7.0)
 	_flash(delta)
 	_pose_body()
+	if _run >= 0.05 and _fall < 0.0 and not (_prone or _airborne or _brace):
+		_keep_toes(false)  # (running, the toes out of the floor: SoldierRig.SURRENDER_ANKLE)
 	if armed:
 		_hold(_rifle_target())
 		_show_flash()
