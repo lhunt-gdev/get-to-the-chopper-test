@@ -116,6 +116,10 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Polish and fixes are made on the demo (`main`) first, tested and pushed, then merged into V2 (`v2`) straight after, so V2 is always the demo plus the new missions. Work only for V2 (missions 2 to 9, their art and story) is made on `v2` and never goes back to the demo. Where a demo fix touches something V2 has changed, V2 keeps its own version and gets the fix on top.
 - Polish is found by a sweep of the demo (bot playthroughs on every setting, phone-size screenshots of every screen, the web build's loading and speed, the menus and text) plus anything the user notices; each round is listed for the user to pick before it is built.
 
+### DECIDED — Toes kept above the floor (user, 2026-11-10: "tidy the toe dip for Cross and the two new characters")
+- **Why:** found while building Bishop and Vesper (V2): in CROSS's run the planted toe dips about 6 cm through the floor, and in the hands-up kneel the rear toe goes about 14 cm under it. It's the shared poses (SoldierRig), so the guards, Bishop and Vesper have it too.
+- **How:** the poses are adjusted (the run's foot roll and planted ankle, the kneel's rear foot) so no toe goes under the floor, on CROSS and on Bishop and Vesper, with the guards checked too; the look of the run and the kneel otherwise unchanged. A test checks the lowest toe in each stays at or above the floor. Made on the demo first, then brought into V2 on its own (the casings try-out stays out of V2 until the user approves it).
+
 ### PROPOSED — Spent casings from the trigger (user, 2026-11-03; a try-out in the demo)
 - **Why (user):** "have bullet shells pop out from behind the trigger button and fall off the bottom of the screen"; "lets put the tink in and see how it sounds." If it works it goes into V2 with the rest.
 - Each shot throws a spent pistol casing out from behind the FIRE trigger, on the trigger's side (TRIGGER), tumbling end over end with a little random spin, falling off the bottom of the screen: a small 3D model drawn over the game, in live play only.
