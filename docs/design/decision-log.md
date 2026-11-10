@@ -120,6 +120,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Polish and fixes are made on the demo (`main`) first, tested and pushed, then merged into V2 (`v2`) straight after, so V2 is always the demo plus the new missions. Work only for V2 (missions 2 to 9, their art and story) is made on `v2` and never goes back to the demo. Where a demo fix touches something V2 has changed, V2 keeps its own version and gets the fix on top.
 - Polish is found by a sweep of the demo (bot playthroughs on every setting, phone-size screenshots of every screen, the web build's loading and speed, the menus and text) plus anything the user notices; each round is listed for the user to pick before it is built.
 
+### PROPOSED — Bishop, a second operative (user, 2026-11-10; V2 only, not in the game yet)
+- **Why (user):** another of the user's high-poly models, Bishop: "hes as tall as Cross. they may appear in the chat dialogues (its to be worked on) the model will be used as an unlockable skin to swap with Cross' in game, but not yet." Not an enemy.
+- **How:** the same pipeline as CROSS and the guard (`art_source/operative/tools`): his source model (`art_source/bishop/bishop.glb`, gitignored like the others) is T-posed, so his arms are lowered to CROSS's A-pose first; reduced to **3,000 triangles** with a **512** texture baked from it; scaled to CROSS's height; rigged with **the same 19 joints**, so every pose CROSS has (menu ready, run, jump, slide, cover, aim, hands up, death) fits him unchanged, as a skin needs. Built to `game/player/bishop.glb`.
+- **Not yet:** nothing in the game loads him. The skin swap (how he's unlocked, where it's picked) and his place in the conversations are to be worked out later.
+
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)
 - **Why (user):** "I'd like to do some localisation, translation to other languages"; "I'd like to try Luxembourgish first, if that's possible?"; "I have someone who speaks Lëtzebuergesch and they can check."
 - All player-facing text (menus, settings, tips, HUD, debrief, scoreboard, credits, the briefing and end conversations) goes through Godot's translation system from one table, English the source and the fallback. In-world signs (EXIT and the like) stay in English as scenery. The cast's names (CROSS, ARDBALLS, VESPER...) stay as they are.
