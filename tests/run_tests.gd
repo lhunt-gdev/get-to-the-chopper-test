@@ -76,6 +76,7 @@ func _run() -> void:
 	_test_cross_ready()
 	_test_cross_eased()
 	_test_operative_models()
+	_test_toes_above_floor()
 	_test_intro_camera()
 	_test_start_room()
 	_test_cutout()
@@ -6950,3 +6951,69 @@ func _test_operative_models() -> void:
 			r.animate(1.0 / 60.0, {"run": 1.0, "aim": true})
 		_check(r.hips != null and r.wrists.size() == 2 and r._meshes.size() > 0, "%s: a SoldierRig builds and poses them" % name)
 		r.free()
+
+
+## Toes kept above the floor (the decision log's "Toes kept above the floor"): through the whole run
+## cycle and in the hands-up kneel, no vertex of CROSS's, Bishop's or Vesper's (or a guard's, in the
+## run) is more than 1 cm under the floor, skinned as the GPU skins it.
+func _test_toes_above_floor() -> void:
+	var rig := func(who: String) -> SoldierRig:
+		match who:
+			"cross":
+				return SoldierRig.new()
+			"guard":
+				return GuardRig.new()
+		return SoldierRig.new(load("res://game/player/%s.glb" % who) as PackedScene, "", who.to_upper())
+	for who in ["cross", "guard", "bishop", "vesper"]:
+		var worst_run := INF
+		for k in 24:
+			var r: SoldierRig = rig.call(who)
+			root.add_child(r)
+			for i in 60:
+				r.animate(1.0 / 60.0, {"run": 1.0})
+			r._phase = TAU * k / 24.0
+			if r is GuardRig:
+				(r as GuardRig)._still = false
+			r.animate(0.0, {"run": 1.0})
+			worst_run = minf(worst_run, _lowest_vertex(r))
+			r.free()
+		_check(worst_run >= -0.01, "%s: no toe under the floor in the run (lowest %.3f m)" % [who, worst_run])
+	for who in ["cross", "bishop", "vesper"]:
+		var c: SoldierRig = rig.call(who)
+		root.add_child(c)
+		for i in 30:
+			c.animate(1.0 / 60.0, {"run": 1.0})
+		for i in 150:
+			c.animate(1.0 / 60.0, {"surrender": true})
+		var kneel := _lowest_vertex(c)
+		c.free()
+		_check(kneel >= -0.01, "%s: no toe under the floor in the hands-up kneel (lowest %.3f m)" % [who, kneel])
+
+
+## The lowest point of a rig's model now (m, y in the world), its vertices skinned from the skeleton's
+## pose as the GPU skins them.
+func _lowest_vertex(r: SoldierRig) -> float:
+	var low := INF
+	var sk := r._skeleton
+	for mi: MeshInstance3D in r._meshes:
+		if mi.skin == null or mi.mesh == null:
+			continue
+		var arr := mi.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / verts.size()
+		var mats: Array[Transform3D] = []
+		for b in mi.skin.get_bind_count():
+			var bi := mi.skin.get_bind_bone(b)
+			if bi < 0:
+				bi = sk.find_bone(mi.skin.get_bind_name(b))
+			mats.append(sk.global_transform * sk.get_bone_global_pose(bi) * mi.skin.get_bind_pose(b))
+		for i in verts.size():
+			var y := 0.0
+			for k in per:
+				var w := weights[i * per + k]
+				if w > 0.0:
+					y += (mats[bones[i * per + k]] * verts[i]).y * w
+			low = minf(low, y)
+	return low
