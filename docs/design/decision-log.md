@@ -130,6 +130,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **How:** as Bishop (above): her source model (`art_source/vesper/vesper.glb`, gitignored) is already near CROSS's A-pose; 3,000 triangles, a 512 texture, the same 19 joints so CROSS's poses fit her, built to `game/player/vesper.glb`. **Her height:** about 93% of CROSS's (a first guess, to be checked by the user: "shorter than Cross and Bishop").
 - **Not yet:** as Bishop: nothing in the game loads her. As a skin she's shorter, so how CROSS's poses sit on a shorter body (his gun, the cover heights, the camera) is for when the swap is built.
 
+### PROPOSED — Eight skins for CROSS (user, 2026-11-10; V2 only, not in the game yet)
+- **Why (user):** eight more of the user's high-poly models, "Cross variation skins, so same hight as Cross": **Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future and Judge** Operative.
+- **How:** as Bishop and Vesper (above): each source (`art_source/skins/<name>/<name>.glb`, gitignored) reduced to 3,000 triangles with a 512 texture, at CROSS's height, rigged with the same 19 joints so all his poses fit, his gun in their fists; Rebel, Future and Judge have their arms further out and are lowered to his A-pose first. Built to `game/player/skins/<name>.glb`, one build script for all of them.
+- **Not yet:** nothing in the game loads them; how skins are unlocked and picked is to be worked out with Bishop's and Vesper's.
+
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)
 - **Why (user):** "I'd like to do some localisation, translation to other languages"; "I'd like to try Luxembourgish first, if that's possible?"; "I have someone who speaks Lëtzebuergesch and they can check."
 - All player-facing text (menus, settings, tips, HUD, debrief, scoreboard, credits, the briefing and end conversations) goes through Godot's translation system from one table, English the source and the fallback. In-world signs (EXIT and the like) stay in English as scenery. The cast's names (CROSS, ARDBALLS, VESPER...) stay as they are.
