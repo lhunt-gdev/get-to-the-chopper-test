@@ -33,6 +33,10 @@ export DROP_BITS=1  # (the remesh leaves a few loose crumbs: dropped, see stage3
 export HEM=0.785  # (her skirt's hem, m: the bake there is straightened, see stage3_bake.py)
 export HEM_KEEP="0.09,0.18,-0.3,0.0"  # (her side split at the front, which shows her leg: left alone)
 export HEM_INNER="0.06,0.83,0,0"  # (between her legs up under the skirt: the skirt's dark, not her leg)
+export HEM_SKIRT="0.93,0.2"  # (the rest of the skirt, up to its waistband: leg-coloured specks on it take the skirt's colour)
+export REMARGIN=4  # (the margins round the texture's pieces made again after the clean-up: no dark streaks at the seams)
+export HEM_EDGE="0.785,200"  # (an edge loop along the hem, 200 triangles kept back for it: a clean hem under the PS1's affine texturing)
+export HEM_SHADE=0.015  # (the 1.5 cm of leg under the hem, shaded darker in the source: her leg's own tone from just below)
 export CUT_LEGS="0.66,0.81,0.024"  # (her thighs cut apart from mid-thigh up into the skirt, see stage3_bake.py: no bridge under the hem)
 # Her joints where the mesh can't show them (see stage4_rig.py): the crotch under her skirt at CROSS's
 # share of the height, the tops of her narrower shoulders looked for nearer the middle (m), and the

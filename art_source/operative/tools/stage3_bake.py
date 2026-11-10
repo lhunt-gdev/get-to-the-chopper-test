@@ -112,10 +112,27 @@ if os.environ.get("CUT_LEGS"):
     print("CUT_LEGS split %d edges, moved %d vertices out to the thighs, closed %d openings" % (len(cut), moved, len(made)))
 dm = low.modifiers.new("reduce", 'DECIMATE'); dm.decimate_type = 'COLLAPSE'; dm.use_collapse_triangulate = True
 low.data.calc_loop_triangles()
-dm.ratio = target / max(1, len(low.data.loop_triangles))  # target is in triangles
+# HEM_EDGE="z,reserve" (environment): an edge loop round her at height z (her skirt's hem), so no
+# triangle spans the hem: the PS1's affine texturing bends the texture across a big triangle, and
+# the hem drew ragged across the ones that spanned it. `reserve` triangles are kept back from the
+# reduction for the loop, so it stays within the budget.
+hem_edge = [float(v) for v in os.environ["HEM_EDGE"].split(",")] if os.environ.get("HEM_EDGE") else None
+dm.ratio = (target - (int(hem_edge[1]) if hem_edge else 0)) / max(1, len(low.data.loop_triangles))  # target is in triangles
 bpy.ops.object.modifier_apply(modifier=dm.name)
 low.data.calc_loop_triangles()
 print("LOW_TRIS", len(low.data.loop_triangles))
+if hem_edge:
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    near = [f for f in bm.faces if abs(f.calc_center_median().x) < 0.22 and abs(f.calc_center_median().z - hem_edge[0]) < 0.06]
+    geom = list({v for f in near for v in f.verts}) + list({e for f in near for e in f.edges}) + near
+    bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, hem_edge[0]), plane_no=(0, 0, 1), dist=1e-4)
+    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
+    bm.to_mesh(low.data)
+    bm.free()
+    low.data.update()
+    low.data.calc_loop_triangles()
+    print("LOW_TRIS with the hem's edge loop", len(low.data.loop_triangles))
 # Fresh UVs for the low-poly.
 while low.data.uv_layers:
     low.data.uv_layers.remove(low.data.uv_layers[0])
@@ -266,6 +283,13 @@ if os.environ.get("HEM"):
     # from bz below the hem up to it (where the remesh closes the gap between her thighs just under the
     # hem, a little rounded: the underneath of the skirt there, seen between her legs).
     inner_x, inner_z, under_x, under_z = [float(v) for v in os.environ["HEM_INNER"].split(",")] if os.environ.get("HEM_INNER") else (0.0, 0.0, 0.0, 0.0)
+    # HEM_SKIRT="top,x" (m): the rest of the skirt too, up to `top` and within x of the middle (her
+    # hands hang further out): any warm, leg-coloured texel on it is a speck (Vesper's: an orange one on
+    # the back) and takes the skirt's colour; her side split (HEM_KEEP) is left out, and only tidied
+    # (see below).
+    skirt_top, skirt_x = [float(v) for v in os.environ["HEM_SKIRT"].split(",")] if os.environ.get("HEM_SKIRT") else (0.0, 0.0)
+    split = set()  # texels on her side split
+    zmap = {}  # texel -> its height on her
     W, H = img.size
     pix = list(img.pixels)
     uvd = low.data.uv_layers.active.data
@@ -273,7 +297,7 @@ if os.environ.get("HEM"):
     side = {}  # texel -> True below the hem, False in the band above it
     for t in low.data.loop_triangles:
         cs = [low.data.vertices[i].co for i in t.vertices]
-        if max(c.z for c in cs) < hem - 0.3 or min(c.z for c in cs) > max(hem + 0.015, inner_z):
+        if max(c.z for c in cs) < hem - 0.3 or min(c.z for c in cs) > max(hem + 0.015, inner_z, skirt_top):
             continue
         p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
         area = (p[1] - p[0]).cross(p[2] - p[0])
@@ -288,6 +312,7 @@ if os.environ.get("HEM"):
                 if min(w0, w1, w2) < -0.02 or not (0 <= x < W and 0 <= y < H):
                     continue
                 z = cs[0].z * w0 + cs[1].z * w1 + cs[2].z * w2
+                zmap[(x, y)] = z
                 ax = abs(cs[0].x * w0 + cs[1].x * w1 + cs[2].x * w2)
                 if hem - under_z <= z < hem and ax < under_x:
                     side[(x, y)] = None
@@ -295,11 +320,15 @@ if os.environ.get("HEM"):
                     side[(x, y)] = True
                 elif hem <= z <= inner_z and ax < inner_x:
                     side[(x, y)] = None
-                elif hem <= z <= hem + 0.015:
+                elif hem <= z <= max(hem + 0.015, skirt_top):
                     px_ = cs[0].x * w0 + cs[1].x * w1 + cs[2].x * w2
                     py_ = cs[0].y * w0 + cs[1].y * w1 + cs[2].y * w2
-                    if not (keep and keep[0] <= px_ <= keep[1] and keep[2] <= py_ <= keep[3]):
+                    if keep and keep[0] <= px_ <= keep[1] and keep[2] <= py_ <= keep[3]:
+                        split.add((x, y))
+                    elif z <= hem + 0.015:
                         side[(x, y)] = False
+                    elif ax < skirt_x:
+                        side[(x, y)] = None
     def luma(q):
         i = (q[1] * W + q[0]) * 4
         return 0.3 * pix[i] + 0.59 * pix[i + 1] + 0.11 * pix[i + 2]
@@ -345,9 +374,137 @@ if os.environ.get("HEM"):
         else:
             pix[i:i + 3] = mean[side[q]]
         fixed += 1
+    # Then flecks: on her legs under the hem (and on the skirt above it) a texel much darker (or, on the
+    # skirt, much lighter) than the texels round it (5 x 5, the same side; 7 x 7 and finer within 10 cm
+    # under the hem) takes the colour of the middle
+    # one of them: smudges and specks gone, the fabric's and the stockings' own shading kept.
+    flecks = 0
+    for _ in range(2):
+        fix = {}
+        for (x, y), below in side.items():
+            close = below and zmap.get((x, y), 0.0) > hem - 0.1  # (on her legs near the hem: finer)
+            rad = 3 if close else 2
+            near = [(x + dx, y + dy) for dx in range(-rad, rad + 1) for dy in range(-rad, rad + 1) if side.get((x + dx, y + dy)) == below]
+            if len(near) < 9:
+                continue
+            near.sort(key=luma)
+            m = near[len(near) // 2]
+            l, lm = luma((x, y)), luma(m)
+            if l < (0.9 if close else 0.86) * lm or (not below and l > 1.5 * lm + 0.02):
+                fix[(x, y)] = m
+        for (x, y), m in fix.items():
+            i, j = (y * W + x) * 4, (m[1] * W + m[0]) * 4
+            pix[i:i + 3] = pix[j:j + 3]
+        flecks += len(fix)
+    print("HEM flecks smoothed:", flecks)
+    # And the strip of leg just under the hem (HEM_SHADE m), shaded darker in the source as though in
+    # the skirt's shadow, reads as a smudge under it: it takes the colours of her leg a little lower
+    # down (the nearest texels from HEM_SHADE to 2.5 x it under the hem), her leg's tone up to the hem.
+    shade = float(os.environ.get("HEM_SHADE", "0"))
+    if shade > 0.0:
+        strip = {q for q, below in side.items() if below and zmap.get(q, -1.0) > hem - shade}
+        ref = {q: q for q, below in side.items() if below and hem - 2.5 * shade <= zmap.get(q, 9.0) <= hem - shade}
+        front = list(ref)
+        while front:
+            nxt = []
+            for (x, y) in front:
+                for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    q = (x + d[0], y + d[1])
+                    if q in strip and q not in ref:
+                        ref[q] = ref[(x, y)]
+                        nxt.append(q)
+            front = nxt
+        for q in strip:
+            s = ref.get(q)
+            if s:
+                i, j = (q[1] * W + q[0]) * 4, (s[1] * W + s[0]) * 4
+                pix[i:i + 3] = pix[j:j + 3]
+        print("HEM strip under the hem in her leg's tone:", len(strip), "texels")
+    # Her side split: each texel there skirt or leg (warm), the odd one out among its neighbours (a
+    # pale texel in the skirt's edge, a dark one in her leg) made like them, twice over, and recoloured
+    # from the nearest of its new kind: a clean dark edge against her leg.
+    kind = {q: warm(q) for q in split}
+    for _ in range(2):
+        flip = {}
+        for (x, y), k in kind.items():
+            near = [kind[(x + dx, y + dy)] for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx or dy) and (x + dx, y + dy) in kind]
+            if len(near) >= 5 and sum(1 for n in near if n != k) >= 5:
+                flip[(x, y)] = not k
+        kind.update(flip)
+    tidied = 0
+    for (x, y), k in kind.items():
+        if warm((x, y)) == k:
+            continue
+        best = None
+        for r in range(1, 6):
+            for dx in range(-r, r + 1):
+                for dy in (-r, r) if abs(dx) != r else range(-r, r + 1):
+                    q = (x + dx, y + dy)
+                    if q in kind and kind[q] == k and warm(q) == k:
+                        best = q
+                        break
+                if best:
+                    break
+            if best:
+                break
+        if best:
+            i, j = (y * W + x) * 4, (best[1] * W + best[0]) * 4
+            pix[i:i + 3] = pix[j:j + 3]
+            tidied += 1
+    print("HEM side split tidied:", tidied, "texels of", len(split))
     img.pixels[:] = pix
     print("HEM", fixed, "of", len(wrong), "texels on the wrong side of the hem recoloured")
 img.scale(tex, tex)  # baked at twice the size, scaled down: cleaner edges
+# REMARGIN=n (environment, texels): after the texture's been worked on (the hem, the misses), the
+# margin round every piece of it made again from what's in the piece now, n texels out: the bake's own
+# margin still held the colours from before, and a triangle's edge reads a texel or two of it (dark
+# streaks down Vesper's thighs from the hem, flecks along the seams).
+if os.environ.get("REMARGIN"):
+    reach = int(os.environ["REMARGIN"])
+    W, H = img.size
+    pix = list(img.pixels)
+    uvd = low.data.uv_layers.active.data
+    low.data.calc_loop_triangles()
+    done = bytearray(W * H)  # 1: a texel of a piece, or margin already made
+    for t in low.data.loop_triangles:
+        p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+        area = (p[1] - p[0]).cross(p[2] - p[0])
+        if abs(area) < 1e-9:
+            continue
+        for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+            for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                c = mathutils.Vector((x + 0.5, y + 0.5))
+                w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                if min(w0, w1, 1.0 - w0 - w1) >= -0.01:
+                    done[y * W + x] = 1
+    front = [i for i in range(W * H) if done[i]]
+    grown = 0
+    for _ in range(reach):
+        ring = []
+        for i in front:
+            x, y = i % W, i // W
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if 0 <= x + dx < W and 0 <= y + dy < H and not done[(y + dy) * W + x + dx]:
+                    done[(y + dy) * W + x + dx] = 2
+                    ring.append((y + dy) * W + x + dx)
+        for j in ring:
+            x, y = j % W, j // W
+            acc = [0.0, 0.0, 0.0]
+            n = 0
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if 0 <= x + dx < W and 0 <= y + dy < H and done[(y + dy) * W + x + dx] == 1:
+                    k = ((y + dy) * W + x + dx) * 4
+                    acc = [acc[c] + pix[k + c] for c in range(3)]
+                    n += 1
+            if n:
+                pix[j * 4:j * 4 + 3] = [a / n for a in acc]
+                grown += 1
+        for j in ring:
+            done[j] = 1
+        front = ring
+    img.pixels[:] = pix
+    print("REMARGIN", grown, "margin texels made again from their pieces")
 # GROW_GAPS=1 (environment): the gaps between islands, still unbaked black, grown over from the
 # islands' edges 4 texels further than the bake's margin: a triangle's corner at an island's edge can
 # sample them (thin black marks on Vesper's thighs).

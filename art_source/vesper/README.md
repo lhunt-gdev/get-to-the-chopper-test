@@ -38,6 +38,14 @@ What her build does that CROSS's doesn't (each set in `build_vesper.sh`, explain
   of its own, so below the hem nothing joins her legs (no holes; still 3,000 triangles).
 - `HEM_INNER` (stage 3): between her legs, up under the skirt, the texture takes the skirt's dark
   colour, so looking up between her thighs it's dark, as under a skirt, not her leg.
+- The skirt's texture cleaned up (stage 3): an edge loop round her along the hem so no triangle
+  spans it (`HEM_EDGE`; the PS1's affine texturing drew the hem ragged across those, and 200 triangles
+  are kept back for the loop: 2,980 in all); leg-coloured specks on the rest of the skirt taken out
+  (`HEM_SKIRT`); dark flecks and smudges near the hem smoothed into the texels round them; the strip
+  of leg just under the hem, shaded darker in the source, given her leg's tone from just below
+  (`HEM_SHADE`); the side split's edge tidied to a clean skirt edge against her leg; and the margins
+  round the texture's pieces made again from the cleaned colours (`REMARGIN`), so no dark streaks run
+  from the seams.
 - `HEM`, `HEM_KEEP` (stages 3 and 4): her skirt is tight on her thighs, so the remesh makes them one
   surface and the bake there was ragged. The texture is straightened along the hem (skirt above, leg
   below; the side split left alone), and the skirt between her legs follows her hips, not her thighs.
