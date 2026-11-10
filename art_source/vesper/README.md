@@ -32,9 +32,12 @@ What her build does that CROSS's doesn't (each set in `build_vesper.sh`, explain
   skirt down to above her knees. They're parted on the source to at least 5 cm apart from 0.55 m up
   under the skirt to the crotch (the inner side of each thigh moved out, easing to nothing across it,
   the gap closing over its top 4 cm), so her legs are apart right up to the hem and move on their own.
-- `HEM_INNER` (stage 3): between her legs, up under the skirt and where the remesh closes the gap
-  just under the hem, the texture takes the skirt's dark colour, so looking up between her thighs
-  it's dark, as under a skirt, not a band of leg.
+- `CUT_LEGS` (stage 3): the 1.2 cm remesh still joined her thighs with a small bridge just under the
+  hem. After the remesh her skin is cut down the middle from mid-thigh up into the skirt, the vertices
+  between her legs moved out onto each thigh's inner side and each thigh's opening closed with faces
+  of its own, so below the hem nothing joins her legs (no holes; still 3,000 triangles).
+- `HEM_INNER` (stage 3): between her legs, up under the skirt, the texture takes the skirt's dark
+  colour, so looking up between her thighs it's dark, as under a skirt, not her leg.
 - `HEM`, `HEM_KEEP` (stages 3 and 4): her skirt is tight on her thighs, so the remesh makes them one
   surface and the bake there was ragged. The texture is straightened along the hem (skirt above, leg
   below; the side split left alone), and the skirt between her legs follows her hips, not her thighs.

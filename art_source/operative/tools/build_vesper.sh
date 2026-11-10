@@ -32,7 +32,8 @@ export GROW_GAPS=1  # (black gaps between islands grown over: thin black marks o
 export DROP_BITS=1  # (the remesh leaves a few loose crumbs: dropped, see stage3_bake.py)
 export HEM=0.785  # (her skirt's hem, m: the bake there is straightened, see stage3_bake.py)
 export HEM_KEEP="0.09,0.18,-0.3,0.0"  # (her side split at the front, which shows her leg: left alone)
-export HEM_INNER="0.06,0.83,0.026,0.05"  # (between her legs up under the skirt, and where her thighs close just under the hem: the skirt's dark, not her leg)
+export HEM_INNER="0.06,0.83,0,0"  # (between her legs up under the skirt: the skirt's dark, not her leg)
+export CUT_LEGS="0.66,0.81,0.024"  # (her thighs cut apart from mid-thigh up into the skirt, see stage3_bake.py: no bridge under the hem)
 # Her joints where the mesh can't show them (see stage4_rig.py): the crotch under her skirt at CROSS's
 # share of the height, the tops of her narrower shoulders looked for nearer the middle (m), and the
 # shoulder joint placed across by hand.

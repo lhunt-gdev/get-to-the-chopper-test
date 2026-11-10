@@ -49,6 +49,67 @@ if os.environ.get("DROP_BITS") == "1":
     bm.to_mesh(low.data)
     bm.free()
     print("DROPPED", len(parts) - sum(1 for p in parts if len(p) >= biggest * 0.01), "loose bits,", len(crumbs), "vertices")
+# CUT_LEGS="z_from,z_to,x_edge" (environment, m): legs the remesh joined (Vesper's thighs, a little
+# bridge just under her skirt's hem, inside 1.2 cm voxels): cut apart, before the reduction. The
+# remeshed skin is split down the middle (x = 0) from z_from up to z_to (up inside the skirt, out of
+# sight), every vertex between the legs there is moved out onto its own thigh's inner side (x_edge
+# from the middle), and each thigh's opened side is closed with new faces lying on it: below z_to
+# nothing joins her legs, and each is whole.
+if os.environ.get("CUT_LEGS"):
+    z_from, z_to, x_edge = [float(v) for v in os.environ["CUT_LEGS"].split(",")]
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    region = [f for f in bm.faces if abs(f.calc_center_median().x) < 0.1 and z_from - 0.02 < f.calc_center_median().z < z_to + 0.02]
+    geom = list({v for f in region for v in f.verts}) + list({e for f in region for e in f.edges}) + region
+    bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, 0), plane_no=(1, 0, 0), dist=1e-5)
+    cut = [e for e in bm.edges if all(abs(v.co.x) < 1e-4 and z_from <= v.co.z <= z_to for v in e.verts) and len(e.link_faces) == 2]
+    bmesh.ops.split_edges(bm, edges=cut)
+    moved = 0
+    for v in bm.verts:
+        if abs(v.co.x) >= x_edge or not (z_from <= v.co.z <= z_to) or not v.link_faces:
+            continue
+        sides = [f.calc_center_median().x for f in v.link_faces]
+        if min(sides) < 0.0 < max(sides):
+            continue  # (still on both legs: where the cut stops, up in the skirt)
+        v.co.x = x_edge if sum(sides) > 0 else -x_edge
+        moved += 1
+    bm.normal_update()
+    # Each opening (a loop of open edges) runs down one thigh and back up the other, joined where the
+    # cut stopped (the vertices left at x = 0, up in the skirt): it's closed a thigh at a time, each
+    # stretch between two of those joins made a face of its own (so nothing spans between her legs).
+    made = []
+    seen = set()
+    for e0 in [e for e in bm.edges if e.is_boundary]:
+        if e0 in seen:
+            continue
+        loop = [e0.verts[0]]
+        e, v = e0, e0.verts[1]
+        seen.add(e)
+        while v != loop[0]:
+            loop.append(v)
+            nxt = [x for x in v.link_edges if x.is_boundary and x not in seen]
+            if not nxt:
+                break
+            e = nxt[0]
+            seen.add(e)
+            v = e.other_vert(v)
+        joins = [i for i, w in enumerate(loop) if abs(w.co.x) < 1e-4]
+        if len(joins) < 2:
+            continue
+        for a, b in zip(joins, joins[1:] + [joins[0] + len(loop)]):
+            chain = [loop[i % len(loop)] for i in range(a, b + 1)]
+            if len(chain) >= 3:
+                try:
+                    made.append(bm.faces.new(chain))
+                except ValueError:
+                    pass
+    made = bmesh.ops.triangulate(bm, faces=made)["faces"]
+    bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=1e-5)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(low.data)
+    bm.free()
+    low.data.update()
+    print("CUT_LEGS split %d edges, moved %d vertices out to the thighs, closed %d openings" % (len(cut), moved, len(made)))
 dm = low.modifiers.new("reduce", 'DECIMATE'); dm.decimate_type = 'COLLAPSE'; dm.use_collapse_triangulate = True
 low.data.calc_loop_triangles()
 dm.ratio = target / max(1, len(low.data.loop_triangles))  # target is in triangles
