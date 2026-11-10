@@ -58,9 +58,9 @@ def lower_slanted(side):
     my = sum(p[2] for p in pts) / n
     sxx = sum((p[0] - mx) ** 2 for p in pts)
     bz = sum((p[0] - mx) * (p[1] - mz) for p in pts) / sxx  # z change per metre out (negative: down)
+    by = sum((p[0] - mx) * (p[2] - my) for p in pts) / sxx  # y change per metre out (its lean, front or back)
     below = math.atan(-bz)  # how far below straight out
     out_angle = math.pi / 2.0 - below  # how far out from hanging
-    turn = out_angle - hang
     # The arm's thickness across itself (an upright slice through a slanted arm is longer).
     thick = sorted(p[3] for p in pts)[n // 2] * math.cos(below)
     radius = thick / 2.0
@@ -73,8 +73,17 @@ def lower_slanted(side):
     top = max(v.z for v in V if 0.18 <= v.x * side <= 0.30 and v.z < h * 0.9)
     pz = top - 0.05
     px = mx + (pz - mz) / bz
-    pivot = mathutils.Vector((side * px, my, pz))
-    axis = mathutils.Vector((0, 1, 0))
+    pivot = mathutils.Vector((side * px, my + by * (px - mx), pz))
+    # The turn: from the arm's line as made to hanging `hang` out to the side, level front to back
+    # (Bishop's source has one arm reaching forward and the other back: both come to his sides). With
+    # no lean, and the shoulder at the middle of the body's depth, it's a turn about y, straight down sideways.
+    was = mathutils.Vector((side, by, bz)).normalized()
+    # Level front to back: the hand ends (about 0.6 m down the arm) at the middle of the body's depth.
+    mid = [v.y for v in V if abs(v.x) < 0.12 and abs(v.z - h * 0.66) < 0.02]
+    y_mid = (min(mid) + max(mid)) / 2.0
+    to = mathutils.Vector((side * math.sin(hang), (y_mid - pivot.y) / 0.6, -math.cos(hang))).normalized()
+    axis = was.cross(to).normalized()
+    turn = was.angle(to)
     moved = 0
     for i, v in enumerate(me.vertices):
         p = V[i]
@@ -87,10 +96,11 @@ def lower_slanted(side):
             w *= 1.0 - smoothstep(radius * 1.1, radius * 1.6, d)
         if w <= 0.0:
             continue
-        r = mathutils.Matrix.Rotation(side * turn * w, 4, axis)
+        r = mathutils.Matrix.Rotation(turn * w, 4, axis)
         q = pivot + (r @ (p - pivot).to_4d()).to_3d()
         v.co = Mi @ q
         moved += 1
+    print("APOSE side", side, "leaning %.1f deg %s" % (math.degrees(abs(math.atan(by))), "back" if by > 0 else "forward"))
     print("APOSE side", side, "slanted arm %.1f deg out from hanging, radius %.3f, shoulder top %.3f, pivot %s: moved %d verts, turned %.1f deg" % (
             math.degrees(out_angle), radius, top, tuple(round(c, 3) for c in pivot), moved, math.degrees(turn)))
 

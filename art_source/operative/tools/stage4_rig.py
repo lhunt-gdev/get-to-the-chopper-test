@@ -346,6 +346,87 @@ bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
 bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL', limit=4)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
 bpy.ops.object.mode_set(mode='OBJECT')
+# HAND_LIKE="run;palm" (environment, Godot axes, the right hand; the left is its mirror): turn each
+# hand about its wrist, at rest, so it hangs as CROSS's does. SoldierRig measures a hand from the mesh
+# (which way it runs from the wrist, which way the palm faces: SoldierRig._measure_hand, done the same
+# way here) and seats the pistol in it for CROSS's; a hand made open and turned forward and out
+# (Bishop's) took the pistol above his knuckles and askew. Turned like CROSS's, the gun sits in his
+# grip in every pose with CROSS's numbers. The turn blends out across the cuff with the wrist's weight.
+if os.environ.get("HAND_LIKE"):
+    want_run, want_palm = [mathutils.Vector([float(x) for x in part.split(",")]) for part in os.environ["HAND_LIKE"].split(";")]
+    def to_godot(v):
+        return mathutils.Vector((v.x, v.z, -v.y))
+    def to_blender(v):
+        return mathutils.Vector((v.x, -v.z, v.y))
+    def frame(run, palm):
+        run = run.normalized()
+        palm = (palm - run * palm.dot(run)).normalized()
+        return mathutils.Matrix((run, palm, run.cross(palm))).transposed()
+    for side, s in ((1, "R"), (-1, "L")):
+        wb = gi["Wrist" + s]
+        head = to_godot(pos["Wrist" + s])
+        pts = [to_godot(M @ v.co) - head for v in me.vertices if any(g.group == wb and g.weight >= 0.6 for g in v.groups)]
+        if len(pts) < 8:
+            continue
+        mid = sum(pts, mathutils.Vector()) / len(pts)
+        run = mid.normalized()
+        u = run.cross(mathutils.Vector((0, 0, -1))).normalized()
+        w = run.cross(u)
+        uu = sum((q - mid).dot(u) ** 2 for q in pts)
+        ww = sum((q - mid).dot(w) ** 2 for q in pts)
+        uw = sum((q - mid).dot(u) * (q - mid).dot(w) for q in pts)
+        thin = 0.5 * math.atan2(2.0 * uw, uu - ww) + math.pi / 2.0
+        palm = (u * math.cos(thin) + w * math.sin(thin)).normalized()
+        if palm.x * side > 0.0:
+            palm = -palm
+        mirror = mathutils.Vector((side, 1, 1))
+        turn_g = frame(want_run * mirror, want_palm * mirror) @ frame(run, palm).transposed()
+        # (the same turn in Blender's axes)
+        S = mathutils.Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0)))
+        q = (S.transposed() @ turn_g @ S).to_quaternion()
+        pivot = pos["Wrist" + s]
+        turned = 0
+        for v in me.vertices:
+            k = sum(g.weight for g in v.groups if g.group == wb)
+            if k <= 0.0:
+                continue
+            p = M @ v.co
+            r = mathutils.Quaternion().slerp(q, min(1.0, k))
+            v.co = M.inverted() @ (pivot + r @ (p - pivot))
+            turned += 1
+        print("WEIGHTS hand", s, "turned %.1f deg to hang like CROSS's (%d vertices)" % (math.degrees(q.angle), turned))
+    me.update()
+    # HAND_CURL (environment, degrees): his fingers curled in toward the palm, this far at the tips, from
+    # the knuckles (about 55% of the way from the wrist to the fingertips), a smooth bend like a finger's
+    # joints, so an open hand closes round the pistol's grip as CROSS's fists do.
+    curl = math.radians(float(os.environ.get("HAND_CURL", "0")))
+    if curl > 0.0:
+        for side, s in ((1, "R"), (-1, "L")):
+            wb = gi["Wrist" + s]
+            mirror = mathutils.Vector((side, 1, 1))
+            run_b = to_blender(want_run * mirror).normalized()
+            palm_b = to_blender(want_palm * mirror)
+            palm_b = (palm_b - run_b * palm_b.dot(run_b)).normalized()
+            pivot = pos["Wrist" + s]
+            hand = [v for v in me.vertices if any(g.group == wb and g.weight >= 0.6 for g in v.groups)]
+            tip = max((M @ v.co - pivot).dot(run_b) for v in hand)
+            s0 = tip * 0.55
+            R = (tip - s0) / curl  # (a bend this radius turns the fingertips by `curl`)
+            bent = 0
+            for v in me.vertices:
+                k = sum(g.weight for g in v.groups if g.group == wb)
+                p = M @ v.co - pivot
+                sa = p.dot(run_b)
+                if k <= 0.0 or sa <= s0:
+                    continue
+                t = p.dot(palm_b)
+                rest = p - run_b * sa - palm_b * t
+                th = (sa - s0) / R
+                new = run_b * (s0 + (R - t) * math.sin(th)) + palm_b * (R + (t - R) * math.cos(th)) + rest
+                v.co = M.inverted() @ (pivot + p.lerp(new, min(1.0, k)))
+                bent += 1
+            print("WEIGHTS hand", s, "fingers curled %.0f deg (%d vertices)" % (math.degrees(curl), bent))
+        me.update()
 groups = {g.index: g.name for g in low.vertex_groups}
 print("WEIGHTS groups", len(groups), "unweighted by bone heat", unweighted, "of", len(me.vertices),
       "| given to the body (only followed an arm)", fallback,

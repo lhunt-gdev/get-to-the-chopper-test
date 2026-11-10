@@ -15,17 +15,24 @@ Rebuild him from the project root with `art_source/operative/tools/build_bishop.
 `game/player/bishop.json` (no goggle lenses). He's 1.90 m as made, CROSS's height, so he isn't scaled.
 How the scripts work is in `art_source/operative/README.md`.
 
-His source needs four things the others didn't, each switched on in `build_bishop.sh`:
+His source needs things the others didn't, each switched on in `build_bishop.sh`:
 
 - `WELD=1`: the source is split along its texture seams (2,078 loose pieces), which fall apart when
   reduced; its vertices are welded first, so it's one skin.
-- `slanted` (stage 1b): his arms are made partway down, not in a T-pose, so each arm's line is measured
-  and turned down only the rest of the way to CROSS's A-pose (about 18 degrees).
+- `slanted` (stage 1b): his arms are made partway down, not in a T-pose, and one reaches forward while
+  the other reaches back (about 23 degrees each). Each arm's line is measured and turned the rest of
+  the way to CROSS's A-pose, down beside him and level front to back, so his arms hang at his sides
+  like CROSS's.
 - `VOXEL=0.012`: the remesh's voxel size (1.2 cm, not 0.8): finer, his reduced copy comes apart into
   hundreds of pieces.
 - `SPLIT_OVERLAPS=1` and `FILL_MISSES=1`: his hanging arms were unwrapped over his sides (his thigh
   wore his hand's colours), so overlapping faces are unwrapped again apart; and a face folded in at
   his hairline missed the bake (a black chip), so it's filled from the faces round it.
+- `DROP_BITS=1`: a loose crumb the remesh left stopped the automatic weights; it's dropped.
+- `HAND_LIKE` and `HAND_CURL` (stage 4): his hands were made open and turned forward and out, so
+  SoldierRig's pistol sat on his knuckles and askew. Each hand is turned at the wrist to hang as
+  CROSS's does, and its fingers curled closed (80 degrees at the tips), so the pistol sits in his fist
+  in every pose with CROSS's own numbers; CROSS and SoldierRig are unchanged.
 
 After a re-import, check `game/player/bishop_bishop_3000_512.png.import` has
 `detect_3d/compress_to=0`, like CROSS's.

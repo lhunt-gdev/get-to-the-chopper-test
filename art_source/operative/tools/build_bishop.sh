@@ -11,4 +11,9 @@ export WELD=1  # (his source is split along its texture seams: welded before it'
 export VOXEL=0.012  # (finer than this, his reduced copy's remesh comes apart into hundreds of pieces)
 export SPLIT_OVERLAPS=1  # (his arms hang close: unwrapped apart from his sides, see stage3_bake.py)
 export FILL_MISSES=1  # (a face folded in at his hairline misses the bake: filled from round it)
+export DROP_BITS=1  # (any loose crumbs the remesh leaves dropped: one stops the automatic weights)
+# His hands turned at the wrist to hang as CROSS's do (CROSS's right hand as SoldierRig measures it: which
+# way it runs from the wrist; which way the palm faces), so the pistol sits in his grip (see stage4_rig.py).
+export HAND_LIKE="-0.0546,-0.9743,-0.2186;-0.9328,-0.0283,0.3592"
+export HAND_CURL=80  # (his open hands curled closed, fingertips 80 degrees in: round the grip, see stage4_rig.py)
 exec art_source/operative/tools/build_character.sh bishop art_source/bishop/bishop.glb game/player "${1:-3000}" "${2:-512}" slanted
