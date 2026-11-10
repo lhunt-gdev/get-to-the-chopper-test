@@ -396,6 +396,38 @@ if os.environ.get("HAND_LIKE"):
             turned += 1
         print("WEIGHTS hand", s, "turned %.1f deg to hang like CROSS's (%d vertices)" % (math.degrees(q.angle), turned))
     me.update()
+    # HAND_NARROW="w,k" (environment: m, a share): an open hand's spread fingers and its thumb, held
+    # out from the side of the hand, drawn in before it's curled. Across the hand (square to the way it
+    # runs and to the palm), anything more than w from the hand's middle comes in to k of the way it
+    # stuck out, easing in from the wrist: the palm keeps its width, and the fist closes round the grip
+    # without fingertips and a thumb spiking out of it (Rebel's, Future's, Judge's).
+    if os.environ.get("HAND_NARROW"):
+        w_keep, k_out = [float(x) for x in os.environ["HAND_NARROW"].split(",")]
+        for side, s in ((1, "R"), (-1, "L")):
+            wb = gi["Wrist" + s]
+            mirror = mathutils.Vector((side, 1, 1))
+            run_b = to_blender(want_run * mirror).normalized()
+            palm_b = to_blender(want_palm * mirror)
+            palm_b = (palm_b - run_b * palm_b.dot(run_b)).normalized()
+            across = run_b.cross(palm_b)
+            pivot = pos["Wrist" + s]
+            hand = [M @ v.co - pivot for v in me.vertices if any(g.group == wb and g.weight >= 0.6 for g in v.groups)]
+            a_mid = sum(p.dot(across) for p in hand) / max(1, len(hand))
+            drawn = 0
+            for v in me.vertices:
+                kw = sum(g.weight for g in v.groups if g.group == wb)
+                if kw <= 0.0:
+                    continue
+                p = M @ v.co - pivot
+                d = p.dot(across) - a_mid
+                if abs(d) <= w_keep:
+                    continue
+                ease = min(1.0, max(0.0, p.dot(run_b) / 0.04))  # (nothing at the wrist, all of it 4 cm on)
+                nd = math.copysign(w_keep + (abs(d) - w_keep) * k_out, d)
+                v.co = M.inverted() @ (pivot + p + across * (nd - d) * ease * min(1.0, kw))
+                drawn += 1
+            print("WEIGHTS hand", s, "drawn in across: %d vertices" % drawn)
+        me.update()
     # HAND_CURL (environment, degrees): his fingers curled in toward the palm, this far at the tips, from
     # the knuckles (about 55% of the way from the wrist to the fingertips), a smooth bend like a finger's
     # joints, so an open hand closes round the pistol's grip as CROSS's fists do.
@@ -411,6 +443,18 @@ if os.environ.get("HAND_LIKE"):
             hand = [v for v in me.vertices if any(g.group == wb and g.weight >= 0.6 for g in v.groups)]
             tip = max((M @ v.co - pivot).dot(run_b) for v in hand)
             s0 = tip * 0.55
+            # HAND_SHORTEN=k (environment, a share): the fingers past the knuckles shortened to k of their
+            # length first. A long, flat open hand (Judge's gloves) curled whole is a hook with spiked
+            # tips, not a fist; shortened, it closes into a compact one.
+            shorten = float(os.environ.get("HAND_SHORTEN", "1"))
+            if shorten < 1.0:
+                for v in me.vertices:
+                    k = sum(g.weight for g in v.groups if g.group == wb)
+                    p = M @ v.co - pivot
+                    sa = p.dot(run_b)
+                    if k > 0.0 and sa > s0:
+                        v.co = M.inverted() @ (pivot + p - run_b * (sa - s0) * (1.0 - shorten) * min(1.0, k))
+                tip = s0 + (tip - s0) * shorten
             R = (tip - s0) / curl  # (a bend this radius turns the fingertips by `curl`)
             bent = 0
             for v in me.vertices:
@@ -427,6 +471,67 @@ if os.environ.get("HAND_LIKE"):
                 bent += 1
             print("WEIGHTS hand", s, "fingers curled %.0f deg (%d vertices)" % (math.degrees(curl), bent))
         me.update()
+# HAND_CLEAN=k (environment): the dark creases baked between an open hand's fingers show as dark
+# marks across the knuckles once HAND_CURL closes it into a fist. On the texture, each hand's texels
+# (its faces wholly the wrist bone's, more than 5 cm past the wrist joint, so a watch or a cuff is left
+# alone) darker than k times the hand's middle brightness take the colour of the nearest one that
+# isn't: the hand's own tone, its light and shade kept.
+if os.environ.get("HAND_CLEAN"):
+    k_dark = float(os.environ["HAND_CLEAN"])
+    cimg = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
+    W, H = cimg.size
+    cpx = list(cimg.pixels)
+    uvd = me.uv_layers.active.data
+    me.calc_loop_triangles()
+    cleaned = 0
+    for side, s in ((1, "R"), (-1, "L")):
+        wb = gi["Wrist" + s]
+        wrist = pos["Wrist" + s]
+        run = (pos["Wrist" + s] - pos["Elbow" + s]).normalized()
+        on_hand = {v.index for v in me.vertices
+                   if sum(g.weight for g in v.groups if g.group == wb) >= 0.5 and (M @ v.co - wrist).dot(run) > 0.05}
+        hand = set()
+        for t in me.loop_triangles:
+            if not all(i in on_hand for i in t.vertices):
+                continue
+            p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+            area = (p[1] - p[0]).cross(p[2] - p[0])
+            if abs(area) < 1e-9:
+                continue
+            for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+                for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                    c = mathutils.Vector((x + 0.5, y + 0.5))
+                    w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                    w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                    if min(w0, w1, 1.0 - w0 - w1) >= -0.15:
+                        hand.add((x, y))
+        def luma(q):
+            i = (q[1] * W + q[0]) * 4
+            return 0.3 * cpx[i] + 0.59 * cpx[i + 1] + 0.11 * cpx[i + 2]
+        if not hand:
+            continue
+        mid_l = sorted(luma(q) for q in hand)[len(hand) // 2]
+        dark = {q for q in hand if luma(q) < k_dark * mid_l}
+        src_of = {q: q for q in hand if q not in dark}
+        front = list(src_of)
+        while front:
+            nxt = []
+            for (x, y) in front:
+                for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    q = (x + d[0], y + d[1])
+                    if q in dark and q not in src_of:
+                        src_of[q] = src_of[(x, y)]
+                        nxt.append(q)
+            front = nxt
+        for q in dark:
+            f = src_of.get(q)
+            if f:
+                i, j = (q[1] * W + q[0]) * 4, (f[1] * W + f[0]) * 4
+                cpx[i:i + 3] = cpx[j:j + 3]
+                cleaned += 1
+    cimg.pixels[:] = cpx
+    cimg.pack()  # (the export takes the packed copy)
+    print("WEIGHTS hands cleaned:", cleaned, "dark texels")
 groups = {g.index: g.name for g in low.vertex_groups}
 print("WEIGHTS groups", len(groups), "unweighted by bone heat", unweighted, "of", len(me.vertices),
       "| given to the body (only followed an arm)", fallback,

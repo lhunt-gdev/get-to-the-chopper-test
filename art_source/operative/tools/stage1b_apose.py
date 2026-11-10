@@ -29,6 +29,22 @@ M = obj.matrix_world
 Mi = M.inverted()
 V = [M @ v.co for v in me.vertices]
 h = max(v.z for v in V)
+# The full-detail source the texture is baked from, when stage 1 kept one (BAKE_FULL): its arms are
+# turned with the copy's, by the same turn at each point, so the two still lie together.
+full = bpy.data.objects.get(name.upper() + "_full")
+meshes = [(me, V)] + ([(full.data, [M @ v.co for v in full.data.vertices])] if full else [])
+
+
+def turn_all(turned):
+    """Each mesh's vertices moved to turned(their place), where it gives one; how many of the copy's moved."""
+    moved = 0
+    for mesh, at in meshes:
+        for i, v in enumerate(mesh.vertices):
+            q = turned(at[i])
+            if q is not None:
+                v.co = Mi @ q
+                moved += mesh is me
+    return moved
 
 
 def smoothstep(e0, e1, x):
@@ -84,9 +100,7 @@ def lower_slanted(side):
     to = mathutils.Vector((side * math.sin(hang), (y_mid - pivot.y) / 0.6, -math.cos(hang))).normalized()
     axis = was.cross(to).normalized()
     turn = was.angle(to)
-    moved = 0
-    for i, v in enumerate(me.vertices):
-        p = V[i]
+    def turned(p):
         dx, dz = p.x * side - px, p.z - pz
         s = dx * u[0] + dz * u[1]  # how far out along the arm past the pivot
         d = dx * nrm[0] + dz * nrm[1]  # how far in under the arm's line, toward the body
@@ -95,11 +109,10 @@ def lower_slanted(side):
         if d > radius * 1.1:
             w *= 1.0 - smoothstep(radius * 1.1, radius * 1.6, d)
         if w <= 0.0:
-            continue
+            return None
         r = mathutils.Matrix.Rotation(turn * w, 4, axis)
-        q = pivot + (r @ (p - pivot).to_4d()).to_3d()
-        v.co = Mi @ q
-        moved += 1
+        return pivot + (r @ (p - pivot).to_4d()).to_3d()
+    moved = turn_all(turned)
     print("APOSE side", side, "leaning %.1f deg %s" % (math.degrees(abs(math.atan(by))), "back" if by > 0 else "forward"))
     print("APOSE side", side, "slanted arm %.1f deg out from hanging, radius %.3f, shoulder top %.3f, pivot %s: moved %d verts, turned %.1f deg" % (
             math.degrees(out_angle), radius, top, tuple(round(c, 3) for c in pivot), moved, math.degrees(turn)))
@@ -130,28 +143,27 @@ for side in (1, -1):
     pivot = mathutils.Vector((side * (root - 0.03), ya, za))
     turn = math.pi / 2.0 - hang  # from straight out down to `hang` out from hanging
     axis = mathutils.Vector((0, 1, 0))
-    moved = 0
-    for i, v in enumerate(me.vertices):
-        p = V[i]
+    def turned(p):
         s = p.x * side - (root - 0.03)  # how far out past the pivot
         w = smoothstep(-0.05, 0.09, s)
         # The body's side under the armpit stays with the body.
         if s < 0.09 and p.z < za - radius * 1.1:
             w *= smoothstep(za - radius * 1.6, za - radius * 1.1, p.z)
         if w <= 0.0:
-            continue
+            return None
         r = mathutils.Matrix.Rotation(side * turn * w, 4, axis)
-        q = pivot + (r @ (p - pivot).to_4d()).to_3d()
-        v.co = Mi @ q
-        moved += 1
+        return pivot + (r @ (p - pivot).to_4d()).to_3d()
+    moved = turn_all(turned)
     print("APOSE side", side, "arm axis z %.3f y %.3f radius %.3f root x %.3f pivot %s: moved %d verts, turned %.1f deg" % (
             za, ya, radius, root, tuple(round(c, 3) for c in pivot), moved, math.degrees(turn)))
-me.update()
+for mesh, _ in meshes:
+    mesh.update()
 # Back on the ground (the hands now hang below where they were).
 mn_z = min((M @ v.co).z for v in me.vertices)
 if mn_z < 0.0:
-    for v in me.vertices:
-        v.co.z -= mn_z
-    me.update()
+    for mesh, _ in meshes:
+        for v in mesh.vertices:
+            v.co.z -= mn_z
+        mesh.update()
 bpy.ops.wm.save_as_mainfile(filepath=path)
 print("APOSED", path)

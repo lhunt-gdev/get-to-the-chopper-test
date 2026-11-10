@@ -13,6 +13,9 @@ voxel = float(argv[4]) if len(argv) > 4 else 0.008
 bpy.ops.wm.open_mainfile(filepath=os.path.join(work, f"{name}_20k.blend"))
 src = bpy.data.objects[NAME]
 src.name = f"{NAME}_high"
+# The full-detail source, when stage 1 kept one (BAKE_FULL): the texture is baked from it, not the 20k copy.
+full = bpy.data.objects.get(f"{NAME}_full")
+bake_src = full or src
 low = src.copy(); low.data = src.data.copy(); low.name = f"{NAME}_low"
 bpy.context.scene.collection.objects.link(low)
 for o in bpy.context.selected_objects: o.select_set(False)
@@ -215,13 +218,13 @@ scene.render.bake.use_pass_direct = False
 scene.render.bake.use_pass_indirect = False
 scene.render.bake.use_pass_color = True
 # Bake the base colour only: with metallic at 0 the diffuse colour pass is exactly the base colour.
-for m_src in src.data.materials:
+for m_src in bake_src.data.materials:
     for n in m_src.node_tree.nodes:
         if n.type == 'BSDF_PRINCIPLED':
             for l in list(n.inputs['Metallic'].links):
                 m_src.node_tree.links.remove(l)
             n.inputs['Metallic'].default_value = 0.0
-src.select_set(True); low.select_set(True); bpy.context.view_layer.objects.active = low
+bake_src.select_set(True); low.select_set(True); bpy.context.view_layer.objects.active = low
 bpy.ops.object.bake(type='DIFFUSE', pass_filter={'COLOR'})
 # FILL_MISSES=1 (environment): a face folded into a crease (Bishop's, at his hairline) can send all
 # its rays past the source and stay black (exactly black: nothing the source has), a black chip in
@@ -534,6 +537,8 @@ img.filepath_raw = os.path.join(work, f"{name}_{target}_{tex}.png"); img.file_fo
 img.pack()  # kept inside the .blend, so the later stages don't depend on this machine's paths
 print("BAKED", img.filepath_raw)
 bpy.data.objects.remove(src)
+if full:
+    bpy.data.objects.remove(full)
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(work, f"{name}_low_{target}.blend"))
 h = max((low.matrix_world @ v.co).z for v in low.data.vertices)
 scene.render.engine = 'BLENDER_WORKBENCH'

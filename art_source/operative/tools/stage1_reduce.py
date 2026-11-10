@@ -26,6 +26,17 @@ obj.select_set(True)
 mn_z = min((obj.matrix_world @ v.co).z for v in obj.data.vertices)
 obj.location.z -= mn_z
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+# CENTRE=1 (environment): stand him in the middle across (x = 0), by his chest (the middle of his
+# width, arms and all, between 66% and 70% of his height). A source made a little to one side
+# (Silent's, by about 8 mm) doesn't line up with its own mirror image, so a part mirrored in from the
+# other side (MIRROR_BOX, whose boxes are then measured after this) wouldn't meet the rest of him.
+if os.environ.get("CENTRE") == "1":
+    top = max(v.co.z for v in obj.data.vertices)
+    chest = [v.co.x for v in obj.data.vertices if top * 0.66 <= v.co.z <= top * 0.70]
+    dx = (min(chest) + max(chest)) / 2.0
+    obj.data.transform(mathutils.Matrix.Translation((-dx, 0.0, 0.0)))
+    obj.data.update()
+    print("CENTRED moved %.4f m across" % -dx)
 
 # TINT_BOX="x0,x1,y0,y1,z0,z1" (environment) and TINT_FROM="z0,z1": a patch of the source's colour
 # texture the wrong colour (Vesper's side split shows her leg through it, but in a tan, not her
@@ -163,6 +174,17 @@ if os.environ.get("HEIGHT"):
     obj.data.transform(mathutils.Matrix.Scale(k, 4))
     obj.data.update()
     print("SCALED", round(h, 4), "m to", os.environ["HEIGHT"], "m (x%.4f)" % k)
+# BAKE_FULL=1 (environment): keep the source at full detail too, as <NAME>_full beside the 20k copy,
+# and bake the texture from it (stage 3; stage 1b moves its arms with the copy's). Reducing a welded
+# source carries its texture across the seams it was split along (a triangle's corners from different
+# pieces of the texture): the 20k copy wore smears, tan flecks on a black jacket, white streaks;
+# baked from the full source, each texel comes from where it was painted.
+if os.environ.get("BAKE_FULL") == "1":
+    full = obj.copy()
+    full.data = obj.data.copy()
+    full.name = f"{NAME}_full"
+    bpy.context.scene.collection.objects.link(full)
+    print("BAKE_FULL kept", len(full.data.polygons), "faces to bake from")
 mod = obj.modifiers.new("reduce", 'DECIMATE')
 mod.decimate_type = 'COLLAPSE'
 mod.ratio = 20000 / len(obj.data.polygons)

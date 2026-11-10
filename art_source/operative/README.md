@@ -81,6 +81,15 @@ skirt's hem straightened (`HEM`), her thighs parted before the remesh (`LEG_GAP`
 Bishop's also uses `DROP_BITS` and, in stage 4, `HAND_LIKE` (each hand turned at the wrist to hang as
 CROSS's does) and `HAND_CURL` (open fingers curled closed), so SoldierRig's pistol sits in his fist.
 
+`build_skin.sh <name>` builds one of CROSS's eight skins (`art_source/skins/<name>/`, into
+`game/player/skins/`; nothing loads them yet), each skin's settings in a `case` block in the script.
+They brought in more options, each off unless a build sets it: `BAKE_FULL` (stage 1 keeps the source
+at full detail and stage 3 bakes from it, not the 20k copy, whose texture smears across a welded
+source's seams; stage 1b turns its arms with the copy's), `CENTRE` (stage 1 stands a source made to
+one side in the middle), `HAND_CLEAN` (stage 4 cleans the dark creases off a curled bare hand's
+knuckles), and `HAND_NARROW` and `HAND_SHORTEN` (stage 4 draws a spread open hand's fingers together and
+shortens them before the curl, so it closes into a fist). See `art_source/skins/README.md`.
+
 The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
 then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one
 end), scales him to 0.72 m at the shoulder (the line of his back between his legs), finds his paws,
