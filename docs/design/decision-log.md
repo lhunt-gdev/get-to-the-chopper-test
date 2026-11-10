@@ -133,6 +133,7 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 ### PROPOSED — Eight skins for CROSS (user, 2026-11-10; V2 only, not in the game yet)
 - **Why (user):** eight more of the user's high-poly models, "Cross variation skins, so same hight as Cross": **Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future and Judge** Operative.
 - **How:** as Bishop and Vesper (above): each source (`art_source/skins/<name>/<name>.glb`, gitignored) reduced to 3,000 triangles with a 512 texture, at CROSS's height, rigged with the same 19 joints so all his poses fit, his gun in their fists; Rebel, Future and Judge have their arms further out and are lowered to his A-pose first. Built to `game/player/skins/<name>.glb`, one build script for all of them.
+- **Their fists (user):** rounded, the fingers curled round the grip as first made, only a point left sticking out smoothed off. (A compact, squared fist with the thumb tucked in was tried; user: "No I don't like the blockier hands.")
 - **Not yet:** nothing in the game loads them; how skins are unlocked and picked is to be worked out with Bishop's and Vesper's.
 
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)

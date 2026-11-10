@@ -34,17 +34,18 @@ in the fist. Besides those, new with the skins (each off unless a build sets it)
   the middle colour of the texels round it takes that colour).
 - `CENTRE` (stage 1): Silent's source stands 8 mm to one side; he's moved to the middle first, or his
   mirrored hand wouldn't meet his arm.
-- The fists (stage 4, every skin): the sources' hands are open or loosely curled, and curled 80 degrees
-  whole (as Bishop's) they made hooks, a gap in the middle and a fingertip or thumb spiking out. The thumb
-  is tucked in against the palm (`HAND_TUCK`), the fingers shortened past the knuckles (`HAND_SHORTEN`, to
-  a third) and curled 30 degrees (`HAND_CURL`), and any point left sticking out smoothed off
-  (`HAND_SPIKES`): a compact, squared fist like a PS1 character's, the pistol's grip in it. Rebel's,
-  Future's and Judge's hands are made open with the fingers spread flat: theirs are first drawn in
-  together across the hand (`HAND_NARROW`) and shortened further, to a fifth.
+  (Casual's box takes the watch across too, whole: cut under it, half a watch was left on his right wrist.)
+- The fists (stage 4, every skin): the fingers curled 80 degrees round the grip (`HAND_CURL`, as Bishop's),
+  rounded fists, and any point left sticking out of them (a thumb's tip, a fingertip) smoothed off
+  (`HAND_SPIKES`). Rebel's, Future's and Judge's hands are made open with the fingers spread flat: theirs
+  are first drawn in together across the hand (`HAND_NARROW`) and shortened to half past the knuckles
+  (`HAND_SHORTEN`), then curled 100 degrees. (A compact, squared fist with the thumb tucked in,
+  `HAND_TUCK`, was tried and turned down as too blocky; the option is still there, off.)
 - `HAND_CLEAN` (stage 4): bare hands (all but Future's and Judge's gloves): the dark creases between
   the open fingers, which show across the knuckles once the hand is a fist, are cleaned off the texture
-  with the hand's own tone, and flecks and light scratches on the hand despeckled; then the margins round
-  the texture's pieces are made again from the cleaned colours.
+  with the hand's own tone, and flecks and light scratches on the hand despeckled, from 5 cm past the
+  wrist joint on so a watch or a cuff is left whole; then the margins round the texture's pieces are made
+  again from the cleaned colours.
 - Shadow's coat (stages 3 and 4): his long coat is cut up the back along its own vent, from below the hem
   to 4 cm under the crotch (`CUT_LEGS`, as Vesper's thighs), so each side of it goes with its own leg and
   in a stride the back panel no longer stretches across between his legs; and his crotch, hidden by the

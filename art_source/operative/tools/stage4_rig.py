@@ -541,7 +541,8 @@ if os.environ.get("HAND_LIKE"):
 # (its faces wholly the wrist bone's, more than 5 cm past the wrist joint, so a watch or a cuff is left
 # alone) darker than k times the hand's middle brightness take the colour of the nearest one that
 # isn't: the hand's own tone, its light and shade kept. Then any texel there unlike the texels round it
-# (a light scratch, a fleck) takes their middle colour (see despeckle below).
+# (a light scratch, a fleck) takes their middle colour (see despeckle below), from the same 5 cm on,
+# so a watch or a cuff is left whole.
 # WRIST_CLEAN="from,to" (environment, m along the arm from the right wrist joint, + toward the hand):
 # the right wrist's band despeckled too. A right hand mirrored in from the left (MIRROR_BOX) meets the
 # arm there, and the bake left marks along the join (a dark speck, the left cuff's cufflink mirrored).
@@ -631,7 +632,7 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN"):
                     i, j = (q[1] * W + q[0]) * 4, (f[1] * W + f[0]) * 4
                     cpx[i:i + 3] = cpx[j:j + 3]
                     cleaned += 1
-            specks += despeckle(hand_texels(side, -0.02, 1.0, whole=False), far=0.06, rad=3)
+            specks += despeckle(hand_texels(side, 0.05, 1.0, whole=False), far=0.06, rad=3)
     if os.environ.get("WRIST_CLEAN"):
         w_from, w_to = [float(x) for x in os.environ["WRIST_CLEAN"].split(",")]
         specks += despeckle(hand_texels(1, w_from, w_to, whole=False))
