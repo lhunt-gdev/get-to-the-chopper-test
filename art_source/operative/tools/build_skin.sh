@@ -27,10 +27,9 @@ export REMARGIN=4
 # The texture baked from the source at full detail, not the 20k working copy: reduced, a welded source
 # smears its texture across its seams (tan flecks on a black jacket; see stage1_reduce.py).
 export BAKE_FULL=1
-# Each hand turned at the wrist to hang as CROSS's does and its fingers curled closed, so SoldierRig's
-# pistol (CROSS's, mounted with his numbers) sits in the fist (see stage4_rig.py; as Bishop's).
+# Each hand turned at the wrist to hang as CROSS's does, so SoldierRig's pistol (CROSS's, mounted with his
+# numbers) sits in the fist (see stage4_rig.py; as Bishop's), and closed into a fist (FIST, below).
 export HAND_LIKE="-0.0546,-0.9743,-0.2186;-0.9328,-0.0283,0.3592"
-export HAND_CURL=80
 POSE=""
 
 # The skin's own needs.
@@ -40,31 +39,51 @@ POSE=""
 # across (MIRROR_BOX, see stage1_reduce.py), which then closes round the game's pistol like the others'.
 # The sources are within millimetres of mirror images there. The box stops above the hand but just
 # under the watch on his left wrist (Casual, Tropical, Silent), so it isn't mirrored onto his right too.
+# Where the mirrored hand meets his arm the bake left marks (a faint line, a dark speck, the left cuff's
+# cufflink on the right): the right wrist, from 8 cm up the arm to 6 cm past the joint, is despeckled
+# (WRIST_CLEAN, see stage4_rig.py).
 gun_box() {  # z0 (below the silencer's end), z1 (up the forearm, above the hand)
   export MIRROR_BOX="-0.45,-0.265,-1.0,$1,$2"
+  export WRIST_CLEAN="-0.08,0.06"
+  fist
 }
 # BARE: bare hands: the dark creases between the open fingers, curled into a fist, are cleaned off the
-# knuckles (HAND_CLEAN, see stage4_rig.py; texels darker than 85% of the hand's middle brightness).
+# knuckles, and light scratches and flecks on the hand despeckled (HAND_CLEAN, see stage4_rig.py;
+# texels darker than 85% of the hand's middle brightness).
 bare() {
   export HAND_CLEAN=0.85
 }
-# OPEN: made with open hands, fingers spread out flat (Rebel, Future, Judge). Curled as they are, they
-# make hooks with spiked fingertips, not fists: the fingers are drawn in together across the hand and
-# shortened to half past the knuckles first, then curled 100 degrees, a compact fist round the grip
-# (HAND_NARROW, HAND_SHORTEN, HAND_CURL, see stage4_rig.py).
+# FIST: every skin's hands are made open or loosely curled; curled 80 degrees whole (as Bishop's) they
+# made hooks, a gap in the middle and a fingertip or thumb spiking out of it. So, in stage 4: the thumb
+# tucked in against the palm (HAND_TUCK), the fingers shortened past the knuckles (HAND_SHORTEN, to a
+# third) and curled 30 degrees, a compact, squared fist like a PS1 character's round the grip, and any
+# point still sticking out of it smoothed off (HAND_SPIKES: a vertex whose faces' corners add up to
+# under 300 degrees).
+fist() {
+  export HAND_TUCK=1
+  export HAND_SHORTEN=0.35
+  export HAND_CURL=30
+  export HAND_SPIKES=300
+}
+# OPEN: made with open hands, fingers spread out flat (Rebel, Future, Judge): the fingers drawn in
+# together across the hand first (HAND_NARROW) and shortened further, to a fifth.
 open_hands() {
-  export HAND_NARROW="0.035,0.4"
-  export HAND_SHORTEN=0.5
-  export HAND_CURL=100
+  fist
+  export HAND_NARROW="0.03,0.15"
+  export HAND_SHORTEN=0.2
 }
 case "$NAME" in
   shadow)    # long leather coat, sunglasses
     gun_box 0.56 0.97; bare
     # His coat hides his crotch (the remesh joins it to his legs down to 0.69 m): put at CROSS's share
     # of his height, as Vesper's under her skirt (see stage4_rig.py).
-    export CROTCH=0.464 ;;
+    export CROTCH=0.464
+    # His coat cut up the back, along its own vent, from below the hem to 4 cm under the crotch
+    # (CUT_LEGS, stage 3): each side of it goes with its own leg, and in a stride the back panel no
+    # longer stretches across between his legs.
+    export CUT_LEGS="0.2,0.84,0.012" ;;
   casual)    # leather flying jacket, jeans, sunglasses
-    gun_box 0.59 0.96; bare ;;
+    gun_box 0.59 0.945; bare ;;
   tropical)  # flowered shirt, jeans
     gun_box 0.71 0.975; bare ;;
   midnight)  # dinner suit, bow tie

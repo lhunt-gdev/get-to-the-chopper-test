@@ -428,6 +428,36 @@ if os.environ.get("HAND_LIKE"):
                 drawn += 1
             print("WEIGHTS hand", s, "drawn in across: %d vertices" % drawn)
         me.update()
+    # HAND_TUCK=1 (environment): an open hand's thumb, held out over the palm, tucked in against it
+    # before the curl (Rebel's and Judge's stuck out under the fist as a point). Between the wrist and
+    # the knuckles, whatever stands further out on the palm side than most of the palm (its 60th
+    # percentile) comes in to a fifth of the way it stood out.
+    if os.environ.get("HAND_TUCK") == "1":
+        for side, s in ((1, "R"), (-1, "L")):
+            wb = gi["Wrist" + s]
+            mirror = mathutils.Vector((side, 1, 1))
+            run_b = to_blender(want_run * mirror).normalized()
+            palm_b = to_blender(want_palm * mirror)
+            palm_b = (palm_b - run_b * palm_b.dot(run_b)).normalized()
+            pivot = pos["Wrist" + s]
+            hand = [M @ v.co - pivot for v in me.vertices if any(g.group == wb and g.weight >= 0.6 for g in v.groups)]
+            tip = max(p.dot(run_b) for p in hand)
+            palm = sorted(p.dot(palm_b) for p in hand if 0.02 < p.dot(run_b) < tip * 0.55)
+            if len(palm) < 5:
+                continue
+            cap = palm[int(len(palm) * 0.6)]
+            tucked = 0
+            for v in me.vertices:
+                kw = sum(g.weight for g in v.groups if g.group == wb)
+                p = M @ v.co - pivot
+                t = p.dot(palm_b)
+                if kw <= 0.0 or t <= cap or p.dot(run_b) <= 0.0:
+                    continue
+                ease = min(1.0, p.dot(run_b) / 0.03)
+                v.co = M.inverted() @ (pivot + p - palm_b * (t - cap) * 0.8 * ease * min(1.0, kw))
+                tucked += 1
+            print("WEIGHTS hand", s, "thumb tucked in: %d vertices" % tucked)
+        me.update()
     # HAND_CURL (environment, degrees): his fingers curled in toward the palm, this far at the tips, from
     # the knuckles (about 55% of the way from the wrist to the fingertips), a smooth bend like a finger's
     # joints, so an open hand closes round the pistol's grip as CROSS's fists do.
@@ -471,67 +501,183 @@ if os.environ.get("HAND_LIKE"):
                 bent += 1
             print("WEIGHTS hand", s, "fingers curled %.0f deg (%d vertices)" % (math.degrees(curl), bent))
         me.update()
+    # HAND_SPIKES=deg (environment): points left sticking out of a fist made from an open hand (a
+    # thumb's tip, a thin flap where the remesh closed round it) smoothed off. A vertex of the hand,
+    # from 2 cm short of the wrist joint on, whose faces' corners there add up to less than `deg` (a flat surface's add up
+    # to 360; a spike's tip, far less) moves to the middle of the vertices joined to it, a few times
+    # over, until none is left.
+    if os.environ.get("HAND_SPIKES"):
+        limit = math.radians(float(os.environ["HAND_SPIKES"]))
+        import bmesh
+        for side, s in ((1, "R"), (-1, "L")):
+            wb = gi["Wrist" + s]
+            pivot = M.inverted() @ pos["Wrist" + s]
+            run_b = (pos["Wrist" + s] - pos["Elbow" + s]).normalized()
+            hand = {v.index for v in me.vertices if sum(g.weight for g in v.groups if g.group == wb) >= 0.5
+                    and (M @ v.co - pos["Wrist" + s]).dot(run_b) > -0.02}
+            moved = set()
+            for _ in range(6):
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+                spikes = []
+                for i in hand:
+                    v = bm.verts[i]
+                    if len(v.link_edges) < 3:
+                        continue
+                    total = sum(l.calc_angle() for l in v.link_loops)
+                    if total < limit:
+                        spikes.append((i, sum((e.other_vert(v).co for e in v.link_edges), mathutils.Vector()) / len(v.link_edges)))
+                bm.free()
+                if not spikes:
+                    break
+                for i, mid in spikes:
+                    me.vertices[i].co = mid
+                    moved.add(i)
+            print("WEIGHTS hand", s, "spikes smoothed off: %d vertices" % len(moved))
+        me.update()
 # HAND_CLEAN=k (environment): the dark creases baked between an open hand's fingers show as dark
 # marks across the knuckles once HAND_CURL closes it into a fist. On the texture, each hand's texels
 # (its faces wholly the wrist bone's, more than 5 cm past the wrist joint, so a watch or a cuff is left
 # alone) darker than k times the hand's middle brightness take the colour of the nearest one that
-# isn't: the hand's own tone, its light and shade kept.
-if os.environ.get("HAND_CLEAN"):
-    k_dark = float(os.environ["HAND_CLEAN"])
+# isn't: the hand's own tone, its light and shade kept. Then any texel there unlike the texels round it
+# (a light scratch, a fleck) takes their middle colour (see despeckle below).
+# WRIST_CLEAN="from,to" (environment, m along the arm from the right wrist joint, + toward the hand):
+# the right wrist's band despeckled too. A right hand mirrored in from the left (MIRROR_BOX) meets the
+# arm there, and the bake left marks along the join (a dark speck, the left cuff's cufflink mirrored).
+def hand_texels(side, s_from, s_to, whole=True):
+    """The texels of the faces on one arm between s_from and s_to along it from the wrist joint (m;
+    whole: faces wholly the wrist bone's)."""
+    s = "R" if side > 0 else "L"
+    wb = gi["Wrist" + s]
+    wrist = pos["Wrist" + s]
+    run = (pos["Wrist" + s] - pos["Elbow" + s]).normalized()
+    arm = {gi[n + s] for n in ("Elbow", "Wrist")}
+    def on(v):
+        a = (M @ v.co - wrist).dot(run)
+        if not (s_from < a <= s_to):
+            return False
+        if whole:
+            return sum(g.weight for g in v.groups if g.group == wb) >= 0.5
+        return any(g.group in arm and g.weight > 0.3 for g in v.groups)
+    on_hand = {v.index for v in me.vertices if on(v)}
+    out = set()
+    for t in me.loop_triangles:
+        if not all(i in on_hand for i in t.vertices):
+            continue
+        p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+        area = (p[1] - p[0]).cross(p[2] - p[0])
+        if abs(area) < 1e-9:
+            continue
+        for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+            for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                c = mathutils.Vector((x + 0.5, y + 0.5))
+                w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                if min(w0, w1, 1.0 - w0 - w1) >= -0.15:
+                    out.add((x, y))
+    return out
+def despeckle(texels, far=0.14, rad=2):
+    """Each texel whose colour is further than `far` from the middle colour of the texels round it
+    (within rad, of the same set) takes that middle colour: specks and thin marks go, edges between
+    two colours stay (a texel there is near one side's)."""
+    fix = {}
+    for (x, y) in texels:
+        near = [(x + dx, y + dy) for dx in range(-rad, rad + 1) for dy in range(-rad, rad + 1) if (x + dx, y + dy) in texels]
+        if len(near) < 9:
+            continue
+        cols = [cpx[(q[1] * W + q[0]) * 4:(q[1] * W + q[0]) * 4 + 3] for q in near]
+        mid = [sorted(c[k] for c in cols)[len(cols) // 2] for k in range(3)]
+        i = (y * W + x) * 4
+        if sum((cpx[i + k] - mid[k]) ** 2 for k in range(3)) ** 0.5 > far:
+            fix[(x, y)] = mid
+    for (x, y), c in fix.items():
+        i = (y * W + x) * 4
+        cpx[i:i + 3] = c
+    return len(fix)
+if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN"):
     cimg = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
     W, H = cimg.size
     cpx = list(cimg.pixels)
     uvd = me.uv_layers.active.data
     me.calc_loop_triangles()
     cleaned = 0
-    for side, s in ((1, "R"), (-1, "L")):
-        wb = gi["Wrist" + s]
-        wrist = pos["Wrist" + s]
-        run = (pos["Wrist" + s] - pos["Elbow" + s]).normalized()
-        on_hand = {v.index for v in me.vertices
-                   if sum(g.weight for g in v.groups if g.group == wb) >= 0.5 and (M @ v.co - wrist).dot(run) > 0.05}
-        hand = set()
-        for t in me.loop_triangles:
-            if not all(i in on_hand for i in t.vertices):
+    specks = 0
+    if os.environ.get("HAND_CLEAN"):
+        k_dark = float(os.environ["HAND_CLEAN"])
+        for side in (1, -1):
+            hand = hand_texels(side, 0.05, 1.0)
+            def luma(q):
+                i = (q[1] * W + q[0]) * 4
+                return 0.3 * cpx[i] + 0.59 * cpx[i + 1] + 0.11 * cpx[i + 2]
+            if not hand:
                 continue
-            p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
-            area = (p[1] - p[0]).cross(p[2] - p[0])
-            if abs(area) < 1e-9:
-                continue
-            for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
-                for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
-                    c = mathutils.Vector((x + 0.5, y + 0.5))
-                    w0 = (p[2] - p[1]).cross(c - p[1]) / area
-                    w1 = (p[0] - p[2]).cross(c - p[2]) / area
-                    if min(w0, w1, 1.0 - w0 - w1) >= -0.15:
-                        hand.add((x, y))
-        def luma(q):
-            i = (q[1] * W + q[0]) * 4
-            return 0.3 * cpx[i] + 0.59 * cpx[i + 1] + 0.11 * cpx[i + 2]
-        if not hand:
+            mid_l = sorted(luma(q) for q in hand)[len(hand) // 2]
+            dark = {q for q in hand if luma(q) < k_dark * mid_l}
+            src_of = {q: q for q in hand if q not in dark}
+            front = list(src_of)
+            while front:
+                nxt = []
+                for (x, y) in front:
+                    for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        q = (x + d[0], y + d[1])
+                        if q in dark and q not in src_of:
+                            src_of[q] = src_of[(x, y)]
+                            nxt.append(q)
+                front = nxt
+            for q in dark:
+                f = src_of.get(q)
+                if f:
+                    i, j = (q[1] * W + q[0]) * 4, (f[1] * W + f[0]) * 4
+                    cpx[i:i + 3] = cpx[j:j + 3]
+                    cleaned += 1
+            specks += despeckle(hand_texels(side, -0.02, 1.0, whole=False), far=0.06, rad=3)
+    if os.environ.get("WRIST_CLEAN"):
+        w_from, w_to = [float(x) for x in os.environ["WRIST_CLEAN"].split(",")]
+        specks += despeckle(hand_texels(1, w_from, w_to, whole=False))
+    # The margins round the texture's pieces made again from the cleaned colours, 4 texels out (as
+    # REMARGIN in stage 3): they still held the colours from before, and a triangle's edge reads a texel
+    # or two of them (a dotted line along Midnight's cuff where it meets his hand).
+    covered = bytearray(W * H)
+    for t in me.loop_triangles:
+        p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+        area = (p[1] - p[0]).cross(p[2] - p[0])
+        if abs(area) < 1e-9:
             continue
-        mid_l = sorted(luma(q) for q in hand)[len(hand) // 2]
-        dark = {q for q in hand if luma(q) < k_dark * mid_l}
-        src_of = {q: q for q in hand if q not in dark}
-        front = list(src_of)
-        while front:
-            nxt = []
-            for (x, y) in front:
-                for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    q = (x + d[0], y + d[1])
-                    if q in dark and q not in src_of:
-                        src_of[q] = src_of[(x, y)]
-                        nxt.append(q)
-            front = nxt
-        for q in dark:
-            f = src_of.get(q)
-            if f:
-                i, j = (q[1] * W + q[0]) * 4, (f[1] * W + f[0]) * 4
-                cpx[i:i + 3] = cpx[j:j + 3]
-                cleaned += 1
+        for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+            for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                c = mathutils.Vector((x + 0.5, y + 0.5))
+                w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                if min(w0, w1, 1.0 - w0 - w1) >= -0.01:
+                    covered[y * W + x] = 1
+    front = [i for i in range(W * H) if covered[i]]
+    for _ in range(4):
+        ring = []
+        for i in front:
+            x, y = i % W, i // W
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                j = (y + dy) * W + x + dx
+                if 0 <= x + dx < W and 0 <= y + dy < H and not covered[j]:
+                    covered[j] = 2
+                    ring.append(j)
+        for j in ring:
+            x, y = j % W, j // W
+            acc = [0.0, 0.0, 0.0]
+            n = 0
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                k = (y + dy) * W + x + dx
+                if 0 <= x + dx < W and 0 <= y + dy < H and covered[k] == 1:
+                    acc = [acc[c] + cpx[k * 4 + c] for c in range(3)]
+                    n += 1
+            if n:
+                cpx[j * 4:j * 4 + 3] = [a / n for a in acc]
+        for j in ring:
+            covered[j] = 1
+        front = ring
     cimg.pixels[:] = cpx
     cimg.pack()  # (the export takes the packed copy)
-    print("WEIGHTS hands cleaned:", cleaned, "dark texels")
+    print("WEIGHTS hands cleaned:", cleaned, "dark texels,", specks, "specks")
 groups = {g.index: g.name for g in low.vertex_groups}
 print("WEIGHTS groups", len(groups), "unweighted by bone heat", unweighted, "of", len(me.vertices),
       "| given to the body (only followed an arm)", fallback,

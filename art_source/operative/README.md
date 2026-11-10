@@ -87,8 +87,10 @@ They brought in more options, each off unless a build sets it: `BAKE_FULL` (stag
 at full detail and stage 3 bakes from it, not the 20k copy, whose texture smears across a welded
 source's seams; stage 1b turns its arms with the copy's), `CENTRE` (stage 1 stands a source made to
 one side in the middle), `HAND_CLEAN` (stage 4 cleans the dark creases off a curled bare hand's
-knuckles), and `HAND_NARROW` and `HAND_SHORTEN` (stage 4 draws a spread open hand's fingers together and
-shortens them before the curl, so it closes into a fist). See `art_source/skins/README.md`.
+knuckles and despeckles it; `WRIST_CLEAN` the same for a wrist where a mirrored hand meets the arm),
+and `HAND_NARROW`, `HAND_TUCK`, `HAND_SHORTEN` and `HAND_SPIKES` (stage 4 draws an open hand's fingers
+together, tucks its thumb in, shortens the fingers before the curl and smooths off any point left, so it
+closes into a compact fist). See `art_source/skins/README.md`.
 
 The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
 then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one

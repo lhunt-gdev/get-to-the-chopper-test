@@ -18,8 +18,8 @@ the settings Bishop's and Vesper's builds brought in are in `art_source/bishop/R
 `art_source/vesper/README.md`.
 
 What every skin's build does (as Bishop's): `WELD`, `VOXEL=0.012`, `SPLIT_OVERLAPS`, `FILL_MISSES`,
-`DROP_BITS`, `GROW_GAPS`, `REMARGIN`, and `HAND_LIKE` with `HAND_CURL` so CROSS's pistol sits in each fist.
-Besides those, new with the skins (each off unless a build sets it):
+`DROP_BITS`, `GROW_GAPS`, `REMARGIN`, and `HAND_LIKE` so each hand hangs as CROSS's and his pistol sits
+in the fist. Besides those, new with the skins (each off unless a build sets it):
 
 - `BAKE_FULL` (stages 1, 1b, 3): the texture is baked from the source at full detail, not from the
   20k working copy. Reduced, a welded source carries its texture across the seams it was split along,
@@ -29,16 +29,26 @@ Besides those, new with the skins (each off unless a build sets it):
   pistol in the right hand, part of the same mesh. The right hand and the pistol are cut away in a box
   and the left hand mirrored in (`MIRROR_BOX`, stage 1), which then closes round the game's own pistol.
   The box stops just under the watch on the left wrist (Casual, Tropical, Silent), so he still wears one.
+  Where the mirrored hand meets the arm the bake left marks (a faint line, a dark speck, the left cuff's
+  cufflink mirrored onto the right): the right wrist is despeckled (`WRIST_CLEAN`, stage 4: a texel unlike
+  the middle colour of the texels round it takes that colour).
 - `CENTRE` (stage 1): Silent's source stands 8 mm to one side; he's moved to the middle first, or his
   mirrored hand wouldn't meet his arm.
+- The fists (stage 4, every skin): the sources' hands are open or loosely curled, and curled 80 degrees
+  whole (as Bishop's) they made hooks, a gap in the middle and a fingertip or thumb spiking out. The thumb
+  is tucked in against the palm (`HAND_TUCK`), the fingers shortened past the knuckles (`HAND_SHORTEN`, to
+  a third) and curled 30 degrees (`HAND_CURL`), and any point left sticking out smoothed off
+  (`HAND_SPIKES`): a compact, squared fist like a PS1 character's, the pistol's grip in it. Rebel's,
+  Future's and Judge's hands are made open with the fingers spread flat: theirs are first drawn in
+  together across the hand (`HAND_NARROW`) and shortened further, to a fifth.
 - `HAND_CLEAN` (stage 4): bare hands (all but Future's and Judge's gloves): the dark creases between
-  the open fingers, which show across the knuckles once the hand is curled into a fist, are cleaned off
-  the texture with the hand's own tone.
-- `HAND_NARROW`, `HAND_SHORTEN` (stage 4; Rebel, Future, Judge): their hands are made open with the
-  fingers spread flat, and curled as they were they made hooks with spiked fingertips. The fingers are
-  drawn in together across the hand and shortened to half past the knuckles, then curled 100 degrees:
-  a compact fist round the grip.
-- `CROTCH` (stage 4, Shadow): his long coat hides his crotch, so it's put at CROSS's share of his height.
+  the open fingers, which show across the knuckles once the hand is a fist, are cleaned off the texture
+  with the hand's own tone, and flecks and light scratches on the hand despeckled; then the margins round
+  the texture's pieces are made again from the cleaned colours.
+- Shadow's coat (stages 3 and 4): his long coat is cut up the back along its own vent, from below the hem
+  to 4 cm under the crotch (`CUT_LEGS`, as Vesper's thighs), so each side of it goes with its own leg and
+  in a stride the back panel no longer stretches across between his legs; and his crotch, hidden by the
+  coat, is put at CROSS's share of his height (`CROTCH`).
 - Rebel, Future and Judge are made with their arms further out (35 to 40 degrees from hanging); stage 1b
   (`slanted`) lowers them to CROSS's A-pose, level front to back.
 
