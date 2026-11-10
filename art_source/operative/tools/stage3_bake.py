@@ -20,6 +20,35 @@ bpy.context.view_layer.objects.active = low; low.select_set(True)
 rm = low.modifiers.new("remesh", 'REMESH'); rm.mode = 'VOXEL'; rm.voxel_size = voxel; rm.adaptivity = 0.0
 bpy.ops.object.modifier_apply(modifier=rm.name)
 print("REMESHED", len(low.data.polygons))
+# DROP_BITS=1 (environment): the remesh can leave a few crumbs floating loose beside the skin (bits
+# of the source thinner than a voxel); anything under 1% of the biggest piece is dropped, so it
+# isn't reduced, baked and rigged along with him (Vesper's: 14 crumbs of 8-12 vertices).
+if os.environ.get("DROP_BITS") == "1":
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    bm.verts.ensure_lookup_table()
+    seen = set()
+    parts = []
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        part = [v]
+        seen.add(v.index)
+        k = 0
+        while k < len(part):
+            for e in part[k].link_edges:
+                w = e.other_vert(part[k])
+                if w.index not in seen:
+                    seen.add(w.index)
+                    part.append(w)
+            k += 1
+        parts.append(part)
+    biggest = max(len(p) for p in parts)
+    crumbs = [v for p in parts if len(p) < biggest * 0.01 for v in p]
+    bmesh.ops.delete(bm, geom=crumbs, context='VERTS')
+    bm.to_mesh(low.data)
+    bm.free()
+    print("DROPPED", len(parts) - sum(1 for p in parts if len(p) >= biggest * 0.01), "loose bits,", len(crumbs), "vertices")
 dm = low.modifiers.new("reduce", 'DECIMATE'); dm.decimate_type = 'COLLAPSE'; dm.use_collapse_triangulate = True
 low.data.calc_loop_triangles()
 dm.ratio = target / max(1, len(low.data.loop_triangles))  # target is in triangles
@@ -160,7 +189,111 @@ if os.environ.get("FILL_MISSES") == "1":
         filled += 1
     img.pixels[:] = pix
     print("FILLED", filled, "faces the bake missed")
+# HEM=z (environment, m): a skirt's hem, straight at height z. Where the skirt is tight on the
+# thighs the remesh makes them one surface, and the bake there lands ragged: skirt-coloured spikes
+# and drips down the thighs, leg-coloured teeth up into the skirt. On the baked texture, below the hem
+# (down 0.3 m) every skirt-coloured texel (cooler: red under 1.4 x blue, or under 70% of her legs'
+# own brightness) takes the colour of the nearest leg-coloured one below the hem, and in a 1.5 cm band
+# above it every leg-coloured one the nearest skirt-coloured one above it, so the hem reads straight,
+# with each side's own texture. HEM_KEEP="x0,x1,y0,y1" (m) leaves the band above alone there (her
+# side split, which shows her leg).
+if os.environ.get("HEM"):
+    hem = float(os.environ["HEM"])
+    keep = [float(x) for x in os.environ["HEM_KEEP"].split(",")] if os.environ.get("HEM_KEEP") else None
+    W, H = img.size
+    pix = list(img.pixels)
+    uvd = low.data.uv_layers.active.data
+    low.data.calc_loop_triangles()
+    side = {}  # texel -> True below the hem, False in the band above it
+    for t in low.data.loop_triangles:
+        cs = [low.data.vertices[i].co for i in t.vertices]
+        if max(c.z for c in cs) < hem - 0.3 or min(c.z for c in cs) > hem + 0.015:
+            continue
+        p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+        area = (p[1] - p[0]).cross(p[2] - p[0])
+        if abs(area) < 1e-9:
+            continue
+        for y in range(int(min(q.y for q in p)), int(max(q.y for q in p)) + 1):
+            for x in range(int(min(q.x for q in p)), int(max(q.x for q in p)) + 1):
+                c = mathutils.Vector((x + 0.5, y + 0.5))
+                w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                w2 = 1.0 - w0 - w1
+                if min(w0, w1, w2) < -0.02 or not (0 <= x < W and 0 <= y < H):
+                    continue
+                z = cs[0].z * w0 + cs[1].z * w1 + cs[2].z * w2
+                if hem - 0.3 <= z < hem:
+                    side[(x, y)] = True
+                elif hem <= z <= hem + 0.015:
+                    px_ = cs[0].x * w0 + cs[1].x * w1 + cs[2].x * w2
+                    py_ = cs[0].y * w0 + cs[1].y * w1 + cs[2].y * w2
+                    if not (keep and keep[0] <= px_ <= keep[1] and keep[2] <= py_ <= keep[3]):
+                        side[(x, y)] = False
+    def luma(q):
+        i = (q[1] * W + q[0]) * 4
+        return 0.3 * pix[i] + 0.59 * pix[i + 1] + 0.11 * pix[i + 2]
+    # (the legs' own brightness: the middle of the warm texels below the hem)
+    legs = sorted(luma(q) for q, below in side.items() if below and pix[(q[1] * W + q[0]) * 4] >= 1.4 * pix[(q[1] * W + q[0]) * 4 + 2])
+    dark = 0.7 * legs[len(legs) // 2] if legs else 0.0
+    def cool(q):  # (skirt-coloured: cooler, or much darker than her legs)
+        i = (q[1] * W + q[0]) * 4
+        return pix[i] < 1.4 * pix[i + 2] or luma(q) < dark
+    wrong = {q for q, below in side.items() if cool(q) == below}
+    src_of = {q: q for q in side if q not in wrong}
+    front = list(src_of)
+    while front:
+        nxt = []
+        for (x, y) in front:
+            for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                q = (x + d[0], y + d[1])
+                if q in wrong and q not in src_of and side[q] == side[(x, y)]:
+                    src_of[q] = src_of[(x, y)]
+                    nxt.append(q)
+        front = nxt
+    # (a texel with no right-coloured one joined to it, on a piece of the texture all on the wrong
+    # side, takes the average of that side's right-coloured texels)
+    mean = {}
+    for below in (True, False):
+        good = [(q[1] * W + q[0]) * 4 for q, b in side.items() if b == below and q not in wrong]
+        mean[below] = [sum(pix[i + k] for i in good) / max(1, len(good)) for k in range(3)]
+    fixed = 0
+    for q in wrong:
+        s = src_of.get(q)
+        i = (q[1] * W + q[0]) * 4
+        if s:
+            j = (s[1] * W + s[0]) * 4
+            pix[i:i + 3] = pix[j:j + 3]
+        else:
+            pix[i:i + 3] = mean[side[q]]
+        fixed += 1
+    img.pixels[:] = pix
+    print("HEM", fixed, "of", len(wrong), "texels on the wrong side of the hem recoloured")
 img.scale(tex, tex)  # baked at twice the size, scaled down: cleaner edges
+# GROW_GAPS=1 (environment): the gaps between islands, still unbaked black, grown over from the
+# islands' edges 4 texels further than the bake's margin: a triangle's corner at an island's edge can
+# sample them (thin black marks on Vesper's thighs).
+if os.environ.get("GROW_GAPS") == "1":
+    W, H = img.size
+    pix = list(img.pixels)
+    for _ in range(4):
+        grown = list(pix)
+        for y in range(H):
+            for x in range(W):
+                i = (y * W + x) * 4
+                if pix[i] != 0.0 or pix[i + 1] != 0.0 or pix[i + 2] != 0.0:
+                    continue
+                acc = [0.0, 0.0, 0.0]
+                n = 0
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    if 0 <= x + dx < W and 0 <= y + dy < H:
+                        j = ((y + dy) * W + x + dx) * 4
+                        if pix[j] != 0.0 or pix[j + 1] != 0.0 or pix[j + 2] != 0.0:
+                            acc = [acc[k] + pix[j + k] for k in range(3)]
+                            n += 1
+                if n:
+                    grown[i:i + 3] = [a / n for a in acc]
+        pix = grown
+    img.pixels[:] = pix
 img.filepath_raw = os.path.join(work, f"{name}_{target}_{tex}.png"); img.file_format = 'PNG'; img.save()
 img.pack()  # kept inside the .blend, so the later stages don't depend on this machine's paths
 print("BAKED", img.filepath_raw)

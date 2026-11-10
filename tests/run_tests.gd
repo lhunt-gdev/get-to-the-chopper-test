@@ -75,7 +75,7 @@ func _run() -> void:
 	_test_end_talk()
 	_test_cross_ready()
 	_test_cross_eased()
-	_test_bishop_model()
+	_test_operative_models()
 	_test_intro_camera()
 	_test_start_room()
 	_test_cutout()
@@ -6901,43 +6901,52 @@ func _test_language_setting() -> void:
 			and p.contains("Ö") and not p.contains("O"), "language: the pseudo-language lengthens and accents the words, never a {place} or a symbol (%s)" % p)
 
 
-## Bishop (V2; the decision log's "Bishop, a second operative"): his model loads with CROSS's 19
-## joints, each on the same parent (so every SoldierRig pose fits him, as a skin needs), within the
-## 3,000-triangle budget, a 512 texture, CROSS's height (within 2 cm), and a SoldierRig builds and
-## poses him. Nothing in the game loads him yet.
-func _test_bishop_model() -> void:
-	var stats := func(path: String) -> Dictionary:
-		var model: Node3D = (load(path) as PackedScene).instantiate()
-		var out := {"tris": 0, "top": -INF, "tex": Vector2.ZERO, "joints": false}
-		var sks := model.find_children("*", "Skeleton3D", true, false)
-		if sks.size() == 1:
-			var sk := sks[0] as Skeleton3D
-			var ok := sk.get_bone_count() == SoldierRig.TREE.size()
-			for bone: String in SoldierRig.TREE:
-				var b := sk.find_bone(bone)
-				var parent: String = SoldierRig.TREE[bone]
-				ok = ok and b >= 0 and (sk.get_bone_parent(b) == -1 if parent == "" else sk.get_bone_parent(b) == sk.find_bone(parent))
-			out["joints"] = ok
-		for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
-			for s in mi.mesh.get_surface_count():
-				var arr := mi.mesh.surface_get_arrays(s)
-				var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
-				out["tris"] += (idx.size() if idx.size() > 0 else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
-			out["top"] = maxf(out["top"], mi.get_aabb().end.y)
-			var mat := mi.get_active_material(0) as BaseMaterial3D
-			if mat and mat.albedo_texture:
-				out["tex"] = mat.albedo_texture.get_size()
-		model.free()
-		return out
-	var bishop: Dictionary = stats.call("res://game/player/bishop.glb")
-	var cross: Dictionary = stats.call("res://game/player/cross.glb")
-	_check(bishop["joints"], "Bishop: CROSS's 19 joints, each on the same parent")
-	_check(bishop["tris"] > 2500 and bishop["tris"] <= 3000, "Bishop: within the 3,000-triangle budget (%d)" % bishop["tris"])
-	_check(bishop["tex"] == Vector2(512, 512), "Bishop: a 512 texture (%s)" % bishop["tex"])
-	_check(absf(bishop["top"] - cross["top"]) < 0.02, "Bishop: CROSS's height (%.3f m, CROSS %.3f m)" % [bishop["top"], cross["top"]])
-	var r := SoldierRig.new(load("res://game/player/bishop.glb") as PackedScene, "", "BISHOP")
-	root.add_child(r)
-	for i in 30:
-		r.animate(1.0 / 60.0, {"run": 1.0, "aim": true})
-	_check(r.hips != null and r.wrists.size() == 2 and r._meshes.size() > 0, "Bishop: a SoldierRig builds and poses him")
-	r.free()
+## An operative's model (game/player): whether it has CROSS's 19 joints, each on the same parent; its
+## triangles; the top of its head (m, at rest); its texture's size.
+func _operative_model(path: String) -> Dictionary:
+	var model: Node3D = (load(path) as PackedScene).instantiate()
+	var out := {"tris": 0, "top": -INF, "tex": Vector2.ZERO, "joints": false}
+	var sks := model.find_children("*", "Skeleton3D", true, false)
+	if sks.size() == 1:
+		var sk := sks[0] as Skeleton3D
+		var ok := sk.get_bone_count() == SoldierRig.TREE.size()
+		for bone: String in SoldierRig.TREE:
+			var b := sk.find_bone(bone)
+			var parent: String = SoldierRig.TREE[bone]
+			ok = ok and b >= 0 and (sk.get_bone_parent(b) == -1 if parent == "" else sk.get_bone_parent(b) == sk.find_bone(parent))
+		out["joints"] = ok
+	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		for s in mi.mesh.get_surface_count():
+			var arr := mi.mesh.surface_get_arrays(s)
+			var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+			out["tris"] += (idx.size() if idx.size() > 0 else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
+		out["top"] = maxf(out["top"], mi.get_aabb().end.y)
+		var mat := mi.get_active_material(0) as BaseMaterial3D
+		if mat and mat.albedo_texture:
+			out["tex"] = mat.albedo_texture.get_size()
+	model.free()
+	return out
+
+
+## Bishop and Vesper (V2; the decision log's "Bishop, a second operative" and "Vesper, a third
+## operative"): each model loads with CROSS's 19 joints, each on the same parent (so every SoldierRig
+## pose fits them, as a skin needs), within the 3,000-triangle budget, with a 512 texture; Bishop is
+## CROSS's height and Vesper 93% of it (each within 2 cm); and a SoldierRig builds and poses each.
+## Nothing in the game loads them yet.
+func _test_operative_models() -> void:
+	var cross := _operative_model("res://game/player/cross.glb")
+	for who: String in ["bishop", "vesper"]:
+		var path := "res://game/player/%s.glb" % who
+		var m := _operative_model(path)
+		var name := who.capitalize()
+		var tall: float = cross["top"] * (0.93 if who == "vesper" else 1.0)
+		_check(m["joints"], "%s: CROSS's 19 joints, each on the same parent" % name)
+		_check(m["tris"] > 2500 and m["tris"] <= 3000, "%s: within the 3,000-triangle budget (%d)" % [name, m["tris"]])
+		_check(m["tex"] == Vector2(512, 512), "%s: a 512 texture (%s)" % [name, m["tex"]])
+		_check(absf(m["top"] - tall) < 0.02, "%s: %.3f m tall, wanted %.3f (CROSS %.3f)" % [name, m["top"], tall, cross["top"]])
+		var r := SoldierRig.new(load(path) as PackedScene, "", who.to_upper())
+		root.add_child(r)
+		for i in 30:
+			r.animate(1.0 / 60.0, {"run": 1.0, "aim": true})
+		_check(r.hips != null and r.wrists.size() == 2 and r._meshes.size() > 0, "%s: a SoldierRig builds and poses them" % name)
+		r.free()

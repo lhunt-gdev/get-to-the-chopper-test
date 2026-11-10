@@ -30,7 +30,7 @@ TOOLS="art_source/operative/tools"
 mkdir -p "$WORK" "$OUT"
 export CHAR="$NAME"
 # (A stage that fails stops the build: Blender exits non-zero on a Python error.)
-run() { "$BLENDER" --background --python-exit-code 1 --python "$TOOLS/$1" -- "${@:2}" 2>&1 | { grep -E "^(BASE|TRIS|WELDED|SAVED|APOSE|APOSED|REMESHED|LOW_TRIS|UV_OVERLAPS|FILLED|BAKED|DONE|TURNED|LANDMARKS|WEIGHTS|LENSES|EXPORTED)|Error|Traceback" || true; }; }
+run() { "$BLENDER" --background --python-exit-code 1 --python "$TOOLS/$1" -- "${@:2}" 2>&1 | { grep -E "^(BASE|TRIS|TINTED|MIRRORED|WELDED|SCALED|SAVED|APOSE|APOSED|REMESHED|DROPPED|LOW_TRIS|UV_OVERLAPS|FILLED|HEM|BAKED|DONE|TURNED|LANDMARKS|WEIGHTS|LENSES|EXPORTED)|Error|Traceback" || true; }; }
 echo "== $NAME, stage 1: reduce"
 run stage1_reduce.py "$SRC" "$WORK"
 if [[ "$POSE" == "apose" ]]; then

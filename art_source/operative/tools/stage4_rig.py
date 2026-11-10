@@ -71,6 +71,10 @@ while z < 1.2:
         crotch = z
         break
     z += 0.004
+# CROTCH (environment, a share of his height): where the crotch is, when the mesh can't show it (Vesper's
+# skirt, and her legs together: the remesh joins them down to above the knee).
+if os.environ.get("CROTCH"):
+    crotch = h * float(os.environ["CROTCH"])
 # The armpits and arm lines, each side: going down from the shoulders, where the arm splits off
 # from the body, then following that arm down (each step's arm section close to the last one's)
 # to where it ends, the fingertips.
@@ -128,7 +132,10 @@ for side, s in ((1, "R"), (-1, "L")):
     ft = arms[side]["fingertip"]
     # The shoulder joint, where the arm turns: up in the ball of the shoulder, 4 cm under its top
     # (user, twice: the shoulders were too low, and bent the shoulder out of shape with his arms up).
-    top = max(v.z for v in V if 0.22 <= v.x * side <= 0.32 and ap < v.z < ap + 0.4)
+    # SHOULDER_BAND="lo,hi" (environment, m out from the middle): where to look for the top of the
+    # shoulder (0.22-0.32 m, CROSS's; narrower shoulders need it nearer the middle).
+    lo, hi = [float(x) for x in os.environ.get("SHOULDER_BAND", "0.22,0.32").split(",")]
+    top = max(v.z for v in V if lo <= v.x * side <= hi and ap < v.z < ap + 0.4)
     sh_z = top - 0.04
     print("SHOULDER_TOP", side, round(top, 3))
     # The arm's line, traced from the armpit down and carried on up to the shoulder joint's height
@@ -142,6 +149,10 @@ for side, s in ((1, "R"), (-1, "L")):
     wr_z = ft + 0.19
     el_z = sh_z - 0.53 * (sh_z - wr_z)
     J["Shoulder" + s] = (along(sh_z), sh_z)  # on the arm's line, so the arm turns about itself
+    # SHOULDER_X (environment, m out from the middle): the shoulder joint's place across, when the arm's
+    # line carried up doesn't reach the ball of the shoulder (Vesper's arms join her sides low down).
+    if os.environ.get("SHOULDER_X"):
+        J["Shoulder" + s] = (side * float(os.environ["SHOULDER_X"]), sh_z)
     # The collarbone, from beside the top of the breastbone out to the shoulder: it lifts the
     # shoulder when the arm goes up high (a shrug), so the shoulder joint doesn't bend that far alone.
     J["Clavicle" + s] = (side * 0.045, J["Chest"][1])
@@ -312,6 +323,25 @@ for v in me.vertices:
     if w != before and sum(w.values()) > 1e-4:
         write(v, w)
         reapplied += 1
+# HEM=z (environment, m: as stage 3's): a skirt. Between her legs (within 7 cm of the middle) the skirt
+# above the hem is one surface with the inside of her thighs (the remesh joins them), and with the
+# thighs' weights it was pulled down them in a stride, a dark spike on each thigh: there it follows
+# her hips instead.
+if os.environ.get("HEM"):
+    hem = float(os.environ["HEM"])
+    leg_groups = [gi[n + s] for n in ("LegHip", "Knee", "Ankle") for s in ("R", "L")]
+    moved = 0
+    for v in me.vertices:
+        p = M @ v.co
+        if p.z < hem or abs(p.x) > 0.07:
+            continue
+        w = {g.group: g.weight for g in v.groups}
+        off = sum(w.pop(b, 0.0) for b in leg_groups)
+        if off > 0.0:
+            w[gi["Hips"]] = w.get(gi["Hips"], 0.0) + off
+            write(v, w)
+            moved += 1
+    print("WEIGHTS skirt between the legs given to the hips:", moved, "vertices")
 bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
 bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL', limit=4)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)

@@ -72,6 +72,13 @@ place of `apose` (stage 1b measures arms made partway down and lowers them only 
 again any faces whose UVs overlap) and `FILL_MISSES=1` (stage 3 fills a face the bake missed from
 the faces round it). See `art_source/bishop/README.md`.
 
+`build_vesper.sh` builds Vesper the same way (`art_source/vesper/`, into `game/player/`; nothing loads
+her yet), scaled to a share of CROSS's height (`HEIGHT`, stage 1), with more of these options: parts
+of the source replaced with the other side's (`MIRROR_BOX`) or recoloured (`TINT_BOX`) in stage 1, a
+skirt's hem straightened (`HEM`) and the remesh's crumbs and the texture's gaps tidied (`DROP_BITS`,
+`GROW_GAPS`) in stage 3, and joints the mesh can't show placed by hand (`CROTCH`, `SHOULDER_BAND`,
+`SHOULDER_X`) in stage 4. See `art_source/vesper/README.md`.
+
 The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
 then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one
 end), scales him to 0.72 m at the shoulder (the line of his back between his legs), finds his paws,
