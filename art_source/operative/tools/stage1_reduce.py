@@ -27,6 +27,18 @@ obj.select_set(True)
 mn_z = min((obj.matrix_world @ v.co).z for v in obj.data.vertices)
 obj.location.z -= mn_z
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+# WELD=1 (environment): weld the source's vertices that sit on top of each other (within 0.1 mm) first.
+# A source exported split along its texture seams (Bishop's: 2,078 loose pieces) falls apart into
+# fragments when reduced, and the remesh in stage 3 can't close them; welded, it's one skin.
+if os.environ.get("WELD") == "1":
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    before = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0001)
+    print("WELDED", before - len(bm.verts), "vertices")
+    bm.to_mesh(obj.data)
+    bm.free()
 mod = obj.modifiers.new("reduce", 'DECIMATE')
 mod.decimate_type = 'COLLAPSE'
 mod.ratio = 20000 / len(obj.data.polygons)

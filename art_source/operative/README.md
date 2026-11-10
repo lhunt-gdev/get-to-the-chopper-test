@@ -64,6 +64,14 @@ file: he has no goggles), which the rifle troopers, the pursuit squad and the sn
 `build_scout.sh` and `build_boss.sh` are the same for the scout and the boss (`art_source/scout/`,
 `art_source/boss/`, into `game/enemies/scout/` and `game/enemies/boss/`; both T-posed).
 
+`build_bishop.sh` builds Bishop (`art_source/bishop/`, into `game/player/`; nothing loads him yet).
+His source needed options the others don't use, set as environment variables in his script:
+`WELD=1` (stage 1 welds a source split along its texture seams before reducing it), `slanted` in
+place of `apose` (stage 1b measures arms made partway down and lowers them only the rest of the way),
+`VOXEL` (stage 3's remesh voxel size, 0.008 m by default), `SPLIT_OVERLAPS=1` (stage 3 unwraps
+again any faces whose UVs overlap) and `FILL_MISSES=1` (stage 3 fills a face the bake missed from
+the faces round it). See `art_source/bishop/README.md`.
+
 The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
 then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one
 end), scales him to 0.72 m at the shoulder (the line of his back between his legs), finds his paws,
