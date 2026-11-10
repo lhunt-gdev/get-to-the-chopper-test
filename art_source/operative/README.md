@@ -75,9 +75,11 @@ the faces round it). See `art_source/bishop/README.md`.
 `build_vesper.sh` builds Vesper the same way (`art_source/vesper/`, into `game/player/`; nothing loads
 her yet), scaled to a share of CROSS's height (`HEIGHT`, stage 1), with more of these options: parts
 of the source replaced with the other side's (`MIRROR_BOX`) or recoloured (`TINT_BOX`) in stage 1, a
-skirt's hem straightened (`HEM`) and the remesh's crumbs and the texture's gaps tidied (`DROP_BITS`,
+skirt's hem straightened (`HEM`), her thighs parted before the remesh (`LEG_GAP`, stage 1) and the remesh's crumbs and the texture's gaps tidied (`DROP_BITS`,
 `GROW_GAPS`) in stage 3, and joints the mesh can't show placed by hand (`CROTCH`, `SHOULDER_BAND`,
 `SHOULDER_X`) in stage 4. See `art_source/vesper/README.md`.
+Bishop's also uses `DROP_BITS` and, in stage 4, `HAND_LIKE` (each hand turned at the wrist to hang as
+CROSS's does) and `HAND_CURL` (open fingers curled closed), so SoldierRig's pistol sits in his fist.
 
 The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
 then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one

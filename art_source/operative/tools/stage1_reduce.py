@@ -119,6 +119,41 @@ if os.environ.get("WELD") == "1":
     print("WELDED", before - len(bm.verts), "vertices")
     bm.to_mesh(obj.data)
     bm.free()
+# LEG_GAP="z0,z1,gap" (environment, m): her thighs parted to at least `gap` apart between heights z0
+# and z1 (up to her skirt's hem). Vesper stands with her thighs nearly touching (1 cm apart 8 cm under
+# the hem, touching above), and the remesh in stage 3 can't keep a gap that narrow: it webbed them
+# together into one panel down to above her knees. Each thigh's inner side moves out half of what's
+# missing at that height (measured on the mesh, every centimetre), easing to nothing across the thigh,
+# so the outside of her legs keeps its shape; nothing more than 7 cm from her legs' middle depth moves
+# (her skirt's front and back).
+if os.environ.get("LEG_GAP"):
+    z0, z1, gap = [float(x) for x in os.environ["LEG_GAP"].split(",")]
+    me = obj.data
+    near = [v.co for v in me.vertices if z0 - 0.01 <= v.co.z <= z1 + 0.01 and abs(v.co.x) < 0.12]
+    y_mid = sum(c.y for c in near) / max(1, len(near))
+    inner = {}  # 1 cm band -> (the right thigh's inner edge, the left's), |x|
+    for c in near:
+        if abs(c.y - y_mid) > 0.07:
+            continue
+        k = round(c.z, 2)
+        r, l = inner.get(k, (1.0, 1.0))
+        inner[k] = (min(r, c.x), l) if c.x > 0 else (r, min(l, -c.x))
+    moved = 0
+    for v in me.vertices:
+        c = v.co
+        if not (z0 <= c.z <= z1) or abs(c.y - y_mid) > 0.07:
+            continue
+        r, l = inner.get(round(c.z, 2), (1.0, 1.0))
+        missing = max(0.0, gap - (r + l))
+        if missing <= 0.0:
+            continue
+        edge = r if c.x > 0 else l
+        t = min(1.0, max(0.0, (abs(c.x) - edge) / 0.08))  # 0 at the inner side .. 1 8 cm across
+        push = missing / 2.0 * (1.0 - t * t * (3.0 - 2.0 * t))
+        c.x += push if c.x > 0 else -push
+        moved += 1
+    me.update()
+    print("LEG_GAP thighs parted to %.3f m from %.2f to %.2f m up: %d vertices moved" % (gap, z0, z1, moved))
 # HEIGHT (environment, m): scale him to this height, feet on the ground (Vesper is shorter than CROSS).
 if os.environ.get("HEIGHT"):
     h = max(v.co.z for v in obj.data.vertices)
