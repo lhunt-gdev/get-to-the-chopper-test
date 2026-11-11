@@ -813,6 +813,12 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
             tall = z1 - z0
             wide = tall * ew / eh
             cx = (x0 + x1) / 2.0
+            # (printed into the jacket: the emblem takes the suede's light and shade, each texel's brightness
+            # against the jacket's middle brightness there, so it isn't a flat sticker on it)
+            def lum(i):
+                return 0.3 * cpx[i] + 0.59 * cpx[i + 1] + 0.11 * cpx[i + 2]
+            lums = sorted(lum((q[1] * W + q[0]) * 4) for q in on_back)
+            lum_mid = max(1e-3, lums[len(lums) // 2])
             laid = 0
             for (x, y), p in on_back.items():
                 u = (p.x - cx) / wide + 0.5
@@ -834,8 +840,9 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
                     continue
                 a = acc[3] / 4.0
                 i = (y * W + x) * 4
+                shade = min(1.1, max(0.88, 1.0 + 0.5 * (lum(i) / lum_mid - 1.0)))  # (half the suede's shading, kept gentle)
                 for c in range(3):
-                    cpx[i + c] = cpx[i + c] * (1.0 - a) + acc[c] / 4.0
+                    cpx[i + c] = cpx[i + c] * (1.0 - a) + min(1.0, acc[c] / 4.0 * shade)
                 laid += 1
             print("WEIGHTS back emblem: %d texels of the old one filled, the new one laid on %d (%.2f x %.2f m, %.2f to %.2f m up)"
                   % (len(gold), laid, wide, tall, z0, z1))

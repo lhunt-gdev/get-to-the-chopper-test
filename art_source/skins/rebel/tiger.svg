@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" width="200" height="280">
+  <!-- Rebel's jacket emblem, the other choice: a tiger in the Japanese tattoo style, crouched and
+       coming down his back, tail curled up behind it, jaws open. One gold, no outline, printed into the
+       jacket; its stripes cut out to the jacket, tapered like a tattoo's. Drawn for this game. -->
+  <defs>
+    <mask id="stripes" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="280">
+      <rect width="200" height="280" fill="white"/>
+      <g fill="black">
+        <!-- the tail's rings -->
+        <path d="M54,22 L70,24 L56,28 Z M50,36 L66,36 L52,41 Z M50,50 L66,49 L52,55 Z M54,64 L69,60 L57,68 Z"/>
+        <!-- the back and flank: tapered stripes, each a crescent from the spine -->
+        <path d="M62,86 C74,78 84,88 98,82 C86,92 74,86 62,92 Z"/>
+        <path d="M60,100 C74,92 86,104 102,96 C88,108 74,100 60,106 Z"/>
+        <path d="M62,116 C76,108 88,120 108,110 C92,124 76,116 64,122 Z"/>
+        <path d="M68,132 C82,124 94,136 114,126 C98,140 82,132 70,138 Z"/>
+        <path d="M78,148 C90,142 102,152 120,142 C106,156 90,150 80,154 Z"/>
+        <path d="M94,162 C104,158 112,164 124,158 C114,168 104,164 96,168 Z"/>
+        <!-- the raised hind leg -->
+        <path d="M108,62 C118,58 124,66 134,62 C126,70 118,66 110,68 Z M116,78 C126,74 132,82 142,78 C134,86 126,82 118,84 Z M130,94 C138,92 142,98 150,96 C144,102 138,98 132,100 Z"/>
+        <!-- the bent front leg -->
+        <path d="M64,180 C70,176 78,182 86,178 C80,186 72,182 66,186 Z M60,196 C66,192 74,198 82,194 C76,202 68,198 62,202 Z"/>
+        <!-- the reaching front leg -->
+        <path d="M134,208 C140,206 146,212 152,210 C148,216 142,214 136,214 Z M140,226 C146,224 152,230 158,228 C154,234 148,232 142,232 Z M146,244 C152,242 158,248 164,246 C160,252 154,250 148,250 Z"/>
+        <!-- the forehead's stripes -->
+        <path d="M134,146 L140,156 L138,146 Z M142,142 L146,154 L148,142 Z M152,144 L152,156 L158,146 Z"/>
+        <!-- the eye, narrowed under its brow -->
+        <path d="M144,162 C150,158 158,160 162,164 C156,166 150,166 144,162 Z"/>
+        <!-- the cheek's ruff, jagged -->
+        <path d="M122,174 L130,178 L124,182 L132,186 L126,190 L134,194 L128,198 L136,198 Z"/>
+        <!-- the jaws, open wide -->
+        <path d="M152,182 C162,180 172,184 178,192 C174,200 166,206 154,204 C160,198 160,190 152,182 Z"/>
+        <!-- the toes of the paws -->
+        <path d="M60,214 l-2,-6 l4,0 Z M68,216 l0,-7 l4,1 Z M158,268 l2,-6 l3,2 Z M166,266 l3,-6 l3,3 Z M160,118 l4,-5 l2,4 Z"/>
+      </g>
+    </mask>
+  </defs>
+  <g mask="url(#stripes)" fill="#c8962e">
+    <!-- the tail, curled up -->
+    <path d="M72,82 C56,72 48,52 52,34 C56,18 70,10 80,16 C86,20 82,28 76,26 C66,22 62,36 64,50 C66,62 74,70 84,74 Z"/>
+    <!-- the hindquarters and the raised hind leg, its paw down on the right -->
+    <path d="M66,78 C82,58 104,52 122,54 C138,56 148,70 150,86 C152,98 158,104 164,108 C172,112 168,122 158,120 C146,118 138,110 132,100 C128,94 120,94 112,96 Z"/>
+    <!-- the body, coming down the back to the shoulders -->
+    <path d="M60,82 C54,104 58,130 70,148 C84,168 106,178 128,172 C144,168 152,154 148,140 C142,120 122,102 104,90 C92,82 76,76 60,82 Z"/>
+    <!-- the bent front leg, its paw down on the left -->
+    <path d="M76,158 C66,168 58,182 56,198 C54,210 58,220 70,218 C82,216 86,208 90,198 C94,188 102,180 108,176 Z"/>
+    <!-- the head, low and big, jaws open toward the right -->
+    <path d="M118,150 C126,138 144,134 158,140 C172,146 180,160 182,174 C184,188 178,200 168,206 C156,212 140,210 130,202 C120,194 114,180 114,168 C114,160 115,154 118,150 Z"/>
+    <!-- its ears -->
+    <path d="M124,148 L118,130 L136,142 Z M152,138 L160,124 L166,144 Z"/>
+    <!-- the reaching front leg, down to its paw at the bottom -->
+    <path d="M132,198 C142,208 150,224 156,240 C160,250 164,258 172,264 C178,268 176,274 166,274 C154,274 146,266 142,256 C136,240 128,222 120,206 Z"/>
+  </g>
+  <!-- the fangs, a pale gold -->
+  <path d="M158,184 L162,194 L165,185 Z M170,198 L168,190 L173,193 Z" fill="#efe2c0"/>
+</svg>

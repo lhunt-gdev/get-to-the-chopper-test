@@ -78,7 +78,7 @@ case "$NAME" in
     bare
     # The source's scorpion on his back (a well-known film's jacket's) painted out and his own cobra laid
     # where it was (BACK_EMBLEM, see stage4_rig.py; art_source/skins/rebel/cobra.svg, drawn as cobra.png).
-    export BACK_EMBLEM="$PWD/art_source/skins/rebel/cobra.png"
+    export BACK_EMBLEM="${BACK_EMBLEM:-$PWD/art_source/skins/rebel/cobra.png}"  # (or tiger.png, the other choice)
     POSE=slanted ;;
   future)    # cyber jacket, purple hair, fingerless gloves; arms further out
     POSE=slanted ;;
