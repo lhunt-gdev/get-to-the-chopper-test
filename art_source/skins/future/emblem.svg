@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
-  <!-- Future's jacket emblem: a tech insignia drawn for the game. A hexagon round an upward chevron,
+  <!-- Future's jacket emblem: a tech insignia drawn for the game. A hexagon round a cyber skull,
        circuit traces running out to either side and down to nodes. His jacket's own violet, its core
        a lighter violet like lit trim. -->
   <g fill="none" stroke="#7d3da3" stroke-linecap="square" stroke-linejoin="miter">
@@ -26,7 +26,31 @@
     <rect x="148" y="220" width="12" height="12"/>
     <rect x="113" y="16" width="15" height="15"/>
   </g>
-  <!-- the chevron, lit, and the bar under it -->
-  <path d="M120,80 L150,118 L134,118 L120,100 L106,118 L90,118 Z" fill="#b682de"/>
-  <path d="M120,112 L150,150 L134,150 L120,132 L106,150 L90,150 Z" fill="#b682de"/>
+  <!-- a cyber skull in the hexagon: an angular skull in the lighter violet, its eye sockets, nose and
+       the gaps between its teeth cut through to the jacket; the right half of its jaw and brow plated,
+       with a circuit trace across its forehead in the darker violet -->
+  <defs>
+    <mask id="skull" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="240">
+      <rect width="240" height="240" fill="white"/>
+      <g fill="black">
+        <!-- the eye sockets, slanting down to his nose -->
+        <path d="M92,103 L117,111 L115,126 L97,123 Z"/>
+        <path d="M148,103 L123,111 L125,126 L143,123 Z"/>
+        <!-- the nose -->
+        <path d="M120,128 L126,140 L114,140 Z"/>
+        <!-- the gaps between the teeth, and the line of the jaw -->
+        <path d="M100,148 L140,148 L140,151 L100,151 Z"/>
+        <path d="M106,151 h3 v12 h-3 Z M115,151 h3 v13 h-3 Z M124,151 h3 v13 h-3 Z M133,151 h3 v12 h-3 Z"/>
+      </g>
+    </mask>
+  </defs>
+  <path mask="url(#skull)" fill="#b682de" d="M120,72 L144,78 L154,96 L152,124 L144,134 L142,146 L138,164 L102,164 L98,146 L96,134 L88,124 L86,96 L96,78 Z"/>
+  <!-- the circuit across its forehead to a node, and a seam on its brow -->
+  <g fill="none" stroke="#7d3da3" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M120,76 L120,96 L132,96 L140,88" stroke-width="3"/>
+    <path d="M100,92 L108,92" stroke-width="3"/>
+  </g>
+  <rect x="138" y="85" width="6" height="6" fill="#7d3da3"/>
+  <!-- its eyes lit -->
+  <path d="M99,110 L111,114 L110,121 L101,119 Z M141,110 L129,114 L130,121 L139,119 Z" fill="#e3c8f5"/>
 </svg>

@@ -87,6 +87,6 @@ as `rebel/tiger.png`). The other choice, a cobra drawn for the game (`rebel/cobr
 ## Future's jacket
 
 A tech insignia drawn for the game on his back (`future/emblem.svg`, drawn as `future/emblem.png`): a
-hexagon round an upward chevron, circuit traces running out to nodes, in his jacket's own violet, the
-chevron a lighter violet like lit trim. His jacket has no emblem of its own, so it's placed at a set spot
-(`BACK_EMBLEM_AT`, stage 4: centred, from 1.18 to 1.44 m up, between his shoulder blades), nothing filled.
+hexagon round a cyber skull, circuit traces running out to nodes, in his jacket's own violet, the
+skull a lighter violet like lit trim, its eyes lit. His jacket has no emblem of its own, so it's placed at a set spot
+(`BACK_EMBLEM_AT`, stage 4: centred, from 1.23 to 1.49 m up, high between his shoulder blades), nothing filled.

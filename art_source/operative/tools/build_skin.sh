@@ -87,10 +87,10 @@ case "$NAME" in
     POSE=slanted ;;
   future)    # cyber jacket, purple hair, fingerless gloves; arms further out
     # A tech insignia drawn for the game on his back, in his jacket's own violet, between his shoulder
-    # blades (BACK_EMBLEM, BACK_EMBLEM_AT: x, and from 1.18 to 1.44 m up; art_source/skins/future/emblem.svg,
+    # blades (BACK_EMBLEM, BACK_EMBLEM_AT: x, and from 1.23 to 1.49 m up; art_source/skins/future/emblem.svg,
     # drawn as emblem.png).
     export BACK_EMBLEM="$PWD/art_source/skins/future/emblem.png"
-    export BACK_EMBLEM_AT="${BACK_EMBLEM_AT:-0,1.18,1.44}"
+    export BACK_EMBLEM_AT="${BACK_EMBLEM_AT:-0,1.23,1.49}"
     POSE=slanted ;;
   *)
     echo "unknown skin: $NAME" >&2; exit 1 ;;
