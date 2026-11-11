@@ -74,11 +74,12 @@ case "$NAME" in
   silent)    # black sneaking suit, shoulder holster; made 8 mm to one side, so centred first
     export CENTRE=1
     gun_box 0.62 0.965; bare ;;
-  rebel)     # suede jacket with a cobra on the back; arms further out, lowered to the A-pose
+  rebel)     # suede jacket with a tiger on the back; arms further out, lowered to the A-pose
     bare
-    # The source's scorpion on his back (a well-known film's jacket's) painted out and his own cobra laid
-    # where it was (BACK_EMBLEM, see stage4_rig.py; art_source/skins/rebel/cobra.svg, drawn as cobra.png).
-    export BACK_EMBLEM="${BACK_EMBLEM:-$PWD/art_source/skins/rebel/cobra.png}"  # (or tiger.png, the other choice)
+    # The source's scorpion on his back (a well-known film's jacket's) painted out and the user's tiger laid
+    # where it was (BACK_EMBLEM, see stage4_rig.py; art_source/skins/rebel/tiger_source.png, the user's own
+    # drawing, made gold on clear as tiger.png).
+    export BACK_EMBLEM="${BACK_EMBLEM:-$PWD/art_source/skins/rebel/tiger.png}"  # (or cobra.png, the other choice)
     POSE=slanted ;;
   future)    # cyber jacket, purple hair, fingerless gloves; arms further out
     POSE=slanted ;;

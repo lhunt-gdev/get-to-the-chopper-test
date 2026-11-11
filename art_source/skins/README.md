@@ -72,3 +72,13 @@ hands and goggles are CROSS's byte for byte; only the texture packed in the mode
 - Camouflage paint across his face under the goggles, placed on him in 3D: a dark green band across
   the bridge of his nose, and two streaks down each cheek, slanting out (black, then dark green), their
   edges wavering as paint put on by hand.
+
+## Rebel's jacket
+
+The source's scorpion on the back (the signature of a well-known film's jacket) is painted out and
+replaced (`BACK_EMBLEM`, stage 4): the old emblem's bright gold texels on the back of his torso are filled
+with the suede round them on him (the middle colour within 4 cm, with soft blotches like the suede's own),
+and the new emblem laid where it was, as tall, in the same gold, taking a little of the suede's light and
+shade. The emblem is **the user's own tiger** (`rebel/tiger_source.png`, black on white, made gold on clear
+as `rebel/tiger.png`). The other choice, a cobra drawn for the game (`rebel/cobra.svg`, `cobra.png`):
+`BACK_EMBLEM=$PWD/art_source/skins/rebel/cobra.png art_source/operative/tools/build_skin.sh rebel`.

@@ -740,18 +740,19 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
         w_from, w_to = [float(x) for x in os.environ["WRIST_CLEAN"].split(",")]
         specks += despeckle(hand_texels(1, w_from, w_to, whole=False))
     # BACK_EMBLEM=<png> (environment): the emblem on the back of a jacket replaced with another (Rebel's
-    # scorpion, the signature of a well-known film's jacket, with his own cobra; the decision log's
-    # "Eight skins for CROSS"). On the back of his torso (faces facing back, between his shoulder
-    # blades and his waist), the old emblem's texels (gold: saturated, yellow to orange) are found and
-    # filled from the jacket round them, each from the nearest texel that isn't; then the new emblem
-    # (art_source/skins/rebel/cobra.png, from cobra.svg) is laid over where the old one was, as tall as
-    # it was and centred on it, seen from behind (its left on his left).
+    # scorpion, the signature of a well-known film's jacket, with the user's own tiger; the decision
+    # log's "Eight skins for CROSS"). On the back of his torso (faces facing back, between his shoulder
+    # blades and his waist), the old emblem's texels (bright gold: saturated, yellow to orange) are found
+    # and filled with the suede round them (below); then the new emblem (art_source/skins/rebel/tiger.png,
+    # or cobra.png) is laid over where the old one was, as tall as it was and centred on it, seen from
+    # behind (its left on his left), taking a little of the suede's light and shade.
     if os.environ.get("BACK_EMBLEM"):
         import colorsys
         on_back = {}  # texel -> where it is on him (m)
+        shared = {}  # texel -> each place on him it shows at
         for t in me.loop_triangles:
             nrm = (M.to_3x3() @ t.normal).normalized()
-            if nrm.y > -0.35:
+            if nrm.y > -0.1:  # (facing back, if only a little: the back curves round to the sides)
                 continue
             P = [M @ me.vertices[i].co for i in t.vertices]
             c3 = (P[0] + P[1] + P[2]) / 3.0
@@ -768,40 +769,57 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
                     w1 = (p[0] - p[2]).cross(c - p[2]) / area
                     w2 = 1.0 - w0 - w1
                     if min(w0, w1, w2) >= -0.02:
-                        on_back[(x, y)] = P[0] * w0 + P[1] * w1 + P[2] * w2
+                        q3 = P[0] * w0 + P[1] * w1 + P[2] * w2
+                        on_back.setdefault((x, y), q3)
+                        # (where two faces share a texel, mirrored across his back, both places)
+                        if all((q3 - o).length > 0.03 for o in shared.setdefault((x, y), [])):
+                            shared[(x, y)].append(q3)
         def hsv(q):
             i = (q[1] * W + q[0]) * 4
             return colorsys.rgb_to_hsv(cpx[i], cpx[i + 1], cpx[i + 2])
         def is_gold(q, s_min):
             h, s, v = hsv(q)
-            return 0.04 < h < 0.18 and s > s_min and v > 0.2
+            return 0.04 < h < 0.18 and s > s_min and v > 0.4  # (bright: not his brown waistband)
         gold = {q for q in on_back if is_gold(q, 0.3)}
         # (its soft edges: texels next to it a little gold too)
         for _ in range(2):
             gold |= {(x + dx, y + dy) for (x, y) in gold for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
                      if (x + dx, y + dy) in on_back and is_gold((x + dx, y + dy), 0.16)}
-        src_of = {q: q for q in on_back if q not in gold}
-        front = list(src_of)
-        while front:
-            nxt = []
-            for (x, y) in front:
-                for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    q = (x + d[0], y + d[1])
-                    if q in gold and q not in src_of:
-                        src_of[q] = src_of[(x, y)]
-                        nxt.append(q)
-            front = nxt
+        # The old emblem filled with the suede round it, on him (not in the texture, where the pieces
+        # beside it may be anywhere on his back): each texel takes the middle colour of the back clear
+        # of it within 4 cm (or the nearest such texel, further in), then soft blotches like the
+        # suede's own (a smooth noise, 4 cm across, a tenth either way), so it isn't a flat patch where
+        # the new emblem leaves a gap.
+        from mathutils.kdtree import KDTree
+        good = [q for q in on_back if q not in gold]
+        kd = KDTree(len(good))
+        for k, q in enumerate(good):
+            kd.insert(on_back[q], k)
+        kd.balance()
+        def blotch(p):
+            s = 0.04
+            gx, gy, gz = p.x / s, p.y / s, p.z / s
+            ix, iy, iz = math.floor(gx), math.floor(gy), math.floor(gz)
+            fx, fy, fz = gx - ix, gy - iy, gz - iz
+            def h(a, b, c):
+                return ((a * 73856093) ^ (b * 19349663) ^ (c * 83492791)) % 1000 / 999.0
+            def sm(t):
+                return t * t * (3.0 - 2.0 * t)
+            v = 0.0
+            for a in (0, 1):
+                for b in (0, 1):
+                    for c in (0, 1):
+                        w = (sm(fx) if a else 1 - sm(fx)) * (sm(fy) if b else 1 - sm(fy)) * (sm(fz) if c else 1 - sm(fz))
+                        v += w * h(ix + a, iy + b, iz + c)
+            return 0.9 + 0.2 * v
+        fill = {}
         for q in gold:
-            f = src_of.get(q)
-            if f:
-                i, j = (q[1] * W + q[0]) * 4, (f[1] * W + f[0]) * 4
-                cpx[i:i + 3] = cpx[j:j + 3]
-        # (the filled patch softened a little, so it doesn't streak)
-        soft = {}
-        for (x, y) in gold:
-            near = [(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (x + dx, y + dy) in on_back]
-            soft[(x, y)] = [sum(cpx[(n[1] * W + n[0]) * 4 + k] for n in near) / len(near) for k in range(3)]
-        for (x, y), c in soft.items():
+            p = on_back[q]
+            near = kd.find_range(p, 0.04) or [kd.find(p)]
+            cols = [cpx[(good[k][1] * W + good[k][0]) * 4:(good[k][1] * W + good[k][0]) * 4 + 3] for _, k, _ in near]
+            mid = [sorted(c[i] for c in cols)[len(cols) // 2] for i in range(3)]
+            fill[q] = [min(1.0, c * blotch(p)) for c in mid]
+        for (x, y), c in fill.items():
             cpx[(y * W + x) * 4:(y * W + x) * 4 + 3] = c
         if gold:
             where = [on_back[q] for q in gold]
@@ -820,13 +838,14 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
             lums = sorted(lum((q[1] * W + q[0]) * 4) for q in on_back)
             lum_mid = max(1e-3, lums[len(lums) // 2])
             laid = 0
-            for (x, y), p in on_back.items():
+            def sample(p):
+                """The emblem at a place on his back: its colour times its cover, and its cover, summed
+                over 2 x 2 samples in the texel (so its edges aren't jagged)."""
                 u = (p.x - cx) / wide + 0.5
                 v = (z1 - p.z) / tall  # (from its top)
-                if not (0.0 <= u < 1.0 and 0.0 <= v < 1.0):
-                    continue
-                # (2 x 2 samples of the emblem in the texel, so its edges aren't jagged)
                 acc = [0.0, 0.0, 0.0, 0.0]
+                if not (0.0 <= u < 1.0 and 0.0 <= v < 1.0):
+                    return acc
                 for su in (0.25, 0.75):
                     for sv in (0.25, 0.75):
                         ex = min(ew - 1, int(u * ew + (su - 0.5)))
@@ -836,6 +855,11 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
                         for c in range(3):
                             acc[c] += epx[k + c] * a
                         acc[3] += a
+                return acc
+            for (x, y) in on_back:
+                # (a texel shown at two places, mirrored across his back, takes the emblem where it
+                # covers more of them: a one-sided emblem can be right at only one of them)
+                acc = max((sample(p) for p in shared[(x, y)]), key=lambda s: s[3])
                 if acc[3] <= 0.0:
                     continue
                 a = acc[3] / 4.0
