@@ -79,18 +79,21 @@ skirt's hem straightened (`HEM`), her thighs parted before the remesh (`LEG_GAP`
 `GROW_GAPS`) in stage 3, and joints the mesh can't show placed by hand (`CROTCH`, `SHOULDER_BAND`,
 `SHOULDER_X`) in stage 4. See `art_source/vesper/README.md`.
 Bishop's also uses `DROP_BITS` and, in stage 4, `HAND_LIKE` (each hand turned at the wrist to hang as
-CROSS's does) and `HAND_CURL` (open fingers curled closed), so SoldierRig's pistol sits in his fist.
+CROSS's does). Bishop, Vesper and the skins all have CROSS's own hands (`HAND_FROM`, stage 4, from
+`cross_hands.json`, which `extract_cross_hands.py` lifts out of his finished model; `HAND_SCALE` for
+Vesper's, smaller), so SoldierRig's pistol sits in every fist as in his.
 
 `build_skin.sh <name>` builds one of CROSS's eight skins (`art_source/skins/<name>/`, into
 `game/player/skins/`; nothing loads them yet), each skin's settings in a `case` block in the script.
 They brought in more options, each off unless a build sets it: `BAKE_FULL` (stage 1 keeps the source
 at full detail and stage 3 bakes from it, not the 20k copy, whose texture smears across a welded
 source's seams; stage 1b turns its arms with the copy's), `CENTRE` (stage 1 stands a source made to
-one side in the middle), `HAND_CLEAN` (stage 4 cleans the dark creases off a curled bare hand's
-knuckles and despeckles it; `WRIST_CLEAN` the same for a wrist where a mirrored hand meets the arm),
-and `HAND_NARROW`, `HAND_TUCK`, `HAND_SHORTEN` and `HAND_SPIKES` (stage 4 draws an open hand's fingers
+one side in the middle), `HAND_CLEAN` (stage 4 cleans the dark creases off a bare hand's texture and
+despeckles it; `WRIST_CLEAN` the same for a wrist where a mirrored hand meets the arm), and
+`HAND_NARROW`, `HAND_TUCK`, `HAND_SHORTEN` and `HAND_SPIKES` (stage 4 draws an open hand's fingers
 together, tucks its thumb in, shortens the fingers before the curl and smooths off any point left
-sticking out of the fist). See `art_source/skins/README.md`.
+sticking out of the fist; no build uses them now CROSS's hands replace the skins'). See
+`art_source/skins/README.md`.
 
 The dog has four legs, so his last stage is his own: `build_dog.sh` runs stages 1 and 3 as above,
 then `stage4_rig_dog.py`, which turns him to face forward (his head, the highest part, is at one

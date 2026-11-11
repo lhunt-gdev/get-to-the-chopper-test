@@ -27,25 +27,26 @@ in the fist. Besides those, new with the skins (each off unless a build sets it)
   streaks by his lapels). Stage 1b turns the full source's arms with the copy's.
 - The pistol in his hand (Shadow, Casual, Tropical, Midnight, Silent): those sources hold a silenced
   pistol in the right hand, part of the same mesh. The right hand and the pistol are cut away in a box
-  and the left hand mirrored in (`MIRROR_BOX`, stage 1), which then closes round the game's own pistol.
-  The box stops just under the watch on the left wrist (Casual, Tropical, Silent), so he still wears one.
+  and the left hand mirrored in (`MIRROR_BOX`, stage 1), so the right hand (replaced with CROSS's, below)
+  takes its colour from a hand, not the gun.
   Where the mirrored hand meets the arm the bake left marks (a faint line, a dark speck, the left cuff's
   cufflink mirrored onto the right): the right wrist is despeckled (`WRIST_CLEAN`, stage 4: a texel unlike
   the middle colour of the texels round it takes that colour).
 - `CENTRE` (stage 1): Silent's source stands 8 mm to one side; he's moved to the middle first, or his
   mirrored hand wouldn't meet his arm.
-  (Casual's box takes the watch across too, whole: cut under it, half a watch was left on his right wrist.)
-- The fists (stage 4, every skin): the fingers curled 80 degrees round the grip (`HAND_CURL`, as Bishop's),
-  rounded fists, and any point left sticking out of them (a thumb's tip, a fingertip) smoothed off
-  (`HAND_SPIKES`). Rebel's, Future's and Judge's hands are made open with the fingers spread flat: theirs
-  are first drawn in together across the hand (`HAND_NARROW`) and shortened to half past the knuckles
-  (`HAND_SHORTEN`), then curled 100 degrees. (A compact, squared fist with the thumb tucked in,
-  `HAND_TUCK`, was tried and turned down as too blocky; the option is still there, off.)
-- `HAND_CLEAN` (stage 4): bare hands (all but Future's and Judge's gloves): the dark creases between
-  the open fingers, which show across the knuckles once the hand is a fist, are cleaned off the texture
-  with the hand's own tone, and flecks and light scratches on the hand despeckled, from 5 cm past the
-  wrist joint on so a watch or a cuff is left whole; then the margins round the texture's pieces are made
-  again from the cleaned colours.
+- The hands (stage 4, every skin, and Bishop's and Vesper's): CROSS's own (user: "Cross' current hand
+  model is the best fit for the game"), `HAND_FROM`. `extract_cross_hands.py` lifts his two hands out of
+  his finished model into `art_source/operative/cross_hands.json` (run it again if CROSS is rebuilt);
+  stage 4 cuts the skin's own hand off 2 cm short of the wrist joint, puts CROSS's in at the same place
+  on the wrist (so SoldierRig's pistol sits in the fist as in his), joins his glove's cuff to the arm's cut
+  edge with a band of faces so the hand stays on the arm as the wrist bends, and colours his hand from
+  the skin's own hand (each new face from the nearest part of it, the hand only, not a watch or a cuff at
+  the wrist): bare skin, or the skin's own gloves. The watches (Casual, Tropical, Silent) go under the
+  cuff. (Tried before: the skins' own hands curled closed, `HAND_CURL` with `HAND_SPIKES`, `HAND_NARROW`,
+  `HAND_SHORTEN`, `HAND_TUCK`; and a fist modelled new with the thumb and the index finger on their own.)
+- `HAND_CLEAN` (stage 4): bare hands (all but Future's and Judge's gloves): dark creases and flecks on
+  the hand are cleaned off the texture with the hand's own tone before CROSS's hands take their colour
+  from it; then the margins round the texture's pieces are made again from the cleaned colours.
 - Shadow's coat (stages 3 and 4): his long coat is cut up the back along its own vent, from below the hem
   to 4 cm under the crotch (`CUT_LEGS`, as Vesper's thighs), so each side of it goes with its own leg and
   in a stride the back panel no longer stretches across between his legs; and his crotch, hidden by the
@@ -53,5 +54,5 @@ in the fist. Besides those, new with the skins (each off unless a build sets it)
 - Rebel, Future and Judge are made with their arms further out (35 to 40 degrees from hanging); stage 1b
   (`slanted`) lowers them to CROSS's A-pose, level front to back.
 
-After the first import, check each `game/player/skins/<name>_<name>_3000_512.png.import` has
+After the first import, check each `game/player/skins/<name>_<name>_2980_512.png.import` has
 `detect_3d/compress_to=0`, like CROSS's (Godot keeps it from then on).

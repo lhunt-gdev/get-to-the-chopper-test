@@ -15,5 +15,7 @@ export DROP_BITS=1  # (any loose crumbs the remesh leaves dropped: one stops the
 # His hands turned at the wrist to hang as CROSS's do (CROSS's right hand as SoldierRig measures it: which
 # way it runs from the wrist; which way the palm faces), so the pistol sits in his grip (see stage4_rig.py).
 export HAND_LIKE="-0.0546,-0.9743,-0.2186;-0.9328,-0.0283,0.3592"
-export HAND_CURL=80  # (his open hands curled closed, fingertips 80 degrees in: round the grip, see stage4_rig.py)
+# ...and replaced with CROSS's own (user: "Cross' current hand model is the best fit for the game"):
+# his fists' shape at the same place on the wrist, coloured from Bishop's own hands (see stage4_rig.py).
+export HAND_FROM="$PWD/art_source/operative/cross_hands.json"
 exec art_source/operative/tools/build_character.sh bishop art_source/bishop/bishop.glb game/player "${1:-3000}" "${2:-512}" slanted

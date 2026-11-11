@@ -44,4 +44,9 @@ export CUT_LEGS="0.66,0.81,0.024"  # (her thighs cut apart from mid-thigh up int
 export CROTCH=0.464
 export SHOULDER_BAND="0.12,0.19"
 export SHOULDER_X=0.155  # (the shoulder joint across: the arm's line from her low-joined armpit misses it)
+# Her hands replaced with CROSS's own (user: "the same hand model (scaled down on Vesper)"): his fists'
+# shape at the same place on the wrist, scaled to her height about the gun's grip, coloured from her
+# own hands (see stage4_rig.py).
+export HAND_FROM="$PWD/art_source/operative/cross_hands.json"
+export HAND_SCALE=$HEIGHT_OF_CROSS
 exec art_source/operative/tools/build_character.sh vesper art_source/vesper/vesper.glb game/player "${1:-3000}" "${2:-512}"

@@ -29,10 +29,11 @@ His source needs things the others didn't, each switched on in `build_bishop.sh`
   wore his hand's colours), so overlapping faces are unwrapped again apart; and a face folded in at
   his hairline missed the bake (a black chip), so it's filled from the faces round it.
 - `DROP_BITS=1`: a loose crumb the remesh left stopped the automatic weights; it's dropped.
-- `HAND_LIKE` and `HAND_CURL` (stage 4): his hands were made open and turned forward and out, so
-  SoldierRig's pistol sat on his knuckles and askew. Each hand is turned at the wrist to hang as
-  CROSS's does, and its fingers curled closed (80 degrees at the tips), so the pistol sits in his fist
-  in every pose with CROSS's own numbers; CROSS and SoldierRig are unchanged.
+- `HAND_LIKE` and `HAND_FROM` (stage 4): his hands were made open and turned forward and out, so
+  SoldierRig's pistol sat on his knuckles and askew. Each wrist is turned to hang as CROSS's does, and
+  each hand replaced with CROSS's own (user: "Cross' current hand model is the best fit for the game"),
+  coloured from Bishop's, so the pistol sits in his fist in every pose with CROSS's own numbers; CROSS
+  and SoldierRig are unchanged. (See `art_source/skins/README.md`, the hands.)
 
 After a re-import, check `game/player/bishop_bishop_3000_512.png.import` has
 `detect_3d/compress_to=0`, like CROSS's.

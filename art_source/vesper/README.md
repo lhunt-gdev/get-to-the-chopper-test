@@ -51,6 +51,9 @@ What her build does that CROSS's doesn't (each set in `build_vesper.sh`, explain
   below; the side split left alone), and the skirt between her legs follows her hips, not her thighs.
 - `CROTCH`, `SHOULDER_BAND`, `SHOULDER_X` (stage 4): joints the mesh can't show: the crotch under her
   skirt (at CROSS's share of the height), and her narrower shoulders.
+- `HAND_FROM` and `HAND_SCALE` (stage 4): her hands replaced with CROSS's own, scaled to her height
+  (user: "the same hand model (scaled down on Vesper)") about the pistol grip's middle, so the gun stays
+  in her smaller fist; coloured from her own hands. (See `art_source/skins/README.md`, the hands.)
 
 After a re-import, check `game/player/vesper_vesper_3000_512.png.import` has
 `detect_3d/compress_to=0`, like CROSS's.

@@ -136,6 +136,12 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Their fists (user):** rounded, the fingers curled round the grip as first made, only a point left sticking out smoothed off. (A compact, squared fist with the thumb tucked in was tried; user: "No I don't like the blockier hands.")
 - **Not yet:** nothing in the game loads them; how skins are unlocked and picked is to be worked out with Bishop's and Vesper's.
 
+### PROPOSED — CROSS's hands on every operative (user, 2026-11-11; V2 only)
+- **Why (user):** "i think Cross' current hand model is the best fit for the game and i would like all other models to have the same hand model (scaled down on Vesper)". (Tried first: a fist modelled new for each, a thumb and the index finger on their own, the index along the gun's frame; user: "no im not a fan of this".)
+- **What:** Bishop, Vesper and the eight skins (Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future, Judge) each have their hands replaced with CROSS's own, his fists' shape exactly, at the same place on the wrist, so the pistol sits in them as it does in his. Vesper's are scaled down to her size (about 93% of his). The guards and the other enemies keep their own hands.
+- **Their colour:** each model's new hands take their colour from its own hands (bare skin, Future's fingerless gloves, Judge's armoured gloves, Midnight's cuffs), not CROSS's black gloves.
+- **Replaces:** the skins' rounded curled fists (above) and Bishop's and Vesper's.
+
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)
 - **Why (user):** "I'd like to do some localisation, translation to other languages"; "I'd like to try Luxembourgish first, if that's possible?"; "I have someone who speaks Lëtzebuergesch and they can check."
 - All player-facing text (menus, settings, tips, HUD, debrief, scoreboard, credits, the briefing and end conversations) goes through Godot's translation system from one table, English the source and the fallback. In-world signs (EXIT and the like) stay in English as scenery. The cast's names (CROSS, ARDBALLS, VESPER...) stay as they are.

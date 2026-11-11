@@ -536,6 +536,109 @@ if os.environ.get("HAND_LIKE"):
                     moved.add(i)
             print("WEIGHTS hand", s, "spikes smoothed off: %d vertices" % len(moved))
         me.update()
+# HAND_FROM=<json> (environment): each hand replaced with CROSS's (user: "Cross' current hand model is
+# the best fit for the game and i would like all other models to have the same hand model"), from
+# art_source/operative/cross_hands.json (extract_cross_hands.py): the model's own faces that are wholly
+# its wrist's go, and CROSS's go in at the same place on the wrist, in the wrist's frame at rest, with
+# his weights by joint name; so SoldierRig's pistol, mounted on the wrist with his numbers, sits in the
+# fist as it does in his. HAND_SCALE=k scales them about the grip (Vesper's, smaller). Each new
+# face takes its texture from the nearest part of the model's own hand before it went, so the colours
+# stay the model's (its skin, its gloves), not CROSS's black gloves.
+if os.environ.get("HAND_FROM"):
+    import bmesh, json
+    from mathutils.bvhtree import BVHTree
+    with open(os.environ["HAND_FROM"]) as fh:
+        cross_hands = json.load(fh)
+    h_scale = float(os.environ.get("HAND_SCALE", "1"))
+    HAND_CUT = float(os.environ.get("HAND_CUT", "-0.02"))
+    GRIP_MID = (-0.004, -0.096, -0.0025)  # (the pistol grip's middle from the right wrist at rest, Godot axes; the left's is its mirror)
+    def to_b(v):  # Godot axes to Blender's
+        return mathutils.Vector((v[0], -v[2], v[1]))
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    dl = bm.verts.layers.deform.verify()
+    uvl = bm.loops.layers.uv.active
+    Mi = M.inverted()
+    for s in ("R", "L"):
+        wb = gi["Wrist" + s]
+        pivot = pos["Wrist" + s]
+        run_b = (pos["Wrist" + s] - pos["Elbow" + s]).normalized()
+        def along(p):
+            return (M @ p - pivot).dot(run_b)
+        # (its own hand cut off, the arm's faces from HAND_CUT along it from the wrist joint: 2 cm short of it,
+        # under his glove's cuff)
+        eb0 = gi["Elbow" + s]
+        old = [f for f in bm.faces if all(v[dl].get(wb, 0.0) + v[dl].get(eb0, 0.0) >= 0.5 and along(v.co) > HAND_CUT for v in f.verts)]
+        tris = []
+        for f in old:
+            if min(along(v.co) for v in f.verts) < 0.05:
+                continue  # (the colours from the hand itself, not a watch or a cuff at the wrist)
+            ls = f.loops
+            for k in range(1, len(ls) - 1):
+                tris.append([(M @ l.vert.co, l[uvl].uv.copy()) for l in (ls[0], ls[k], ls[k + 1])])
+        tree = BVHTree.FromPolygons([p for t in tris for p, _ in t], [[3 * i, 3 * i + 1, 3 * i + 2] for i in range(len(tris))])
+        def paint(f):
+            """A new face's texture: each corner from where it lies over the nearest part of the old hand;
+            a face whose corners all land on one edge or point there (its texture would stretch into
+            stripes) takes the colour at its middle, whole."""
+            c = M @ f.calc_center_median()
+            hit = tree.find_nearest(c)
+            uvs = [uv_at(M @ l.vert.co, hit[2]) for l in f.loops]
+            # (how near an even triangle its texture is: 1 for an equilateral one, 0 for a sliver)
+            area = abs((uvs[1] - uvs[0]).cross(uvs[2] - uvs[0]))
+            edges = sum((uvs[(k + 1) % 3] - uvs[k]).length_squared for k in range(3))
+            even = 4.0 * 3 ** 0.5 * area / max(1e-12, edges)
+            if area < 1e-5 or even < 0.15:  # (a sliver, or under about 2.6 texels of the 512 texture)
+                uvs = [uv_at(hit[0], hit[2])] * len(uvs)
+            for l, uv in zip(f.loops, uvs):
+                l[uvl].uv = uv
+        def uv_at(p, ti):
+            (a, ua), (b, ub), (c, uc) = tris[ti]
+            w = mathutils.geometry.barycentric_transform(p, a, b, c, mathutils.Vector((1, 0, 0)), mathutils.Vector((0, 1, 0)), mathutils.Vector((0, 0, 1)))
+            w = mathutils.Vector((max(0.0, w.x), max(0.0, w.y), max(0.0, w.z)))
+            w /= max(1e-6, w.x + w.y + w.z)
+            return ua * w.x + ub * w.y + uc * w.z
+        gone_tris = sum(len(f.verts) - 2 for f in old)
+        bmesh.ops.delete(bm, geom=old, context='FACES_ONLY')
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+        hand = cross_hands[s]
+        grip_mid = (GRIP_MID[0] * (1 if s == "R" else -1), GRIP_MID[1], GRIP_MID[2])
+        vs = []
+        for p, ws in zip(hand["verts"], hand["weights"]):
+            # (scaled about the pistol grip's middle, so the gun stays in the smaller fist: SoldierRig
+            # mounts it on the wrist with CROSS's numbers whatever the hand's size)
+            v = bm.verts.new(Mi @ (pivot + to_b([g + (c - g) * h_scale for c, g in zip(p, grip_mid)])))
+            for name, w in ws.items():
+                if name in gi:
+                    v[dl][gi[name]] = w
+            vs.append(v)
+        made = 0
+        for ids in hand["faces"]:
+            f = bm.faces.new([vs[i] for i in ids])
+            f.smooth = True
+            paint(f)
+            made += len(ids) - 2
+        # The arm's cut edge joined to his glove's open cuff with a band of faces, so the hand stays
+        # on the arm as the wrist bends (each side's edge: the edges with one face, there).
+        eb = gi["Elbow" + s]
+        new_set = set(vs)
+        rim_new = [e for e in bm.edges if e.is_boundary and all(v in new_set for v in e.verts)]
+        rim_arm = [e for e in bm.edges if e.is_boundary and not any(v in new_set for v in e.verts)
+                   and all(v[dl].get(wb, 0.0) + v[dl].get(eb, 0.0) >= 0.5 and HAND_CUT - 0.03 < along(v.co) < 0.08
+                           and (M @ v.co - pivot).length < 0.12 for v in e.verts)]
+        try:
+            band = bmesh.ops.bridge_loops(bm, edges=rim_new + rim_arm)["faces"]
+        except Exception as err:
+            band = []
+            print("WEIGHTS hand", s, "cuff not joined:", err)
+        for f in band:
+            f.smooth = True
+            paint(f)
+        print("WEIGHTS hand", s, "cuff joined to the arm: %d faces (edges %d and %d)" % (len(band), len(rim_new), len(rim_arm)))
+        print("WEIGHTS hand", s, "CROSS's in place of its own: %d triangles for %d" % (made, gone_tris))
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
 # HAND_CLEAN=k (environment): the dark creases baked between an open hand's fingers show as dark
 # marks across the knuckles once HAND_CURL closes it into a fist. On the texture, each hand's texels
 # (its faces wholly the wrist bone's, more than 5 cm past the wrist joint, so a watch or a cuff is left

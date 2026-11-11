@@ -27,49 +27,33 @@ export REMARGIN=4
 # The texture baked from the source at full detail, not the 20k working copy: reduced, a welded source
 # smears its texture across its seams (tan flecks on a black jacket; see stage1_reduce.py).
 export BAKE_FULL=1
-# Each hand turned at the wrist to hang as CROSS's does, so SoldierRig's pistol (CROSS's, mounted with his
-# numbers) sits in the fist (see stage4_rig.py; as Bishop's), and closed into a fist (FIST, below).
+# Each hand replaced with CROSS's own (user: "Cross' current hand model is the best fit for the game"):
+# his fists' shape, at the same place on the wrist, so SoldierRig's pistol (CROSS's, mounted with his
+# numbers) sits in them as in his; coloured from the skin's own hand (HAND_FROM, see stage4_rig.py and
+# extract_cross_hands.py). The wrist is first turned to hang as CROSS's does (HAND_LIKE), so the arm
+# runs into them as his does.
 export HAND_LIKE="-0.0546,-0.9743,-0.2186;-0.9328,-0.0283,0.3592"
+export HAND_FROM="$PWD/art_source/operative/cross_hands.json"
 POSE=""
 
 # The skin's own needs.
 # GUN: the source holds a silenced pistol in his right hand, which the game gives him itself; his
 # right hand and the pistol (a box from the hand down past the silencer, metres on the source stood on
 # the ground: x across, his right is -x; y front to back; z up) are replaced with his left hand mirrored
-# across (MIRROR_BOX, see stage1_reduce.py), which then closes round the game's pistol like the others'.
-# The sources are within millimetres of mirror images there. The box stops above the hand but just
-# under the watch on his left wrist (Casual, Tropical, Silent), so it isn't mirrored onto his right too.
+# across (MIRROR_BOX, see stage1_reduce.py), so the right hand takes its colour from a hand, not the gun.
+# The sources are within millimetres of mirror images there.
 # Where the mirrored hand meets his arm the bake left marks (a faint line, a dark speck, the left cuff's
 # cufflink on the right): the right wrist, from 8 cm up the arm to 6 cm past the joint, is despeckled
 # (WRIST_CLEAN, see stage4_rig.py).
 gun_box() {  # z0 (below the silencer's end), z1 (up the forearm, above the hand)
   export MIRROR_BOX="-0.45,-0.265,-1.0,$1,$2"
   export WRIST_CLEAN="-0.08,0.06"
-  fist
 }
-# BARE: bare hands: the dark creases between the open fingers, curled into a fist, are cleaned off the
-# knuckles, and light scratches and flecks on the hand despeckled (HAND_CLEAN, see stage4_rig.py;
-# texels darker than 85% of the hand's middle brightness).
+# BARE: bare hands: dark creases and flecks on the hand cleaned off the texture, so CROSS's fists take
+# an even skin colour from it (HAND_CLEAN, see stage4_rig.py; texels darker than 85% of the hand's middle
+# brightness).
 bare() {
   export HAND_CLEAN=0.85
-}
-# FIST: the hands closed round the grip as first made (curled 80 degrees whole, as Bishop's), the
-# rounder fists the user preferred to a compact, squared one; only the points left sticking out of them
-# (a thumb's tip, a fingertip) smoothed off (HAND_SPIKES: a vertex whose faces' corners add up to under
-# 300 degrees).
-fist() {
-  export HAND_CURL=80
-  export HAND_SPIKES=300
-}
-# OPEN: made with open hands, fingers spread out flat (Rebel, Future, Judge). Curled as they are, they
-# make hooks with spiked fingertips, not fists: the fingers are drawn in together across the hand and
-# shortened to half past the knuckles first, then curled 100 degrees, a fist round the grip
-# (HAND_NARROW, HAND_SHORTEN, HAND_CURL, see stage4_rig.py), its points smoothed off as above.
-open_hands() {
-  fist
-  export HAND_NARROW="0.035,0.4"
-  export HAND_SHORTEN=0.5
-  export HAND_CURL=100
 }
 case "$NAME" in
   shadow)    # long leather coat, sunglasses
@@ -91,15 +75,15 @@ case "$NAME" in
     export CENTRE=1
     gun_box 0.62 0.965; bare ;;
   rebel)     # suede jacket with a scorpion on the back; arms further out, lowered to the A-pose
-    open_hands; bare
+    bare
     POSE=slanted ;;
   future)    # cyber jacket, purple hair, fingerless gloves; arms further out
-    open_hands
     POSE=slanted ;;
   judge)     # armour and helmet, gloves; arms further out
-    open_hands
     POSE=slanted ;;
   *)
     echo "unknown skin: $NAME" >&2; exit 1 ;;
 esac
-exec art_source/operative/tools/build_character.sh "$NAME" "$SRC" game/player/skins "${2:-3000}" "${3:-512}" $POSE
+# 2,980: CROSS's hands and the band joining them to the arm come to about 20 more triangles than the
+# skin's own hands on some (Shadow's, Judge's), so the rest is reduced to that much less; 3,000 in all.
+exec art_source/operative/tools/build_character.sh "$NAME" "$SRC" game/player/skins "${2:-2980}" "${3:-512}" $POSE
