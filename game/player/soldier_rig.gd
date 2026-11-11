@@ -521,7 +521,7 @@ var _rib_seg := 0.0
 var _rib_width := 0.0
 var _rib_t := 0.0
 var _rib_cols: Array = []  # [joint, from, to (in its frame), radius] for each capsule the ribbons keep out of
-const RIBBON_CLEAR := 0.012  # how far off his body they keep (m)
+const RIBBON_CLEAR := 0.005  # how far off his body they keep (m)
 
 
 func _build_ribbons() -> void:
@@ -585,7 +585,7 @@ func _bone_points(bone: String, min_w: float) -> Array[Vector3]:
 
 ## What the ribbons can't pass through: rounded capsules down his head, neck, chest and back, each
 ## between two places on its joint (its own frame, so it turns with him) and as thick as most of the
-## model behind that joint (the 85th of each hundred of its vertices' distances back from the line
+## model behind that joint (the 75th of each hundred of its vertices' distances back from the line
 ## between them, of those behind it), measured at rest.
 func _build_ribbon_colliders() -> void:
 	var head_at := _in_rig(head).origin
@@ -607,7 +607,7 @@ func _build_ribbon_colliders() -> void:
 			if out.length() > 1e-4 and out.normalized().z > 0.6:
 				d.append(out.length())
 		d.sort()
-		var radius: float = d[int(d.size() * 0.85)] if d.size() > 4 else 0.08
+		var radius: float = d[int(d.size() * 0.75)] if d.size() > 4 else 0.08
 		var node: Node3D = c[1]
 		var inv := _in_rig(node).affine_inverse()
 		_rib_cols.append([node, inv * a, inv * b, radius])
