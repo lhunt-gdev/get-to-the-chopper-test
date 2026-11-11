@@ -828,9 +828,15 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
             em = bpy.data.images.load(os.environ["BACK_EMBLEM"])
             ew, eh = em.size
             epx = list(em.pixels)
-            tall = z1 - z0
+            # BACK_EMBLEM_FIT="scale,shift" (environment): the new emblem this share of the old one's
+            # height, about its middle, and moved this far across (m; + his right, the viewer's right
+            # from behind).
+            e_scale, e_shift = [float(v) for v in os.environ.get("BACK_EMBLEM_FIT", "1,0").split(",")]
+            zc = (z0 + z1) / 2.0
+            tall = (z1 - z0) * e_scale
+            z0, z1 = zc - tall / 2.0, zc + tall / 2.0
             wide = tall * ew / eh
-            cx = (x0 + x1) / 2.0
+            cx = (x0 + x1) / 2.0 + e_shift
             # (printed into the jacket: the emblem takes the suede's light and shade, each texel's brightness
             # against the jacket's middle brightness there, so it isn't a flat sticker on it)
             def lum(i):
@@ -856,14 +862,28 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
                             acc[c] += epx[k + c] * a
                         acc[3] += a
                 return acc
+            # BACK_EMBLEM_SHADOW="opacity,drop" (environment): a soft dark shadow just behind the emblem,
+            # so it stands off the pale suede: the emblem's shape, softened over half a centimetre and
+            # dropped this far (m) below it, darkening the jacket by this much at most.
+            sh_k, sh_drop = [float(v) for v in os.environ.get("BACK_EMBLEM_SHADOW", "0,0").split(",")]
+            SHADOW = (0.16, 0.11, 0.05)
+            ring = [mathutils.Vector((0.0, 0.0, 0.0))] + [mathutils.Vector((0.005 * math.cos(t * math.pi / 4.0), 0.0, 0.005 * math.sin(t * math.pi / 4.0))) for t in range(8)]
+            def shadow_at(p):
+                q = p + mathutils.Vector((0.0, 0.0, sh_drop))
+                return sum(sample(q + d)[3] for d in ring) / (4.0 * len(ring))
             for (x, y) in on_back:
+                i = (y * W + x) * 4
+                if sh_k > 0.0:
+                    s = max(shadow_at(p) for p in shared[(x, y)]) * sh_k
+                    if s > 0.0:
+                        for c in range(3):
+                            cpx[i + c] = cpx[i + c] * (1.0 - s) + SHADOW[c] * s
                 # (a texel shown at two places, mirrored across his back, takes the emblem where it
                 # covers more of them: a one-sided emblem can be right at only one of them)
                 acc = max((sample(p) for p in shared[(x, y)]), key=lambda s: s[3])
                 if acc[3] <= 0.0:
                     continue
                 a = acc[3] / 4.0
-                i = (y * W + x) * 4
                 shade = min(1.1, max(0.88, 1.0 + 0.5 * (lum(i) / lum_mid - 1.0)))  # (half the suede's shading, kept gentle)
                 for c in range(3):
                     cpx[i + c] = cpx[i + c] * (1.0 - a) + min(1.0, acc[c] / 4.0 * shade)

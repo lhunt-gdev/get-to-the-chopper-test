@@ -80,6 +80,10 @@ case "$NAME" in
     # where it was (BACK_EMBLEM, see stage4_rig.py; art_source/skins/rebel/tiger_source.png, the user's own
     # drawing, made gold on clear as tiger.png).
     export BACK_EMBLEM="${BACK_EMBLEM:-$PWD/art_source/skins/rebel/tiger.png}"  # (or cobra.png, the other choice)
+    # (85% of the scorpion's height, 3 cm to the right from behind; a soft shadow just behind it, a
+    # third dark at most, half a centimetre down, so it stands off the pale suede)
+    export BACK_EMBLEM_FIT="${BACK_EMBLEM_FIT:-0.85,0.03}"
+    export BACK_EMBLEM_SHADOW="${BACK_EMBLEM_SHADOW:-0.35,0.005}"
     POSE=slanted ;;
   future)    # cyber jacket, purple hair, fingerless gloves; arms further out
     POSE=slanted ;;
