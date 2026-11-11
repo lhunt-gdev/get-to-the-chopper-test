@@ -5,7 +5,7 @@
 # they aren't scaled). Nothing in the game loads them yet. See build_character.sh for the stages and
 # art_source/skins/README.md for each skin.
 # Usage (from the project root): art_source/operative/tools/build_skin.sh NAME [tris=3000] [tex=512]
-#   NAME: shadow, casual, tropical, midnight, silent, rebel or future
+#   NAME: shadow, casual, tropical, midnight, silent, rebel, future or street
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 NAME="${1:?skin name}"
@@ -91,6 +91,16 @@ case "$NAME" in
     # drawn as emblem.png).
     export BACK_EMBLEM="$PWD/art_source/skins/future/emblem.png"
     export BACK_EMBLEM_AT="${BACK_EMBLEM_AT:-0,1.23,1.49}"
+    POSE=slanted ;;
+  street)    # black leather jacket, red T-shirt, red headband, dark glasses, ripped jeans, red high-tops,
+             # fingerless gloves; arms further out
+    # CROSS's hands gloved in his own black leather, not patched with the skin his fingerless gloves
+    # show (HAND_DARK); the round patch on each high-top's ankle, a trainer brand's own mark, painted
+    # out in the shoe's red (ANKLE_PATCH; see stage4_rig.py).
+    export HAND_DARK=1
+    export ANKLE_PATCH=1
+    # (his splayed fingerless-glove hands: the arm traced on past their knuckles to his real fingertips)
+    export ARM_TRACE="0.09,3"
     POSE=slanted ;;
   *)
     echo "unknown skin: $NAME" >&2; exit 1 ;;

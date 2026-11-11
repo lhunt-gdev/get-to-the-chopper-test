@@ -6930,7 +6930,7 @@ func _operative_model(path: String) -> Dictionary:
 
 
 ## CROSS's skins (V2; the decision log's "Eight skins for CROSS", Judge since taken out), in game/player/skins.
-const CROSS_SKINS: Array[String] = ["shadow", "casual", "tropical", "midnight", "silent", "rebel", "future", "jungle"]
+const CROSS_SKINS: Array[String] = ["shadow", "casual", "tropical", "midnight", "silent", "rebel", "future", "jungle", "street"]
 
 
 ## Where an operative's model is: Bishop and Vesper in game/player, CROSS's skins in game/player/skins.

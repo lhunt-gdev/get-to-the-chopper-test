@@ -90,3 +90,17 @@ A tech insignia drawn for the game on his back (`future/emblem.svg`, drawn as `f
 hexagon round a cyber skull, circuit traces running out to nodes, in his jacket's own violet, the
 skull a lighter violet like lit trim, its eyes lit. His jacket has no emblem of its own, so it's placed at a set spot
 (`BACK_EMBLEM_AT`, stage 4: centred, from 1.23 to 1.49 m up, high between his shoulder blades), nothing filled.
+
+## The Street Operative
+
+Built as the others (`build_skin.sh street`; his arms lowered from further out, as Rebel's and Future's).
+Three of his own settings:
+- `ARM_TRACE="0.09,3"` (stage 4): his open fingerless-glove hands have the thumb and fingers splayed, and
+  the arm's outline jumps at the knuckles; traced no further, his fingertips came out 15 cm high, his
+  wrist joints up by his rolled sleeves, and CROSS's hands went on there with his forearms cut off. The
+  arm is followed on past a bigger jump and over a few missing steps, to his real fingertips.
+- `HAND_DARK=1` (stage 4): CROSS's hands coloured only from the dark of his own (his gloves' leather),
+  so they come out gloved rather than patched with the skin his fingerless gloves show.
+- `ANKLE_PATCH=1` (stage 4): the round patch on the side of each high-top's ankle (a trainer brand's own
+  mark) painted out in the shoe's red: the neutral light texels on the sides of the shoes behind the
+  ankle joints, and the patch's dark middle and edge, take the middle colour of the shoe's red there.

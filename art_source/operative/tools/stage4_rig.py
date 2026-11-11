@@ -80,12 +80,18 @@ if os.environ.get("CROTCH"):
 # to where it ends, the fingertips.
 def mid(i):
     return (i[0] + i[1]) / 2.0
+# ARM_TRACE="jump,gaps" (environment): how far the arm's section may move from one step down to the next
+# (m; 0.05 unless set) and how many steps it may go missing before the hand counts as ended (0 unless
+# set). An open hand with its thumb and fingers splayed (the Street Operative's fingerless gloves) jumps
+# at the knuckles: followed no further, his fingertips came out 15 cm high and his forearms were cut off.
+trace_jump, trace_gaps = [float(v) for v in os.environ.get("ARM_TRACE", "0.05,0").split(",")]
 arms = {}
 for side in (1, -1):
     z = h * 0.8
     armpit = None
     line = []
     prev = None
+    missed = 0
     while z > 0.4:
         iv = intervals(z, side)
         if armpit is None:
@@ -96,9 +102,14 @@ for side in (1, -1):
                 line.append((z, mid(arm), arm))
                 prev = mid(arm)
         else:
-            near = [i for i in iv if abs(mid(i) - prev) < 0.05]
+            near = [i for i in iv if abs(mid(i) - prev) < trace_jump]
             if not near:
-                break  # the hand has ended
+                missed += 1
+                if missed > trace_gaps:
+                    break  # the hand has ended
+                z -= 0.01
+                continue
+            missed = 0
             arm = min(near, key=lambda i: abs(mid(i) - prev))
             line.append((z, mid(arm), arm))
             prev = mid(arm)
@@ -551,6 +562,19 @@ if os.environ.get("HAND_FROM"):
         cross_hands = json.load(fh)
     h_scale = float(os.environ.get("HAND_SCALE", "1"))
     HAND_CUT = float(os.environ.get("HAND_CUT", "-0.02"))
+    # HAND_DARK=1 (environment): his hands coloured only from the dark of his own (a fingerless glove's
+    # leather: the Street Operative's), so CROSS's fists come out gloved, not patched with skin.
+    HAND_DARK = os.environ.get("HAND_DARK") == "1"
+    _img = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
+    _tw, _th = _img.size
+    _tpx = _img.pixels[:] if HAND_DARK else None
+    def tex_lum(f):
+        """The texture's brightness at a face's middle."""
+        uvs = [l[uvl].uv for l in f.loops]
+        u = sum(p.x for p in uvs) / len(uvs)
+        v = sum(p.y for p in uvs) / len(uvs)
+        i = (min(_th - 1, max(0, int(v * _th))) * _tw + min(_tw - 1, max(0, int(u * _tw)))) * 4
+        return 0.3 * _tpx[i] + 0.59 * _tpx[i + 1] + 0.11 * _tpx[i + 2]
     GRIP_MID = (-0.004, -0.096, -0.0025)  # (the pistol grip's middle from the right wrist at rest, Godot axes; the left's is its mirror)
     def to_b(v):  # Godot axes to Blender's
         return mathutils.Vector((v[0], -v[2], v[1]))
@@ -573,6 +597,8 @@ if os.environ.get("HAND_FROM"):
         for f in old:
             if min(along(v.co) for v in f.verts) < 0.05:
                 continue  # (the colours from the hand itself, not a watch or a cuff at the wrist)
+            if HAND_DARK and tex_lum(f) > 0.22:
+                continue  # (HAND_DARK: only its glove, for a hand gloved in places)
             ls = f.loops
             for k in range(1, len(ls) - 1):
                 tris.append([(M @ l.vert.co, l[uvl].uv.copy()) for l in (ls[0], ls[k], ls[k + 1])])
@@ -699,7 +725,7 @@ def despeckle(texels, far=0.14, rad=2):
         i = (y * W + x) * 4
         cpx[i:i + 3] = c
     return len(fix)
-if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM"):
+if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM") or os.environ.get("ANKLE_PATCH"):
     cimg = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
     W, H = cimg.size
     cpx = list(cimg.pixels)
@@ -899,6 +925,63 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
                   % (len(gold), laid, wide, tall, z0, z1))
         else:
             print("WEIGHTS back emblem: no old emblem found")
+    # ANKLE_PATCH=1 (environment): a round light patch on the side of each high-top's ankle (a trainer
+    # brand's own mark: the Street Operative's) painted out in the shoe's colour. On the faces of his
+    # feet that face sideways (not the laces on top, not the soles), 6 to 18 cm up, the light texels
+    # take the middle colour of the rest of those faces' texels, a little of their own light and
+    # shade kept.
+    if os.environ.get("ANKLE_PATCH") == "1":
+        legs = {gi[n] for n in ("AnkleR", "AnkleL", "KneeR", "KneeL")}
+        side = set()
+        for t in me.loop_triangles:
+            if not all(sum(g.weight for g in me.vertices[i].groups if g.group in legs) >= 0.5 for i in t.vertices):
+                continue
+            nrm = (M.to_3x3() @ t.normal).normalized()
+            P = [M @ me.vertices[i].co for i in t.vertices]
+            c3 = (P[0] + P[1] + P[2]) / 3.0
+            ankle = min((pos["AnkleR"], pos["AnkleL"]), key=lambda a: abs(a.x - c3.x))
+            # (the side of the shoe behind the ankle joint, where the patch is: not the laces in front)
+            if abs(nrm.x) < 0.5 or not (0.06 < c3.z < 0.2) or c3.y > ankle.y + 0.01:
+                continue
+            p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+            area = (p[1] - p[0]).cross(p[2] - p[0])
+            if abs(area) < 1e-9:
+                continue
+            for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+                for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                    c = mathutils.Vector((x + 0.5, y + 0.5))
+                    w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                    w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                    if min(w0, w1, 1.0 - w0 - w1) >= -0.02:
+                        side.add((x, y))
+        def lum_at(q):
+            i = (q[1] * W + q[0]) * 4
+            return 0.3 * cpx[i] + 0.59 * cpx[i + 1] + 0.11 * cpx[i + 2]
+        def sat_at(q):
+            i = (q[1] * W + q[0]) * 4
+            mx, mn = max(cpx[i:i + 3]), min(cpx[i:i + 3])
+            return (mx - mn) / max(mx, 1e-4)
+        def neutral(q):
+            """Grey to white, not the denim's blue."""
+            i = (q[1] * W + q[0]) * 4
+            return sat_at(q) < 0.35 and cpx[i + 2] < cpx[i] + 0.04
+        def red(q):
+            i = (q[1] * W + q[0]) * 4
+            return cpx[i] > cpx[i + 1] + 0.12 and cpx[i] > cpx[i + 2] + 0.08
+        light = {q for q in side if lum_at(q) > 0.45 and neutral(q)}
+        # (and the patch's dark middle, inside it)
+        light |= {(x + dx, y + dy) for (x, y) in light for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2)
+                  if (x + dx, y + dy) in side and neutral((x + dx, y + dy))}
+        # (and its edge, a texel round it that isn't the shoe's full red)
+        light |= {(x + dx, y + dy) for (x, y) in light for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                  if (x + dx, y + dy) in side and not red((x + dx, y + dy))}
+        rest = [q for q in side if q not in light and red(q)]
+        if rest and light:
+            mid = [sorted(cpx[(q[1] * W + q[0]) * 4 + k] for q in rest)[len(rest) // 2] for k in range(3)]
+            for q in light:
+                i = (q[1] * W + q[0]) * 4
+                cpx[i:i + 3] = mid
+        print("WEIGHTS ankle patches painted out:", len(light), "texels of", len(side))
     # The margins round the texture's pieces made again from the cleaned colours, 4 texels out (as
     # REMARGIN in stage 3): they still held the colours from before, and a triangle's edge reads a texel
     # or two of them (a dotted line along Midnight's cuff where it meets his hand).
