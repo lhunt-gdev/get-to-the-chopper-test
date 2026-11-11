@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dyot6ew8swk20"
-path="res://.godot/imported/rebel_rebel_3000_512.png-ab6eb378e6d1ecde548b2e9055186a5b.ctex"
+uid="uid://bart3e8d70bfd"
+path="res://.godot/imported/future_future_2980_512.png-a56d187c2eecdeddbacede1a65fe9bd0.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "3cce8254d0eecb9d79de7580ec010753"
+"md5": "a9251001a3528dd9b086e823403d1aeb"
 }
 
 [deps]
 
-source_file="res://game/player/skins/rebel_rebel_3000_512.png"
-dest_files=["res://.godot/imported/rebel_rebel_3000_512.png-ab6eb378e6d1ecde548b2e9055186a5b.ctex"]
+source_file="res://game/player/skins/future_future_2980_512.png"
+dest_files=["res://.godot/imported/future_future_2980_512.png-a56d187c2eecdeddbacede1a65fe9bd0.ctex"]
 
 [params]
 

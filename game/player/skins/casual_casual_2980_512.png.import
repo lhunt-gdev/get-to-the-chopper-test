@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c0svf06f7iq34"
-path="res://.godot/imported/judge_judge_3000_512.png-5448829c4db46d821398d4120e47a52a.ctex"
+uid="uid://bxgejfs1mrpox"
+path="res://.godot/imported/casual_casual_2980_512.png-542666223d0504fa45c6a8acc4a86064.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "b31bcc21049f78555e662ea015c05e44"
+"md5": "36c97c6eef21b23026fd978ad2cd20ea"
 }
 
 [deps]
 
-source_file="res://game/player/skins/judge_judge_3000_512.png"
-dest_files=["res://.godot/imported/judge_judge_3000_512.png-5448829c4db46d821398d4120e47a52a.ctex"]
+source_file="res://game/player/skins/casual_casual_2980_512.png"
+dest_files=["res://.godot/imported/casual_casual_2980_512.png-542666223d0504fa45c6a8acc4a86064.ctex"]
 
 [params]
 

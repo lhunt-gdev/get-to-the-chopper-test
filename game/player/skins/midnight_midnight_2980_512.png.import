@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bqykglvomtsf2"
-path="res://.godot/imported/midnight_midnight_3000_512.png-243ab7c4d56e62403b2b0f192168408d.ctex"
+uid="uid://d6i3yn0d16op"
+path="res://.godot/imported/midnight_midnight_2980_512.png-da90a1adca605dc90a585afcd9c6f117.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "06fac757ffd71226add55ab9867d1ec9"
+"md5": "dc5a0e2fc751c5f9b3029921e0615819"
 }
 
 [deps]
 
-source_file="res://game/player/skins/midnight_midnight_3000_512.png"
-dest_files=["res://.godot/imported/midnight_midnight_3000_512.png-243ab7c4d56e62403b2b0f192168408d.ctex"]
+source_file="res://game/player/skins/midnight_midnight_2980_512.png"
+dest_files=["res://.godot/imported/midnight_midnight_2980_512.png-da90a1adca605dc90a585afcd9c6f117.ctex"]
 
 [params]
 

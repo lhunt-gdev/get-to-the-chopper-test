@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dtmkg4ctnox0l"
-path="res://.godot/imported/shadow_shadow_3000_512.png-47aec50f2b139caf3a15211d9e73d6fb.ctex"
+uid="uid://bb14rsnv1hfqu"
+path="res://.godot/imported/judge_judge_2980_512.png-0f771288cdf01d11774fa480864b2302.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "0bedd6fa6df4044efeba8c905cc72686"
+"md5": "2c6a26309670263934f1803fe736eb7d"
 }
 
 [deps]
 
-source_file="res://game/player/skins/shadow_shadow_3000_512.png"
-dest_files=["res://.godot/imported/shadow_shadow_3000_512.png-47aec50f2b139caf3a15211d9e73d6fb.ctex"]
+source_file="res://game/player/skins/judge_judge_2980_512.png"
+dest_files=["res://.godot/imported/judge_judge_2980_512.png-0f771288cdf01d11774fa480864b2302.ctex"]
 
 [params]
 

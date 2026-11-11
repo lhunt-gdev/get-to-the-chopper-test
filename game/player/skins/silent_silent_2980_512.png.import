@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bbprfkr0128vn"
-path="res://.godot/imported/tropical_tropical_3000_512.png-8d1f5ebfa1228d0b961b644f35bb0e40.ctex"
+uid="uid://nvu6fincco3i"
+path="res://.godot/imported/silent_silent_2980_512.png-4e3ed7e6ded81c5e3d8c32aeccab81d0.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "8a819ebc430a1380691ea66957e75c93"
+"md5": "b5f827d169088a6ff9f93d535e15ffcb"
 }
 
 [deps]
 
-source_file="res://game/player/skins/tropical_tropical_3000_512.png"
-dest_files=["res://.godot/imported/tropical_tropical_3000_512.png-8d1f5ebfa1228d0b961b644f35bb0e40.ctex"]
+source_file="res://game/player/skins/silent_silent_2980_512.png"
+dest_files=["res://.godot/imported/silent_silent_2980_512.png-4e3ed7e6ded81c5e3d8c32aeccab81d0.ctex"]
 
 [params]
 
