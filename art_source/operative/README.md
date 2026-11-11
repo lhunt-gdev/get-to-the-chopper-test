@@ -83,7 +83,7 @@ CROSS's does). Bishop, Vesper and the skins all have CROSS's own hands (`HAND_FR
 `cross_hands.json`, which `extract_cross_hands.py` lifts out of his finished model; `HAND_SCALE` for
 Vesper's, smaller), so SoldierRig's pistol sits in every fist as in his.
 
-`build_skin.sh <name>` builds one of CROSS's eight skins (`art_source/skins/<name>/`, into
+`build_skin.sh <name>` builds one of CROSS's seven skins (`art_source/skins/<name>/`, into
 `game/player/skins/`; nothing loads them yet), each skin's settings in a `case` block in the script.
 They brought in more options, each off unless a build sets it: `BAKE_FULL` (stage 1 keeps the source
 at full detail and stage 3 bakes from it, not the 20k copy, whose texture smears across a welded

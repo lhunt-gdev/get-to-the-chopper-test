@@ -699,7 +699,7 @@ def despeckle(texels, far=0.14, rad=2):
         i = (y * W + x) * 4
         cpx[i:i + 3] = c
     return len(fix)
-if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN"):
+if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM"):
     cimg = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
     W, H = cimg.size
     cpx = list(cimg.pixels)
@@ -739,6 +739,108 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN"):
     if os.environ.get("WRIST_CLEAN"):
         w_from, w_to = [float(x) for x in os.environ["WRIST_CLEAN"].split(",")]
         specks += despeckle(hand_texels(1, w_from, w_to, whole=False))
+    # BACK_EMBLEM=<png> (environment): the emblem on the back of a jacket replaced with another (Rebel's
+    # scorpion, the signature of a well-known film's jacket, with his own cobra; the decision log's
+    # "Eight skins for CROSS"). On the back of his torso (faces facing back, between his shoulder
+    # blades and his waist), the old emblem's texels (gold: saturated, yellow to orange) are found and
+    # filled from the jacket round them, each from the nearest texel that isn't; then the new emblem
+    # (art_source/skins/rebel/cobra.png, from cobra.svg) is laid over where the old one was, as tall as
+    # it was and centred on it, seen from behind (its left on his left).
+    if os.environ.get("BACK_EMBLEM"):
+        import colorsys
+        on_back = {}  # texel -> where it is on him (m)
+        for t in me.loop_triangles:
+            nrm = (M.to_3x3() @ t.normal).normalized()
+            if nrm.y > -0.35:
+                continue
+            P = [M @ me.vertices[i].co for i in t.vertices]
+            c3 = (P[0] + P[1] + P[2]) / 3.0
+            if abs(c3.x) > 0.2 or not (pos["Hips"].z < c3.z < pos["Neck"].z):
+                continue
+            p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+            area = (p[1] - p[0]).cross(p[2] - p[0])
+            if abs(area) < 1e-9:
+                continue
+            for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+                for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                    c = mathutils.Vector((x + 0.5, y + 0.5))
+                    w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                    w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                    w2 = 1.0 - w0 - w1
+                    if min(w0, w1, w2) >= -0.02:
+                        on_back[(x, y)] = P[0] * w0 + P[1] * w1 + P[2] * w2
+        def hsv(q):
+            i = (q[1] * W + q[0]) * 4
+            return colorsys.rgb_to_hsv(cpx[i], cpx[i + 1], cpx[i + 2])
+        def is_gold(q, s_min):
+            h, s, v = hsv(q)
+            return 0.04 < h < 0.18 and s > s_min and v > 0.2
+        gold = {q for q in on_back if is_gold(q, 0.3)}
+        # (its soft edges: texels next to it a little gold too)
+        for _ in range(2):
+            gold |= {(x + dx, y + dy) for (x, y) in gold for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                     if (x + dx, y + dy) in on_back and is_gold((x + dx, y + dy), 0.16)}
+        src_of = {q: q for q in on_back if q not in gold}
+        front = list(src_of)
+        while front:
+            nxt = []
+            for (x, y) in front:
+                for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    q = (x + d[0], y + d[1])
+                    if q in gold and q not in src_of:
+                        src_of[q] = src_of[(x, y)]
+                        nxt.append(q)
+            front = nxt
+        for q in gold:
+            f = src_of.get(q)
+            if f:
+                i, j = (q[1] * W + q[0]) * 4, (f[1] * W + f[0]) * 4
+                cpx[i:i + 3] = cpx[j:j + 3]
+        # (the filled patch softened a little, so it doesn't streak)
+        soft = {}
+        for (x, y) in gold:
+            near = [(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (x + dx, y + dy) in on_back]
+            soft[(x, y)] = [sum(cpx[(n[1] * W + n[0]) * 4 + k] for n in near) / len(near) for k in range(3)]
+        for (x, y), c in soft.items():
+            cpx[(y * W + x) * 4:(y * W + x) * 4 + 3] = c
+        if gold:
+            where = [on_back[q] for q in gold]
+            x0, x1 = min(p.x for p in where), max(p.x for p in where)
+            z0, z1 = min(p.z for p in where), max(p.z for p in where)
+            em = bpy.data.images.load(os.environ["BACK_EMBLEM"])
+            ew, eh = em.size
+            epx = list(em.pixels)
+            tall = z1 - z0
+            wide = tall * ew / eh
+            cx = (x0 + x1) / 2.0
+            laid = 0
+            for (x, y), p in on_back.items():
+                u = (p.x - cx) / wide + 0.5
+                v = (z1 - p.z) / tall  # (from its top)
+                if not (0.0 <= u < 1.0 and 0.0 <= v < 1.0):
+                    continue
+                # (2 x 2 samples of the emblem in the texel, so its edges aren't jagged)
+                acc = [0.0, 0.0, 0.0, 0.0]
+                for su in (0.25, 0.75):
+                    for sv in (0.25, 0.75):
+                        ex = min(ew - 1, int(u * ew + (su - 0.5)))
+                        ey = min(eh - 1, int(v * eh + (sv - 0.5)))
+                        k = ((eh - 1 - max(0, ey)) * ew + max(0, ex)) * 4  # (Blender's rows go up)
+                        a = epx[k + 3]
+                        for c in range(3):
+                            acc[c] += epx[k + c] * a
+                        acc[3] += a
+                if acc[3] <= 0.0:
+                    continue
+                a = acc[3] / 4.0
+                i = (y * W + x) * 4
+                for c in range(3):
+                    cpx[i + c] = cpx[i + c] * (1.0 - a) + acc[c] / 4.0
+                laid += 1
+            print("WEIGHTS back emblem: %d texels of the old one filled, the new one laid on %d (%.2f x %.2f m, %.2f to %.2f m up)"
+                  % (len(gold), laid, wide, tall, z0, z1))
+        else:
+            print("WEIGHTS back emblem: no old emblem found")
     # The margins round the texture's pieces made again from the cleaned colours, 4 texels out (as
     # REMARGIN in stage 3): they still held the colours from before, and a triangle's edge reads a texel
     # or two of them (a dotted line along Midnight's cuff where it meets his hand).

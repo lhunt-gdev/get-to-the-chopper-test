@@ -1,7 +1,8 @@
 # CROSS's skins: source art
 
-Eight more of the user's designs, "Cross variation skins, so same hight as Cross": **Shadow, Casual,
-Tropical, Midnight, Silent, Rebel, Future and Judge** Operative. Each is a skin to swap with CROSS's in
+Seven of the user's designs, "Cross variation skins, so same hight as Cross": **Shadow, Casual,
+Tropical, Midnight, Silent, Rebel and Future** Operative (an eighth, Judge, was taken out: too close to a
+well-known comic-book character). Each is a skin to swap with CROSS's in
 the game later; nothing in the game loads them yet (see the decision log, "Eight skins for CROSS").
 Godot ignores this folder.
 
@@ -44,14 +45,14 @@ in the fist. Besides those, new with the skins (each off unless a build sets it)
   the wrist): bare skin, or the skin's own gloves. The watches (Casual, Tropical, Silent) go under the
   cuff. (Tried before: the skins' own hands curled closed, `HAND_CURL` with `HAND_SPIKES`, `HAND_NARROW`,
   `HAND_SHORTEN`, `HAND_TUCK`; and a fist modelled new with the thumb and the index finger on their own.)
-- `HAND_CLEAN` (stage 4): bare hands (all but Future's and Judge's gloves): dark creases and flecks on
+- `HAND_CLEAN` (stage 4): bare hands (all but Future's gloves): dark creases and flecks on
   the hand are cleaned off the texture with the hand's own tone before CROSS's hands take their colour
   from it; then the margins round the texture's pieces are made again from the cleaned colours.
 - Shadow's coat (stages 3 and 4): his long coat is cut up the back along its own vent, from below the hem
   to 4 cm under the crotch (`CUT_LEGS`, as Vesper's thighs), so each side of it goes with its own leg and
   in a stride the back panel no longer stretches across between his legs; and his crotch, hidden by the
   coat, is put at CROSS's share of his height (`CROTCH`).
-- Rebel, Future and Judge are made with their arms further out (35 to 40 degrees from hanging); stage 1b
+- Rebel and Future are made with their arms further out (35 to 40 degrees from hanging); stage 1b
   (`slanted`) lowers them to CROSS's A-pose, level front to back.
 
 After the first import, check each `game/player/skins/<name>_<name>_2980_512.png.import` has

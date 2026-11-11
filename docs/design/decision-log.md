@@ -131,15 +131,18 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Not yet:** as Bishop: nothing in the game loads her. As a skin she's shorter, so how CROSS's poses sit on a shorter body (his gun, the cover heights, the camera) is for when the swap is built.
 
 ### PROPOSED — Eight skins for CROSS (user, 2026-11-10; V2 only, not in the game yet)
-- **Why (user):** eight more of the user's high-poly models, "Cross variation skins, so same hight as Cross": **Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future and Judge** Operative.
+- **Why (user):** eight more of the user's high-poly models, "Cross variation skins, so same hight as Cross": **Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future** and Judge Operative (Judge since taken out, below).
 - **How:** as Bishop and Vesper (above): each source (`art_source/skins/<name>/<name>.glb`, gitignored) reduced to 3,000 triangles with a 512 texture, at CROSS's height, rigged with the same 19 joints so all his poses fit, his gun in their fists; Rebel, Future and Judge have their arms further out and are lowered to his A-pose first. Built to `game/player/skins/<name>.glb`, one build script for all of them.
 - **Their fists (user):** rounded, the fingers curled round the grip as first made, only a point left sticking out smoothed off. (A compact, squared fist with the thumb tucked in was tried; user: "No I don't like the blockier hands.")
+- **Judge taken out (user, 2026-11-11):** "Take judge out completely": his armour, helmet, badge and name sat too close to a well-known comic-book character. Seven skins now.
+- **Rebel's jacket (user, 2026-11-11):** the scorpion on its back (the signature of a well-known film's jacket) replaced with a **coiled cobra** of his own, in the same gold ("I'm leaning more for cobra so go with that first let's see how it looks"; a tiger, as on a souvenir jacket, the other choice).
+- **Shadow stays as he is (user):** a long black coat and dark glasses are an everyday look, "fine to be inspired by".
 - **Not yet:** nothing in the game loads them; how skins are unlocked and picked is to be worked out with Bishop's and Vesper's.
 
 ### PROPOSED — CROSS's hands on every operative (user, 2026-11-11; V2 only)
 - **Why (user):** "i think Cross' current hand model is the best fit for the game and i would like all other models to have the same hand model (scaled down on Vesper)". (Tried first: a fist modelled new for each, a thumb and the index finger on their own, the index along the gun's frame; user: "no im not a fan of this".)
-- **What:** Bishop, Vesper and the eight skins (Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future, Judge) each have their hands replaced with CROSS's own, his fists' shape exactly, at the same place on the wrist, so the pistol sits in them as it does in his. Vesper's are scaled down to her size (about 93% of his). The guards and the other enemies keep their own hands.
-- **Their colour:** each model's new hands take their colour from its own hands (bare skin, Future's fingerless gloves, Judge's armoured gloves, Midnight's cuffs), not CROSS's black gloves.
+- **What:** Bishop, Vesper and the skins (Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future) each have their hands replaced with CROSS's own, his fists' shape exactly, at the same place on the wrist, so the pistol sits in them as it does in his. Vesper's are scaled down to her size (about 93% of his). The guards and the other enemies keep their own hands.
+- **Their colour:** each model's new hands take their colour from its own hands (bare skin, Future's fingerless gloves, Vesper's black gloves), not CROSS's black gloves.
 - **Replaces:** the skins' rounded curled fists (above) and Bishop's and Vesper's.
 
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)

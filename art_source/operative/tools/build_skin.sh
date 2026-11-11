@@ -5,7 +5,7 @@
 # they aren't scaled). Nothing in the game loads them yet. See build_character.sh for the stages and
 # art_source/skins/README.md for each skin.
 # Usage (from the project root): art_source/operative/tools/build_skin.sh NAME [tris=3000] [tex=512]
-#   NAME: shadow, casual, tropical, midnight, silent, rebel, future or judge
+#   NAME: shadow, casual, tropical, midnight, silent, rebel or future
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 NAME="${1:?skin name}"
@@ -74,16 +74,17 @@ case "$NAME" in
   silent)    # black sneaking suit, shoulder holster; made 8 mm to one side, so centred first
     export CENTRE=1
     gun_box 0.62 0.965; bare ;;
-  rebel)     # suede jacket with a scorpion on the back; arms further out, lowered to the A-pose
+  rebel)     # suede jacket with a cobra on the back; arms further out, lowered to the A-pose
     bare
+    # The source's scorpion on his back (a well-known film's jacket's) painted out and his own cobra laid
+    # where it was (BACK_EMBLEM, see stage4_rig.py; art_source/skins/rebel/cobra.svg, drawn as cobra.png).
+    export BACK_EMBLEM="$PWD/art_source/skins/rebel/cobra.png"
     POSE=slanted ;;
   future)    # cyber jacket, purple hair, fingerless gloves; arms further out
-    POSE=slanted ;;
-  judge)     # armour and helmet, gloves; arms further out
     POSE=slanted ;;
   *)
     echo "unknown skin: $NAME" >&2; exit 1 ;;
 esac
 # 2,980: CROSS's hands and the band joining them to the arm come to about 20 more triangles than the
-# skin's own hands on some (Shadow's, Judge's), so the rest is reduced to that much less; 3,000 in all.
+# skin's own hands on some (Shadow's), so the rest is reduced to that much less; 3,000 in all.
 exec art_source/operative/tools/build_character.sh "$NAME" "$SRC" game/player/skins "${2:-2980}" "${3:-512}" $POSE
