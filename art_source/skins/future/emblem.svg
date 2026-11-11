@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <!-- Future's jacket emblem: a tech insignia drawn for the game. A hexagon round an upward chevron,
+       circuit traces running out to either side and down to nodes. His jacket's own violet, its core
+       a lighter violet like lit trim. -->
+  <g fill="none" stroke="#7d3da3" stroke-linecap="square" stroke-linejoin="miter">
+    <!-- the circuit traces: out from the hexagon's sides, stepping down, to nodes -->
+    <path d="M68,96 L52,96 L36,112 L14,112" stroke-width="7"/>
+    <path d="M172,96 L188,96 L204,112 L226,112" stroke-width="7"/>
+    <path d="M68,144 L58,144 L44,158 L44,184" stroke-width="7"/>
+    <path d="M172,144 L182,144 L196,158 L196,184" stroke-width="7"/>
+    <path d="M120,182 L120,214" stroke-width="7"/>
+    <path d="M100,176 L86,190 L86,222" stroke-width="5"/>
+    <path d="M140,176 L154,190 L154,222" stroke-width="5"/>
+    <path d="M120,58 L120,30" stroke-width="7"/>
+    <!-- the hexagon -->
+    <path d="M120,58 L172,88 L172,150 L120,180 L68,150 L68,88 Z" stroke-width="10"/>
+  </g>
+  <!-- the nodes at the traces' ends -->
+  <g fill="#7d3da3">
+    <rect x="2" y="105" width="15" height="15"/>
+    <rect x="223" y="105" width="15" height="15"/>
+    <rect x="37" y="182" width="15" height="15"/>
+    <rect x="189" y="182" width="15" height="15"/>
+    <rect x="113" y="212" width="15" height="15"/>
+    <rect x="80" y="220" width="12" height="12"/>
+    <rect x="148" y="220" width="12" height="12"/>
+    <rect x="113" y="16" width="15" height="15"/>
+  </g>
+  <!-- the chevron, lit, and the bar under it -->
+  <path d="M120,80 L150,118 L134,118 L120,100 L106,118 L90,118 Z" fill="#b682de"/>
+  <path d="M120,112 L150,150 L134,150 L120,132 L106,150 L90,150 Z" fill="#b682de"/>
+</svg>

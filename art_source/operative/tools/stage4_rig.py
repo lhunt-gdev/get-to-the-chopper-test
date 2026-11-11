@@ -780,7 +780,10 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
         def is_gold(q, s_min):
             h, s, v = hsv(q)
             return 0.04 < h < 0.18 and s > s_min and v > 0.4  # (bright: not his brown waistband)
-        gold = {q for q in on_back if is_gold(q, 0.3)}
+        # BACK_EMBLEM_AT="x,z0,z1" (environment): a jacket with no emblem of its own (Future's): the new one
+        # placed there instead (its middle across, m, and from its foot to its top, m up), nothing filled.
+        at = os.environ.get("BACK_EMBLEM_AT")
+        gold = set() if at else {q for q in on_back if is_gold(q, 0.3)}
         # (its soft edges: texels next to it a little gold too)
         for _ in range(2):
             gold |= {(x + dx, y + dy) for (x, y) in gold for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
@@ -821,10 +824,14 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
             fill[q] = [min(1.0, c * blotch(p)) for c in mid]
         for (x, y), c in fill.items():
             cpx[(y * W + x) * 4:(y * W + x) * 4 + 3] = c
-        if gold:
-            where = [on_back[q] for q in gold]
-            x0, x1 = min(p.x for p in where), max(p.x for p in where)
-            z0, z1 = min(p.z for p in where), max(p.z for p in where)
+        if gold or at:
+            if at:
+                xa, z0, z1 = [float(v) for v in at.split(",")]
+                x0 = x1 = xa
+            else:
+                where = [on_back[q] for q in gold]
+                x0, x1 = min(p.x for p in where), max(p.x for p in where)
+                z0, z1 = min(p.z for p in where), max(p.z for p in where)
             em = bpy.data.images.load(os.environ["BACK_EMBLEM"])
             ew, eh = em.size
             epx = list(em.pixels)

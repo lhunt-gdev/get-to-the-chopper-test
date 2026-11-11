@@ -83,3 +83,10 @@ same gold over a soft dark shadow (`BACK_EMBLEM_SHADOW`, so it stands off the pa
 shade. The emblem is **the user's own tiger** (`rebel/tiger_source.png`, black on white, made a deeper gold (0.72, 0.47, 0.07) on clear
 as `rebel/tiger.png`). The other choice, a cobra drawn for the game (`rebel/cobra.svg`, `cobra.png`):
 `BACK_EMBLEM=$PWD/art_source/skins/rebel/cobra.png art_source/operative/tools/build_skin.sh rebel`.
+
+## Future's jacket
+
+A tech insignia drawn for the game on his back (`future/emblem.svg`, drawn as `future/emblem.png`): a
+hexagon round an upward chevron, circuit traces running out to nodes, in his jacket's own violet, the
+chevron a lighter violet like lit trim. His jacket has no emblem of its own, so it's placed at a set spot
+(`BACK_EMBLEM_AT`, stage 4: centred, from 1.18 to 1.44 m up, between his shoulder blades), nothing filled.
