@@ -567,6 +567,10 @@ if os.environ.get("HAND_FROM"):
     HAND_DARK = os.environ.get("HAND_DARK") == "1"
     _img = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
     _tw, _th = _img.size
+    # HAND_FINGERLESS=run (environment): fingerless gloves (the Street Operative's): with HAND_DARK, CROSS's
+    # fingers past this far along his hand from the wrist (m) coloured from the skin of his own hand,
+    # the rest from his gloves' leather.
+    HAND_FINGERLESS = float(os.environ.get("HAND_FINGERLESS", "0"))
     _tpx = _img.pixels[:] if HAND_DARK else None
     def tex_lum(f):
         """The texture's brightness at a face's middle."""
@@ -594,32 +598,40 @@ if os.environ.get("HAND_FROM"):
         eb0 = gi["Elbow" + s]
         old = [f for f in bm.faces if all(v[dl].get(wb, 0.0) + v[dl].get(eb0, 0.0) >= 0.5 and along(v.co) > HAND_CUT for v in f.verts)]
         tris = []
+        skin_tris = []  # (HAND_FINGERLESS: his own hand's skin, for the fingers)
         for f in old:
             if min(along(v.co) for v in f.verts) < 0.05:
                 continue  # (the colours from the hand itself, not a watch or a cuff at the wrist)
-            if HAND_DARK and tex_lum(f) > 0.22:
-                continue  # (HAND_DARK: only its glove, for a hand gloved in places)
             ls = f.loops
-            for k in range(1, len(ls) - 1):
-                tris.append([(M @ l.vert.co, l[uvl].uv.copy()) for l in (ls[0], ls[k], ls[k + 1])])
-        tree = BVHTree.FromPolygons([p for t in tris for p, _ in t], [[3 * i, 3 * i + 1, 3 * i + 2] for i in range(len(tris))])
-        def paint(f):
+            tri3 = [[(M @ l.vert.co, l[uvl].uv.copy()) for l in (ls[0], ls[k], ls[k + 1])] for k in range(1, len(ls) - 1)]
+            if HAND_DARK and tex_lum(f) > 0.22:
+                if HAND_FINGERLESS and tex_lum(f) > 0.32:
+                    skin_tris += tri3
+                continue  # (HAND_DARK: only its glove, for a hand gloved in places)
+            tris += tri3
+        def bvh(ts):
+            return BVHTree.FromPolygons([p for t in ts for p, _ in t], [[3 * i, 3 * i + 1, 3 * i + 2] for i in range(len(ts))])
+        pools = {"main": (tris, bvh(tris))}
+        if skin_tris:
+            pools["skin"] = (skin_tris, bvh(skin_tris))
+        def paint(f, pool="main"):
+            tris_p, tree = pools.get(pool, pools["main"])
             """A new face's texture: each corner from where it lies over the nearest part of the old hand;
             a face whose corners all land on one edge or point there (its texture would stretch into
             stripes) takes the colour at its middle, whole."""
             c = M @ f.calc_center_median()
             hit = tree.find_nearest(c)
-            uvs = [uv_at(M @ l.vert.co, hit[2]) for l in f.loops]
+            uvs = [uv_at(M @ l.vert.co, tris_p[hit[2]]) for l in f.loops]
             # (how near an even triangle its texture is: 1 for an equilateral one, 0 for a sliver)
             area = abs((uvs[1] - uvs[0]).cross(uvs[2] - uvs[0]))
             edges = sum((uvs[(k + 1) % 3] - uvs[k]).length_squared for k in range(3))
             even = 4.0 * 3 ** 0.5 * area / max(1e-12, edges)
             if area < 1e-5 or even < 0.15:  # (a sliver, or under about 2.6 texels of the 512 texture)
-                uvs = [uv_at(hit[0], hit[2])] * len(uvs)
+                uvs = [uv_at(hit[0], tris_p[hit[2]])] * len(uvs)
             for l, uv in zip(f.loops, uvs):
                 l[uvl].uv = uv
-        def uv_at(p, ti):
-            (a, ua), (b, ub), (c, uc) = tris[ti]
+        def uv_at(p, tri):
+            (a, ua), (b, ub), (c, uc) = tri
             w = mathutils.geometry.barycentric_transform(p, a, b, c, mathutils.Vector((1, 0, 0)), mathutils.Vector((0, 1, 0)), mathutils.Vector((0, 0, 1)))
             w = mathutils.Vector((max(0.0, w.x), max(0.0, w.y), max(0.0, w.z)))
             w /= max(1e-6, w.x + w.y + w.z)
@@ -639,10 +651,12 @@ if os.environ.get("HAND_FROM"):
                     v[dl][gi[name]] = w
             vs.append(v)
         made = 0
+        run_g = mathutils.Vector((-0.0546 * (1 if s == "R" else -1), -0.9743, -0.2186)).normalized()  # (CROSS's hand's run)
         for ids in hand["faces"]:
             f = bm.faces.new([vs[i] for i in ids])
             f.smooth = True
-            paint(f)
+            mid_g = sum((mathutils.Vector(hand["verts"][i]) for i in ids), mathutils.Vector()) / len(ids)
+            paint(f, "skin" if HAND_FINGERLESS and mid_g.dot(run_g) > HAND_FINGERLESS else "main")
             made += len(ids) - 2
         # The arm's cut edge joined to his glove's open cuff with a band of faces, so the hand stays
         # on the arm as the wrist bends (each side's edge: the edges with one face, there).
@@ -725,7 +739,7 @@ def despeckle(texels, far=0.14, rad=2):
         i = (y * W + x) * 4
         cpx[i:i + 3] = c
     return len(fix)
-if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM") or os.environ.get("ANKLE_PATCH") or os.environ.get("RED_OFF_BACK"):
+if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM") or os.environ.get("ANKLE_PATCH") or os.environ.get("RED_OFF_BACK") or os.environ.get("BACK_HEM"):
     cimg = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
     W, H = cimg.size
     cpx = list(cimg.pixels)
@@ -1030,6 +1044,54 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
             for (x, y), c in fill.items():
                 cpx[(y * W + x) * 4:(y * W + x) * 4 + 3] = c
         print("WEIGHTS red off his back:", len(reds), "texels of", len(where))
+    # BACK_HEM="tee,hem,top" (environment): a straight hem across the back of a jacket worn over a shirt
+    # that shows below it (the Street Operative's: the bake left the line between his jacket and his red
+    # T-shirt ragged, black and red tangled, a dark notch in it). On the back half of his torso, between
+    # these heights (m): from `tee` up to `hem` his shirt (the middle colour of the shirt's red there),
+    # from `hem` up to `top` his jacket wherever it isn't already (the middle colour of the jacket just
+    # above); his jeans below and the open front of his jacket left alone.
+    if os.environ.get("BACK_HEM"):
+        z_tee, z_hem, z_top = [float(v) for v in os.environ["BACK_HEM"].split(",")]
+        names_by_index = {g.index: g.name for g in low.vertex_groups}
+        spots = {}
+        for t in me.loop_triangles:
+            # (his torso only: not his arms, which hang beside his hips at this height)
+            if any(g.weight > 0.3 and names_by_index.get(g.group, "").startswith(("Elbow", "Wrist", "Shoulder"))
+                   for i in t.vertices for g in me.vertices[i].groups):
+                continue
+            nrm = (M.to_3x3() @ t.normal).normalized()
+            P = [M @ me.vertices[i].co for i in t.vertices]
+            c3 = (P[0] + P[1] + P[2]) / 3.0
+            if nrm.y > 0.05 or not (z_tee - 0.03 < c3.z < z_top + 0.06) or abs(c3.x) > 0.22:
+                continue
+            p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+            area = (p[1] - p[0]).cross(p[2] - p[0])
+            if abs(area) < 1e-9:
+                continue
+            for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+                for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                    c = mathutils.Vector((x + 0.5, y + 0.5))
+                    w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                    w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                    if min(w0, w1, 1.0 - w0 - w1) >= -0.02:
+                        spots[(x, y)] = (P[0] * w0 + P[1] * w1 + P[2] * (1.0 - w0 - w1)).z
+        def col(q):
+            i = (q[1] * W + q[0]) * 4
+            return cpx[i:i + 3]
+        def mid_of(cs):
+            return [sorted(c[k] for c in cs)[len(cs) // 2] for k in range(3)] if cs else None
+        shirt = mid_of([col(q) for q, z in spots.items() if z_tee <= z < z_top and col(q)[0] > 0.3 and col(q)[0] > 2.0 * col(q)[1]])
+        jacket = mid_of([col(q) for q, z in spots.items() if z_top <= z < z_top + 0.05 and max(col(q)) < 0.2])
+        done = 0
+        for q, z in spots.items():
+            i = (q[1] * W + q[0]) * 4
+            if shirt and z_tee <= z < z_hem:
+                cpx[i:i + 3] = shirt
+                done += 1
+            elif jacket and z_hem <= z < z_top and (max(col(q)) >= 0.2 or col(q)[0] > 1.6 * col(q)[2] + 0.02):
+                cpx[i:i + 3] = jacket
+                done += 1
+        print("WEIGHTS back hem made straight:", done, "texels; shirt", shirt and [round(c, 3) for c in shirt], "jacket", jacket and [round(c, 3) for c in jacket])
     # The margins round the texture's pieces made again from the cleaned colours, 4 texels out (as
     # REMARGIN in stage 3): they still held the colours from before, and a triangle's edge reads a texel
     # or two of them (a dotted line along Midnight's cuff where it meets his hand).

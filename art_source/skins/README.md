@@ -114,3 +114,10 @@ Three of his own settings:
   his jacket once his ribbons were live): red texels on the back between 1.085 and 1.745 m up take the
   middle colour round them on him that isn't red. His ribbons' settings come from `RIBBONS` in his
   build, written into `street.json` by stage 4.
+- `HAND_FINGERLESS=0.125` (stage 4, with `HAND_DARK`): his fingerless gloves: CROSS's hand coloured from
+  his gloves' black leather up to the knuckles (12.5 cm along it from the wrist), his fingers past
+  them from the skin of his own hand.
+- `BACK_HEM="1.058,1.088,1.14"` (stage 4): the line between his jacket and the red T-shirt showing
+  below it across his back, left ragged by the bake (black and red tangled, a dark notch), made
+  straight: his T-shirt's red from 1.058 to 1.088 m up, his jacket's black from there to 1.14 m wherever
+  it wasn't; on his torso only, not his arms hanging beside it, nor the open front of his jacket.

@@ -105,6 +105,10 @@ case "$NAME" in
     # live, see soldier_rig.gd; and a red spike painted up the back of his jacket from its hem; his red
     # T-shirt showing below the hem left alone)
     export RED_OFF_BACK="1.085,1.745"
+    # (the line between his jacket and the red T-shirt showing below it across his back made straight: the
+    # bake left it ragged; and his fingerless gloves: CROSS's fingers past the knuckles in his skin)
+    export BACK_HEM="1.058,1.088,1.14"
+    export HAND_FINGERLESS=0.125
     # (his headband's two ribbon tails, moved live in the game: tied on at the knot at the back of it)
     export RIBBONS='{"at": [0.01, 1.752, 0.098], "color": "c3262c", "length": 0.3, "width": 0.04, "gap": 0.03}'
     POSE=slanted ;;
