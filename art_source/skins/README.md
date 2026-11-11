@@ -104,3 +104,8 @@ Three of his own settings:
 - `ANKLE_PATCH=1` (stage 4): the round patch on the side of each high-top's ankle (a trainer brand's own
   mark) painted out in the shoe's red: the neutral light texels on the sides of the shoes behind the
   ankle joints, and the patch's dark middle and edge, take the middle colour of the shoe's red there.
+- His headband's ribbons are live, not part of the model: `game/player/skins/street.json`'s `"ribbons"`
+  (the knot on the model at rest, their colour, length, width and how far apart) has SoldierRig hang
+  two from his head and move them every frame: they stream back in the breeze of his running and
+  flutter, swing down and settle when he stops, and keep out of rounded capsules down his head, neck,
+  chest and back sized from his model (see soldier_rig.gd, "Ribbons").

@@ -76,6 +76,7 @@ func _run() -> void:
 	_test_cross_ready()
 	_test_cross_eased()
 	_test_operative_models()
+	_test_street_ribbons()
 	_test_toes_above_floor()
 	_test_intro_camera()
 	_test_start_room()
@@ -6960,6 +6961,55 @@ func _test_operative_models() -> void:
 			r.animate(1.0 / 60.0, {"run": 1.0, "aim": true})
 		_check(r.hips != null and r.wrists.size() == 2 and r._meshes.size() > 0, "%s: a SoldierRig builds and poses them" % name)
 		r.free()
+
+
+## The Street Operative's headband ribbons (V2; the decision log's "The Street Operative's headband
+## ribbons"): his settings file gives him two; running, their ends stream out behind his head (the model
+## faces -Z: behind is +Z) and up off hanging; stopped, they swing down and hang below the knot; never
+## into his body; CROSS
+## has none.
+func _test_street_ribbons() -> void:
+	var cross := SoldierRig.new()
+	root.add_child(cross)
+	_check(cross._rib_root.is_empty(), "CROSS: no headband ribbons")
+	cross.free()
+	var r := SoldierRig.new(load("res://game/player/skins/street.glb") as PackedScene, "res://game/player/skins/street.json", "STREET")
+	root.add_child(r)
+	_check(r._rib_root.size() == 2, "Street Operative: two headband ribbons (%d)" % r._rib_root.size())
+	if r._rib_root.size() == 2:
+		var dt := 1.0 / 60.0
+		for i in 120:
+			r.animate(dt, {"run": 1.0})
+		var hx: Transform3D = r._in_rig(r.head)
+		var knot: Vector3 = hx * (r._rib_root[0] as Vector3)
+		var tip: Vector3 = (r._rib_pts[0] as Array)[-1]
+		_check(tip.z - knot.z > 0.15, "Street Operative: running, his ribbons stream out behind him (%.2f m back)" % (tip.z - knot.z))
+		_check(knot.y - tip.y < 0.2, "Street Operative: running, his ribbons lift off hanging (%.2f m below the knot)" % (knot.y - tip.y))
+		for i in 240:
+			r.animate(dt, {"run": 0.0})
+		hx = r._in_rig(r.head)
+		knot = hx * (r._rib_root[0] as Vector3)
+		tip = (r._rib_pts[0] as Array)[-1]
+		_check(knot.y - tip.y > 0.22, "Street Operative: stopped, his ribbons hang down (%.2f m below the knot)" % (knot.y - tip.y))
+		var prev := tip
+		r.animate(dt, {"run": 0.0})
+		tip = (r._rib_pts[0] as Array)[-1]
+		_check(prev.distance_to(tip) < 0.004, "Street Operative: stopped, his ribbons settle (moving %.4f m a frame)" % prev.distance_to(tip))
+		# (and never into him: every point outside each of the capsules round his head, neck, chest and back)
+		var worst := 1.0
+		for phase in ["stopped", "running"]:
+			if phase == "running":
+				for i in 90:
+					r.animate(dt, {"run": 1.0})
+			for c in r._rib_cols:
+				var jx: Transform3D = r._in_rig(c[0])
+				var a: Vector3 = jx * (c[1] as Vector3)
+				var b: Vector3 = jx * (c[2] as Vector3)
+				for pts in r._rib_pts:
+					for p in (pts as Array).slice(1):
+						worst = minf(worst, r._seg_dist(p, a, b) - float(c[3]))
+		_check(worst > -0.002, "Street Operative: his ribbons stay out of his head, neck and back, running and stopped (%.3f m)" % worst)
+	r.free()
 
 
 ## Toes kept above the floor (the decision log's "Toes kept above the floor"): through the whole run

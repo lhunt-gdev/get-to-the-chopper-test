@@ -280,6 +280,7 @@ func _build() -> void:
 		glow.rotation.x = PI / 2.0
 		_meshes.append(glow)
 		_materials.append(glow.material_override)
+	_build_ribbons()
 	_pose_stand()
 	_shrug()
 	_apply()
@@ -498,6 +499,197 @@ func _apply() -> void:
 		_skeleton.set_bone_pose_rotation(b, local.basis.orthonormalized().get_rotation_quaternion())
 
 
+## --- Ribbons ------------------------------------------------------------------------------------
+## A headband's ribbon tails (the decision log's "The Street Operative's headband ribbons"), when his
+## model's settings file has them ("ribbons": where the knot is on the model at rest, the ribbons'
+## colour, length, width, and how far apart at the knot). Each is a chain of points hung from the knot,
+## moved every frame: gravity, a breeze from his running that grows with how hard he runs and blows
+## them back and up (the model faces -Z: back is +Z), and a flutter in it; points kept apart at their
+## lengths and behind the back of his head. When he stops the breeze dies away and they swing down
+## and settle. Drawn as flat strips, both sides, narrowing to their ends, in the PS1 look.
+const RIBBON_POINTS := 7
+const RIBBON_DAMP := 0.9
+const RIBBON_BREEZE := 17.0  # m/s/s at a full run (gravity's 9.8: they stream out about 60 degrees)
+const RIBBON_FLUTTER := 5.0  # m/s/s, up and down and side to side, at a full run (a wave along them)
+
+var _rib_root: Array[Vector3] = []  # each ribbon's knot from his head joint, at rest (rig space)
+var _rib_pts: Array = []  # each ribbon's points now (rig space)
+var _rib_prev: Array = []  # ...and a step ago
+var _rib_mesh: Array[ImmediateMesh] = []
+var _rib_mat: Material
+var _rib_seg := 0.0
+var _rib_width := 0.0
+var _rib_t := 0.0
+var _rib_cols: Array = []  # [joint, from, to (in its frame), radius] for each capsule the ribbons keep out of
+const RIBBON_CLEAR := 0.012  # how far off his body they keep (m)
+
+
+func _build_ribbons() -> void:
+	if _lens_file == "":
+		return
+	var f := FileAccess.open(_lens_file, FileAccess.READ)
+	if f == null:
+		return
+	var data = JSON.parse_string(f.get_as_text())
+	if not (data is Dictionary) or not data.has("ribbons"):
+		return
+	var r: Dictionary = data["ribbons"]
+	var at := Vector3(float(r["at"][0]), float(r["at"][1]), float(r["at"][2]))
+	var gap := float(r.get("gap", 0.03))
+	_rib_seg = float(r.get("length", 0.28)) / (RIBBON_POINTS - 1)
+	_rib_width = float(r.get("width", 0.035))
+	_rib_mat = PsxMaterials.figure(PsxMaterials.flat(Color(r.get("color", "c42a2a"))))
+	_materials.append(_rib_mat)
+	var head_at := _in_rig(head).origin
+	for side in [-1, 1]:
+		var root := _sk_xf * at + Vector3(side * gap * 0.5, 0.0, 0.0) - head_at
+		_rib_root.append(root)
+		var pts: Array[Vector3] = []
+		for i in RIBBON_POINTS:
+			pts.append(head_at + root + Vector3(0.0, -_rib_seg * i, 0.01 * i))
+		_rib_pts.append(pts)
+		_rib_prev.append(pts.duplicate())
+		var mi := MeshInstance3D.new()
+		var im := ImmediateMesh.new()
+		mi.mesh = im
+		add_child(mi)
+		_meshes.append(mi)
+		_rib_mesh.append(im)
+	_build_ribbon_colliders()
+
+
+## The model's vertices that follow `bone` (at least `min_w` of their weight), where they are at rest
+## (rig space).
+func _bone_points(bone: String, min_w: float) -> Array[Vector3]:
+	var bi_want := _skeleton.find_bone(bone)
+	var pts: Array[Vector3] = []
+	for mi: MeshInstance3D in _meshes:
+		if mi.skin == null or mi.mesh == null:
+			continue
+		var arr := mi.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / maxi(1, verts.size())
+		for vi in verts.size():
+			for k in per:
+				var bi: int = bones[vi * per + k]
+				var b := mi.skin.get_bind_bone(bi)
+				if b < 0:
+					b = _skeleton.find_bone(mi.skin.get_bind_name(bi))
+				if b == bi_want and weights[vi * per + k] >= min_w:
+					var rest: Transform3D = _rest[b]
+					pts.append(_sk_xf * (rest * (mi.skin.get_bind_pose(bi) * verts[vi])))
+	return pts
+
+
+## What the ribbons can't pass through: rounded capsules down his head, neck, chest and back, each
+## between two places on its joint (its own frame, so it turns with him) and as thick as most of the
+## model behind that joint (the 85th of each hundred of its vertices' distances back from the line
+## between them, of those behind it), measured at rest.
+func _build_ribbon_colliders() -> void:
+	var head_at := _in_rig(head).origin
+	var neck_at := _in_rig(neck).origin
+	var chest_at := _in_rig(chest).origin
+	var spine_at := _in_rig(spine).origin
+	var top := head_at
+	for p in _bone_points("Head", 0.5):
+		if p.y > top.y:
+			top = p
+	var crown := Vector3(head_at.x, head_at.y + (top.y - head_at.y) * 0.6, head_at.z)
+	for c in [["Head", head, head_at, crown], ["Neck", neck, neck_at, head_at], ["Chest", chest, chest_at, neck_at], ["Spine", spine, spine_at, chest_at]]:
+		var a: Vector3 = c[2]
+		var b: Vector3 = c[3]
+		var d := []
+		for p in _bone_points(c[0], 0.5):
+			# (only his back half: the ribbons only go behind him, and he's wider than he's deep)
+			var out: Vector3 = p - _seg_closest(p, a, b)
+			if out.length() > 1e-4 and out.normalized().z > 0.6:
+				d.append(out.length())
+		d.sort()
+		var radius: float = d[int(d.size() * 0.85)] if d.size() > 4 else 0.08
+		var node: Node3D = c[1]
+		var inv := _in_rig(node).affine_inverse()
+		_rib_cols.append([node, inv * a, inv * b, radius])
+
+
+func _seg_dist(p: Vector3, a: Vector3, b: Vector3) -> float:
+	return p.distance_to(_seg_closest(p, a, b))
+
+
+func _seg_closest(p: Vector3, a: Vector3, b: Vector3) -> Vector3:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(1e-8, ab.length_squared()), 0.0, 1.0)
+	return a + ab * t
+
+
+## The ribbons moved `delta` on (none: drawn where they are), the breeze from `run` (0 to 1).
+func _ribbons_step(delta: float, run: float) -> void:
+	if _rib_root.is_empty():
+		return
+	var hx := _in_rig(head)
+	var across := hx.basis.x.normalized()
+	# (his body where it is now: each capsule from its joint)
+	var cols := []
+	for c in _rib_cols:
+		var jx := _in_rig(c[0])
+		cols.append([jx * (c[1] as Vector3), jx * (c[2] as Vector3), float(c[3]) + RIBBON_CLEAR])
+	_rib_t += delta
+	var steps := clampi(ceili(delta / (1.0 / 60.0)), 0, 4)
+	var dt := delta / maxi(1, steps)
+	for k in _rib_root.size():
+		var pts: Array = _rib_pts[k]
+		var prev: Array = _rib_prev[k]
+		var root: Vector3 = hx * _rib_root[k]
+		for s in steps:
+			pts[0] = root
+			prev[0] = root
+			for i in range(1, RIBBON_POINTS):
+				var p: Vector3 = pts[i]
+				var v: Vector3 = (p - prev[i]) * RIBBON_DAMP
+				var wave := sin(_rib_t * 13.0 - i * 0.55 + k * 2.1)
+				var acc := Vector3(0.0, -9.8, 0.0) + Vector3(0.0, 0.25, 1.0) * RIBBON_BREEZE * run \
+						+ (Vector3.UP * wave + across * cos(_rib_t * 9.0 - i * 0.5 + k) * 0.35) * RIBBON_FLUTTER * run * (float(i) / (RIBBON_POINTS - 1))
+				prev[i] = p
+				pts[i] = p + v + acc * dt * dt
+			for _it in 3:
+				for i in range(1, RIBBON_POINTS):
+					var d: Vector3 = pts[i] - pts[i - 1]
+					var n := d.length()
+					if n > 1e-5:
+						pts[i] = pts[i - 1] + d * (_rib_seg / n)
+					# (kept out of his body: pushed out of any capsule it's in, to its surface)
+					for c in cols:
+						var q := _seg_closest(pts[i], c[0], c[1])
+						var away: Vector3 = pts[i] - q
+						var dist := away.length()
+						if dist < c[2]:
+							pts[i] = q + (away / dist if dist > 1e-5 else Vector3.BACK) * c[2]
+		pts[0] = root
+		_ribbon_draw(_rib_mesh[k], pts, across)
+
+
+func _ribbon_draw(im: ImmediateMesh, pts: Array, across: Vector3) -> void:
+	im.clear_surfaces()
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _rib_mat)
+	for face: float in [1.0, -1.0]:  # (both sides: a strip seen from either)
+		for i in RIBBON_POINTS - 1:
+			var a: Vector3 = pts[i]
+			var b: Vector3 = pts[i + 1]
+			var wa := _rib_width * (1.0 - 0.35 * i / (RIBBON_POINTS - 1)) * 0.5
+			var wb := _rib_width * (1.0 - 0.35 * (i + 1) / (RIBBON_POINTS - 1)) * 0.5
+			# (a little twist along it, so it shows some face from the side as well as from behind)
+			var ta := across.rotated((b - a).normalized(), 0.35 + 0.5 * i / (RIBBON_POINTS - 1))
+			var tb := across.rotated((b - a).normalized(), 0.35 + 0.5 * (i + 1) / (RIBBON_POINTS - 1))
+			var n := ((b - a).cross(ta)).normalized() * face
+			var quad := [a - ta * wa, a + ta * wa, b + tb * wb, b - tb * wb]
+			var order := [0, 1, 2, 0, 2, 3] if face > 0.0 else [0, 2, 1, 0, 3, 2]
+			for j in order:
+				im.surface_set_normal(n)
+				im.surface_add_vertex(quad[j])
+	im.surface_end()
+
+
 ## --- Posing -----------------------------------------------------------------------------------
 
 func _reset() -> void:
@@ -694,6 +886,9 @@ func _stand_support() -> void:
 func animate(delta: float, s: Dictionary) -> void:
 	_last_state = s
 	_flash(delta)
+	# (his headband's ribbons, if he has them: the breeze from how hard he was running; none caught or
+	# standing ready)
+	_ribbons_step(delta, 0.0 if s.get("surrender", false) or s.get("ready", false) else _run)
 	if s.get("surrender", false):
 		# Caught: eased down from what he showed, the aim and all (it's let go at once, so this one
 		# is eased after the shrug).

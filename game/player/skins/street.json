@@ -1,3 +1,10 @@
 {
- "lenses": []
+ "lenses": [],
+ "ribbons": {
+  "at": [0.0, 1.785, 0.105],
+  "color": "c3262c",
+  "length": 0.3,
+  "width": 0.04,
+  "gap": 0.03
+ }
 }
