@@ -725,7 +725,7 @@ def despeckle(texels, far=0.14, rad=2):
         i = (y * W + x) * 4
         cpx[i:i + 3] = c
     return len(fix)
-if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM") or os.environ.get("ANKLE_PATCH"):
+if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.get("BACK_EMBLEM") or os.environ.get("ANKLE_PATCH") or os.environ.get("RED_OFF_BACK"):
     cimg = [n.image for n in me.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE'][0]
     W, H = cimg.size
     cpx = list(cimg.pixels)
@@ -982,6 +982,54 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
                 i = (q[1] * W + q[0]) * 4
                 cpx[i:i + 3] = mid
         print("WEIGHTS ankle patches painted out:", len(light), "texels of", len(side))
+    # RED_OFF_BACK="z0,z1" (environment): red painted down the back of his neck and jacket between these
+    # heights (m) taken off (the Street Operative's headband tails, part of the source: his ribbons are
+    # live now, and the painted ones showed as a red patch on his jacket). On the faces facing back
+    # there, each red texel takes the middle colour of the texels round it on him (within 3 cm) that
+    # aren't red: his jacket's black, or his neck's skin.
+    if os.environ.get("RED_OFF_BACK"):
+        from mathutils.kdtree import KDTree
+        rz0, rz1 = [float(v) for v in os.environ["RED_OFF_BACK"].split(",")]
+        where = {}
+        for t in me.loop_triangles:
+            nrm = (M.to_3x3() @ t.normal).normalized()
+            P = [M @ me.vertices[i].co for i in t.vertices]
+            c3 = (P[0] + P[1] + P[2]) / 3.0
+            if nrm.y > 0.0 or not (rz0 < c3.z < rz1) or abs(c3.x) > 0.2:
+                continue
+            p = [uvd[l].uv * mathutils.Vector((W, H)) for l in t.loops]
+            area = (p[1] - p[0]).cross(p[2] - p[0])
+            if abs(area) < 1e-9:
+                continue
+            for y in range(max(0, int(min(q.y for q in p))), min(H - 1, int(max(q.y for q in p))) + 1):
+                for x in range(max(0, int(min(q.x for q in p))), min(W - 1, int(max(q.x for q in p))) + 1):
+                    c = mathutils.Vector((x + 0.5, y + 0.5))
+                    w0 = (p[2] - p[1]).cross(c - p[1]) / area
+                    w1 = (p[0] - p[2]).cross(c - p[2]) / area
+                    if min(w0, w1, 1.0 - w0 - w1) >= -0.02:
+                        where[(x, y)] = P[0] * w0 + P[1] * w1 + P[2] * (1.0 - w0 - w1)
+        def is_red(q):
+            i = (q[1] * W + q[0]) * 4
+            r, g, b = cpx[i], cpx[i + 1], cpx[i + 2]
+            return r > 0.22 and r > g * 1.8 and r > b * 1.8
+        reds = [q for q in where if is_red(q)]
+        # (and a texel round each, its soft edge)
+        reds = set(reds) | {(x + dx, y + dy) for (x, y) in reds for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                            if (x + dx, y + dy) in where and cpx[((y + dy) * W + x + dx) * 4] > cpx[((y + dy) * W + x + dx) * 4 + 1] * 1.3}
+        clear = [q for q in where if q not in reds]
+        if reds and clear:
+            kd = KDTree(len(clear))
+            for k, q in enumerate(clear):
+                kd.insert(where[q], k)
+            kd.balance()
+            fill = {}
+            for q in reds:
+                near = kd.find_range(where[q], 0.03) or [kd.find(where[q])]
+                cols = [cpx[(clear[k][1] * W + clear[k][0]) * 4:(clear[k][1] * W + clear[k][0]) * 4 + 3] for _, k, _ in near]
+                fill[q] = [sorted(c[i] for c in cols)[len(cols) // 2] for i in range(3)]
+            for (x, y), c in fill.items():
+                cpx[(y * W + x) * 4:(y * W + x) * 4 + 3] = c
+        print("WEIGHTS red off his back:", len(reds), "texels of", len(where))
     # The margins round the texture's pieces made again from the cleaned colours, 4 texels out (as
     # REMARGIN in stage 3): they still held the colours from before, and a triangle's edge reads a texel
     # or two of them (a dotted line along Midnight's cuff where it meets his hand).
@@ -1059,9 +1107,14 @@ if len(hits) >= 2:
 print("LENSES", lenses)
 with open(out_json, "w") as f:
     json.dump({"h": h, "joints": {k: [v.x, v.y, v.z] for k, v in pos.items()}, "unweighted": unweighted, "lenses_godot": lenses}, f, indent=1)
-if out_game_json:  # what the game reads alongside the model (the lenses)
+if out_game_json:  # what the game reads alongside the model (the lenses; and a headband's ribbons)
+    game = {"lenses": lenses}
+    # RIBBONS=<json> (environment): a headband's ribbon tails, moved live by SoldierRig (its "Ribbons"):
+    # where they're tied on the model at rest, their colour, length, width and how far apart.
+    if os.environ.get("RIBBONS"):
+        game["ribbons"] = json.loads(os.environ["RIBBONS"])
     with open(out_game_json, "w") as f:
-        json.dump({"lenses": lenses}, f, indent=1)
+        json.dump(game, f, indent=1)
 # --- Export.
 for o in bpy.context.selected_objects: o.select_set(False)
 low.select_set(True)

@@ -109,3 +109,8 @@ Three of his own settings:
   two from his head and move them every frame: they stream back in the breeze of his running and
   flutter, swing down and settle when he stops, and keep out of rounded capsules down his head, neck,
   chest and back sized from his model (see soldier_rig.gd, "Ribbons").
+- `RED_OFF_BACK` (stage 4): the headband's tails painted down the back of his neck and jacket in the
+  source, and a red spike up the jacket's back from its hem, taken off (they showed as red patches on
+  his jacket once his ribbons were live): red texels on the back between 1.085 and 1.745 m up take the
+  middle colour round them on him that isn't red. His ribbons' settings come from `RIBBONS` in his
+  build, written into `street.json` by stage 4.

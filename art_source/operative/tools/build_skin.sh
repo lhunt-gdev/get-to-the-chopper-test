@@ -101,6 +101,12 @@ case "$NAME" in
     export ANKLE_PATCH=1
     # (his splayed fingerless-glove hands: the arm traced on past their knuckles to his real fingertips)
     export ARM_TRACE="0.09,3"
+    # (the headband's tails painted down his neck and jacket in the source taken off: his ribbons are
+    # live, see soldier_rig.gd; and a red spike painted up the back of his jacket from its hem; his red
+    # T-shirt showing below the hem left alone)
+    export RED_OFF_BACK="1.085,1.745"
+    # (his headband's two ribbon tails, moved live in the game: tied on at the knot at the back of it)
+    export RIBBONS='{"at": [0.01, 1.752, 0.098], "color": "c3262c", "length": 0.3, "width": 0.04, "gap": 0.03}'
     POSE=slanted ;;
   *)
     echo "unknown skin: $NAME" >&2; exit 1 ;;
