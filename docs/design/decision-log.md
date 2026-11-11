@@ -139,6 +139,11 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Shadow stays as he is (user):** a long black coat and dark glasses are an everyday look, "fine to be inspired by".
 - **Not yet:** nothing in the game loads them; how skins are unlocked and picked is to be worked out with Bishop's and Vesper's.
 
+### PROPOSED — Jungle Operative, a skin for CROSS (user, 2026-11-11; V2 only, not in the game yet)
+- **Why (user):** "look at Cross' main texture and see if it can be color changed to jungle camo and have a bit of painted on face camo like they guys did in the 80s predator movie"; "jungle operative is a new skin" (CROSS himself stays as he is).
+- **What:** CROSS's own model (his mesh, joints, hands and goggles), its texture repainted: his urban grey camo (shirt and trousers) made a woodland jungle camo of greens, brown and black, its blotches where his are; his grey vest, pouches and knee pads tinted olive drab; and dark green and black camouflage paint streaked across his face under the goggles (a band across his nose, two streaks down each cheek), as a jungle soldier's. His gloves, boots and goggles stay black. Built to `game/player/skins/jungle.glb` from `cross.glb` (no rebuild of the model).
+- **Not yet:** as the other skins: nothing in the game loads it.
+
 ### PROPOSED — CROSS's hands on every operative (user, 2026-11-11; V2 only)
 - **Why (user):** "i think Cross' current hand model is the best fit for the game and i would like all other models to have the same hand model (scaled down on Vesper)". (Tried first: a fist modelled new for each, a thumb and the index finger on their own, the index along the gun's frame; user: "no im not a fan of this".)
 - **What:** Bishop, Vesper and the skins (Shadow, Casual, Tropical, Midnight, Silent, Rebel, Future) each have their hands replaced with CROSS's own, his fists' shape exactly, at the same place on the wrist, so the pistol sits in them as it does in his. Vesper's are scaled down to her size (about 93% of his). The guards and the other enemies keep their own hands.

@@ -57,3 +57,18 @@ in the fist. Besides those, new with the skins (each off unless a build sets it)
 
 After the first import, check each `game/player/skins/<name>_<name>_2980_512.png.import` has
 `detect_3d/compress_to=0`, like CROSS's (Godot keeps it from then on).
+
+## The Jungle Operative
+
+Not from a source model of its own: CROSS's finished model (`game/player/cross.glb`) with its texture
+repainted, built by `art_source/operative/tools/build_jungle.sh` (`build_jungle.py`) into
+`game/player/skins/jungle.glb`; run it again whenever CROSS is rebuilt. His mesh, joints, weights,
+hands and goggles are CROSS's byte for byte; only the texture packed in the model is swapped:
+- His urban grey-blue camo (on his clothes: not his gloves, boots, face or hair, told by the joint each
+  face follows) takes a woodland palette by how light each texel is among them (black-green, brown,
+  dark green, olive, a quarter each), so its blotches stay where his were.
+- The rest of his grey kit (vest, pouches, knee pads, straps) is tinted olive drab, its light and shade
+  kept; his gloves, boots and goggles stay black.
+- Camouflage paint across his face under the goggles, placed on him in 3D: a dark green band across
+  the bridge of his nose, and two streaks down each cheek, slanting out (black, then dark green), their
+  edges wavering as paint put on by hand.
