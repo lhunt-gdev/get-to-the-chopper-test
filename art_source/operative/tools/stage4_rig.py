@@ -571,6 +571,12 @@ if os.environ.get("HAND_FROM"):
     # fingers past this far along his hand from the wrist (m) coloured from the skin of his own hand,
     # the rest from his gloves' leather.
     HAND_FINGERLESS = float(os.environ.get("HAND_FINGERLESS", "0"))
+    # HAND_FLAT=1 (environment): each of CROSS's faces one even colour, from only clear leather (very
+    # dark) or clear skin on the old hand, so where his glove ends follows the fist's own faces cleanly,
+    # no skin specks on the leather or leather specks on the fingers.
+    HAND_FLAT = os.environ.get("HAND_FLAT") == "1"
+    dark_max = 0.14 if HAND_FLAT else 0.22
+    skin_min = 0.4 if HAND_FLAT else 0.32
     _tpx = _img.pixels[:] if HAND_DARK else None
     def tex_lum(f):
         """The texture's brightness at a face's middle."""
@@ -604,8 +610,8 @@ if os.environ.get("HAND_FROM"):
                 continue  # (the colours from the hand itself, not a watch or a cuff at the wrist)
             ls = f.loops
             tri3 = [[(M @ l.vert.co, l[uvl].uv.copy()) for l in (ls[0], ls[k], ls[k + 1])] for k in range(1, len(ls) - 1)]
-            if HAND_DARK and tex_lum(f) > 0.22:
-                if HAND_FINGERLESS and tex_lum(f) > 0.32:
+            if HAND_DARK and tex_lum(f) > dark_max:
+                if HAND_FINGERLESS and tex_lum(f) > skin_min:
                     skin_tris += tri3
                 continue  # (HAND_DARK: only its glove, for a hand gloved in places)
             tris += tri3
@@ -628,6 +634,9 @@ if os.environ.get("HAND_FROM"):
             even = 4.0 * 3 ** 0.5 * area / max(1e-12, edges)
             if area < 1e-5 or even < 0.15:  # (a sliver, or under about 2.6 texels of the 512 texture)
                 uvs = [uv_at(hit[0], tris_p[hit[2]])] * len(uvs)
+            if HAND_FLAT:
+                t3 = tris_p[hit[2]]
+                uvs = [(t3[0][1] + t3[1][1] + t3[2][1]) / 3.0] * len(uvs)  # (the old face's middle, whole)
             for l, uv in zip(f.loops, uvs):
                 l[uvl].uv = uv
         def uv_at(p, tri):
@@ -1048,7 +1057,7 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
     # that shows below it (the Street Operative's: the bake left the line between his jacket and his red
     # T-shirt ragged, black and red tangled, a dark notch in it). On the back half of his torso, between
     # these heights (m): from `tee` up to `hem` his shirt (the middle colour of the shirt's red there),
-    # from `hem` up to `top` his jacket wherever it isn't already (the middle colour of the jacket just
+    # from `hem` up to `top` the jacket's hem band, one even colour (the middle colour of the jacket just
     # above); his jeans below and the open front of his jacket left alone.
     if os.environ.get("BACK_HEM"):
         z_tee, z_hem, z_top = [float(v) for v in os.environ["BACK_HEM"].split(",")]
@@ -1088,7 +1097,7 @@ if os.environ.get("HAND_CLEAN") or os.environ.get("WRIST_CLEAN") or os.environ.g
             if shirt and z_tee <= z < z_hem:
                 cpx[i:i + 3] = shirt
                 done += 1
-            elif jacket and z_hem <= z < z_top and (max(col(q)) >= 0.2 or col(q)[0] > 1.6 * col(q)[2] + 0.02):
+            elif jacket and z_hem <= z < z_top:  # (the jacket's hem band, one even black: the bake left it smudged)
                 cpx[i:i + 3] = jacket
                 done += 1
         print("WEIGHTS back hem made straight:", done, "texels; shirt", shirt and [round(c, 3) for c in shirt], "jacket", jacket and [round(c, 3) for c in jacket])

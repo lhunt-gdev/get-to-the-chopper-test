@@ -109,6 +109,7 @@ case "$NAME" in
     # bake left it ragged; and his fingerless gloves: CROSS's fingers past the knuckles in his skin)
     export BACK_HEM="1.058,1.088,1.14"
     export HAND_FINGERLESS=0.125
+    export HAND_FLAT=1  # (the gloves' leather and his fingers each in one clean colour, face by face)
     # (his headband's two ribbon tails, moved live in the game: tied on at the knot at the back of it)
     export RIBBONS='{"at": [0.01, 1.752, 0.098], "color": "c3262c", "length": 0.3, "width": 0.04, "gap": 0.03}'
     POSE=slanted ;;

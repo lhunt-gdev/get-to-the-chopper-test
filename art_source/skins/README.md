@@ -119,5 +119,7 @@ Three of his own settings:
   them from the skin of his own hand.
 - `BACK_HEM="1.058,1.088,1.14"` (stage 4): the line between his jacket and the red T-shirt showing
   below it across his back, left ragged by the bake (black and red tangled, a dark notch), made
-  straight: his T-shirt's red from 1.058 to 1.088 m up, his jacket's black from there to 1.14 m wherever
-  it wasn't; on his torso only, not his arms hanging beside it, nor the open front of his jacket.
+  straight: his T-shirt's red from 1.058 to 1.088 m up, his jacket's hem band one even black from there to 1.14 m;
+  on his torso only, not his arms hanging beside it, nor the open front of his jacket.
+- `HAND_FLAT=1` (stage 4): each face of CROSS's hands one even colour, from only clear leather or clear
+  skin on his own hand, so where his gloves end follows the fist's faces cleanly, no specks either way.
