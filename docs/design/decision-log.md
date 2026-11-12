@@ -120,7 +120,8 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Why:** found while building Bishop and Vesper (V2): in CROSS's run the planted toe dips about 6 cm through the floor, and in the hands-up kneel the rear toe goes about 14 cm under it. It's the shared poses (SoldierRig), so the guards, Bishop and Vesper have it too.
 - **How:** the poses are adjusted (the run's foot roll and planted ankle, the kneel's rear foot) so no toe goes under the floor, on CROSS and on Bishop and Vesper, with the guards checked too; the look of the run and the kneel otherwise unchanged. A test checks the lowest toe in each stays at or above the floor. Made on the demo first, then brought into V2 on its own (the casings try-out stays out of V2 until the user approves it).
 
-### PROPOSED — Spent casings from the trigger (user, 2026-11-03; a try-out in the demo)
+### DECIDED — Spent casings from the trigger (user, 2026-11-03; approved 2026-11-12: "yes approved")
+- **Approved as built**, the tink with it and no on/off setting. It goes into V2 with the rest of the demo, and V2 takes the demo by merging it again.
 - **Why (user):** "have bullet shells pop out from behind the trigger button and fall off the bottom of the screen"; "lets put the tink in and see how it sounds." If it works it goes into V2 with the rest.
 - Each shot throws a spent pistol casing out from behind the FIRE trigger, on the trigger's side (TRIGGER), tumbling end over end with a little random spin, falling off the bottom of the screen: a small 3D model drawn over the game, in live play only.
 - The casing is made in code in the PS1 style: an 8–10-sided brass cylinder with a narrower neck, a rim and a silver primer, about 40–60 triangles, a small hand-made brass texture (scuffs, a darker rim band, a highlight), in the PS1 shader.
