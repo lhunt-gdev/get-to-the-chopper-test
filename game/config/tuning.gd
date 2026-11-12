@@ -133,7 +133,7 @@ var move_buttons := false
 @export_range(0.1, 1.0) var obstacle_slow_factor: float = 0.5
 ## ...which recovers to full speed over this many seconds after the stun.
 @export var obstacle_slow_recover: float = 1.2
-## HP lost per stumble (0 = time cost only).
+## HP lost by a stumble into the next obstacle after one you ran into (the first is free; 0 = time cost only).
 @export_range(0, 3) var obstacle_damage: int = 1
 ## After a stumble, other obstacles can't trip you for this long.
 @export var obstacle_grace: float = 1.0

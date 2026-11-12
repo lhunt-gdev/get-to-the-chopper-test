@@ -105,6 +105,7 @@ func _run() -> void:
 	await _test_l10n_screens()
 	await _test_language_setting()
 	# --- Spent casings (Casings) ---
+	_test_alarm_box_lowest_alert()
 	_test_casings_model()
 	_test_casings_hud()
 	await _test_casings_level()
@@ -7014,6 +7015,32 @@ func _test_street_ribbons() -> void:
 						worst = minf(worst, r._seg_dist(p, a, b) - float(c[3]))
 		_check(worst > -0.002, "Street Operative: his ribbons stay out of his head, neck and back, running and stopped (%.3f m)" % worst)
 	r.free()
+
+
+## Alarm boxes at the lowest alert (the decision log's "Alarm boxes can't be shot at the lowest
+## alert"): at SNEAKING a box in its window can't be shot (a hit does nothing), its beacon is dark and
+## it doesn't beep; at CAUTION the same box can be, beeps, and a hit puts it out.
+func _test_alarm_box_lowest_alert() -> void:
+	var t := Tuning.new()
+	var box := AlarmBox.new()
+	root.add_child(box)
+	box.at = 10.0
+	var beeps := [0]
+	box.beeped.connect(func(_live: bool) -> void: beeps[0] += 1)
+	var broke := [0]
+	box.destroyed.connect(func() -> void: broke[0] += 1)
+	for i in 120:
+		box.update(1.0 / 60.0, t, 0.0, 1)
+	var dark: bool = box._beacon.material_override == PsxMaterials.flat(AlarmBox.DARK)
+	box.hit()
+	_check(not box.is_targetable(1) and box.asleep and dark and beeps[0] == 0 and broke[0] == 0 and box.is_alive(),
+			"alarm box at SNEAKING: can't be shot, dark, no beeps (nothing to lower)")
+	for i in 120:
+		box.update(1.0 / 60.0, t, 0.0, 2)
+	_check(box.is_targetable(2) and not box.asleep and beeps[0] > 0, "alarm box at CAUTION: in its window it can be shot, and beeps")
+	box.hit()
+	_check(broke[0] == 1 and not box.is_alive(), "alarm box at CAUTION: a hit puts it out")
+	box.free()
 
 
 # --- Spent casings (Casings; the decision log's "Spent casings from the trigger") ---------------

@@ -476,6 +476,9 @@ var _cam_base := Transform3D.IDENTITY
 var _cut_slide := 0.0
 ## Obstacles can't trip you again until this game time (seconds into the run), after a stumble.
 var _stumble_grace_until := -1.0
+## The last jump or slide obstacle you met, you ran into: the next one you run into too costs HP
+## (the decision log's "Obstacles stun instead of kill"). Getting over one cleanly clears it.
+var _stumbled_last := false
 ## The Alert 3 pursuit squad: its guards (chasing, down, or falling back), whether one is out for
 ## this spell at Alert 3, and the rear-view CCTV camera that watches them.
 var _squad: Array[PursuitGuard] = []
@@ -9460,12 +9463,15 @@ func _check_obstacles() -> void:
 		match o["pass"]:
 			"jump":
 				if _player.clears_low_obstacle():
+					_stumbled_last = false  # (got over it cleanly)
 					continue
 			"slide":
 				if _player.is_sliding():
+					_stumbled_last = false
 					continue
 			"jump_or_alert":
 				if _player.clears_low_obstacle():
+					_stumbled_last = false
 					continue
 				for other in _obstacles:  # the whole wire trips (and vanishes) at once
 					if other["group"] == o["group"]:
@@ -9481,8 +9487,9 @@ func _check_obstacles() -> void:
 
 
 ## Ran into a jump or slide obstacle: a stumble, not the end of the run. You're stunned and
-## slowed (the chopper clock makes that cost something) and lose obstacle_damage HP. A short grace
-## afterwards stops one fumble chaining into the next.
+## slowed (the chopper clock makes that cost something); only if you ran into the one before it too
+## (none cleared in between) do you lose obstacle_damage HP (user: "you only lose 1 HP if you run into
+## 2 consecutive obstacles"). A short grace afterwards stops one fumble chaining into the next.
 func _stumble(o: Dictionary) -> void:
 	if _clock.elapsed < _stumble_grace_until:
 		return
@@ -9502,6 +9509,10 @@ func _stumble(o: Dictionary) -> void:
 		# Knocked it over as you went through.
 		var m: Node3D = o["mesh"]
 		m.create_tween().tween_property(m, "rotation:x", m.rotation.x - 1.2, 0.25).set_ease(Tween.EASE_OUT)
+	var twice := _stumbled_last
+	_stumbled_last = true
+	if not twice:
+		return
 	for i in tuning.obstacle_damage:
 		_damage_player(String(o["kind"]))
 
@@ -9525,7 +9536,7 @@ func _update_combat(delta: float) -> void:
 				n.visible = n.is_active(alert)
 			continue
 		if n is AlarmBox:
-			n.update(delta, tuning, d)
+			n.update(delta, tuning, d, alert)
 			continue
 		if n is SecurityTrooper:
 			_update_security(delta, c, d, alert)
@@ -10248,8 +10259,11 @@ func _update_rear_camera() -> void:
 	env.ambient_light_color = _env.ambient_light_color
 
 
-## An alarm box hit lowers alert by one level; that can lift a lockdown door.
+## An alarm box hit lowers alert by one level; that can lift a lockdown door. It only counts (and
+## scores) when there was a level to lower (at the lowest it can't be shot at all: AlarmBox).
 func _on_alarm_destroyed(node_id: StringName) -> void:
+	if GameState.alert_level <= GameState.MIN_ALERT:
+		return
 	RunLog.record_event("alarm_hit", {"node": node_id})
 	GameState.lower_alert()
 
