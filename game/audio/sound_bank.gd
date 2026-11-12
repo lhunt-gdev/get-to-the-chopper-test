@@ -47,7 +47,7 @@ static func get_stream(name: String) -> AudioStreamWAV:
 ## the menu music, the longest of all to build, is done) and the buttons' tick, all tiny; then the
 ## menu music.
 static func all_names() -> Array[String]:
-	var names: Array[String] = ["slide_back", "slide_home", "mag_out", "mag_slap", "tick", "music_menu", "codec", "codec_open", "codec_static", "codec_close", "amb_office", "door_wood", "gun", "spotted", "hit", "fall",
+	var names: Array[String] = ["slide_back", "slide_home", "mag_out", "mag_slap", "tick", "music_menu", "codec", "codec_open", "codec_static", "codec_close", "amb_office", "door_wood", "gun", "casing_tink", "spotted", "hit", "fall",
 			"gun_trooper", "cover", "jump", "land", "slide", "stumble", "player_hit", "zap", "beep",
 			"alarm_break", "alert_up", "klaxon", "alert_down", "squelch", "door_steel", "door_bars",
 			"door_push", "door_shut", "gate_push", "gate_shut",
@@ -407,6 +407,20 @@ static func _make(name: String) -> AudioStreamWAV:
 			await syn.noise(0.0, 0.4, 0.3, 4000.0, 300.0, 0.02, 2.0)
 			await syn.crush(6, 2)
 			await syn.normalize(0.5)
+		"casing_tink":
+			# A spent casing hitting the floor off the bottom of the screen (Casings): a bright, thin
+			# brass ping (high partials that don't fit together, so it rings like metal, not a note)
+			# and a smaller one as it bounces. Played quietly, its pitch a little different each time.
+			syn = Synth.create(0.3, SFX_RATE, seed_value)
+			for hit in [[0.0, 1.0], [0.075, 0.45], [0.12, 0.2]]:
+				var at: float = hit[0]
+				var amp: float = hit[1]
+				for f in [3870.0, 5310.0, 7240.0, 9050.0]:
+					await syn.tone(at, 0.18 - at, f, f * 0.998, amp * 0.2, Synth.Wave.SINE, 0.0003, 9.0)
+				await syn.noise(at, 0.008, amp * 0.35, 0.0, 4000.0, 0.0002, 6.0)
+			await syn.echo(0.03, 0.15, 0.12)
+			await syn.crush(10, 1)
+			await syn.normalize(0.6)
 		"tick":
 			# One letter of a typed caption.
 			syn = Synth.create(0.03, SFX_RATE, seed_value)

@@ -1916,6 +1916,55 @@ static func crt_screen() -> Texture2D:
 	return _finish("crt_screen", img)
 
 
+## A spent pistol casing (Casings; the decision log's "Spent casings from the trigger"), 32 x 16: the
+## side wrapped round it in the left 24 columns (CASING_SIDE: the mouth at the top row, the rim at the
+## bottom), warm brass with a polished mouth, a darker band down by the rim, a few scuffs and a bright
+## streak along it; the base in the top right 8 x 8 (CASING_BASE: brass round a silver primer, its dent
+## in the middle) and the inside of the mouth under it (CASING_MOUTH: dark, a brass lip round it).
+const CASING_SIDE := Rect2i(0, 0, 24, 16)
+const CASING_BASE := Rect2i(24, 0, 8, 8)
+const CASING_MOUTH := Rect2i(24, 8, 8, 8)
+
+
+static func casing() -> Texture2D:
+	if _cache.has("casing"):
+		return _cache["casing"]
+	var brass := Color("d0a040")
+	var img := Image.create(32, 16, false, Image.FORMAT_RGB8)
+	img.fill(brass)
+	var rng := _rng("casing")
+	for y in 16:
+		for x in 24:
+			var k := 1.0 + rng.randf_range(-0.05, 0.05)
+			if y == 0:
+				k *= 1.25  # the mouth's edge, rubbed bright
+			elif y >= 12:
+				k *= [0.78, 0.68, 0.84, 0.74][y - 12]  # the groove and the rim, darker
+			_shade(img, x, y, k)
+	for y in range(1, 12):  # the highlight streak along it
+		_put(img, 4, y, Color("fff0b8"))
+		_put(img, 5, y, Color("f0d078"))
+	for s in 5:  # scuffs: short dark nicks
+		var sx := rng.randi_range(7, 22)
+		var sy := rng.randi_range(2, 10)
+		_put(img, sx, sy, Color("7a5a22"))
+		_put(img, sx + 1, sy + rng.randi_range(-1, 1), Color("94702c"))
+	for y in 8:  # the base, a primer in the middle of it
+		for x in 8:
+			var d := Vector2(x - 3.5, y - 3.5).length()
+			var c := brass.darkened(0.12 + 0.05 * d / 4.0)
+			if d < 1.6:
+				c = Color("dadcdc") if d > 0.8 else Color("a4a8ac")
+			elif d < 2.2:
+				c = Color("6a4c1c")  # the ring round the primer
+			_put(img, CASING_BASE.position.x + x, CASING_BASE.position.y + y, c)
+	for y in 8:  # the mouth: dark inside, a brass lip
+		for x in 8:
+			var d := Vector2(x - 3.5, y - 3.5).length()
+			_put(img, CASING_MOUTH.position.x + x, CASING_MOUTH.position.y + y, Color("2a1e10") if d < 2.6 else brass.lightened(0.15))
+	return _finish("casing", img)
+
+
 ## Venetian blinds: pale slats, lit along the top edge and shaded under, a dark gap between them,
 ## and a ladder cord down each side. 16 slats a tile (0.4 m a tile: 2.5 cm slats).
 static func blinds() -> Texture2D:

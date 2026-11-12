@@ -104,6 +104,10 @@ func _run() -> void:
 	_test_l10n_fit()
 	await _test_l10n_screens()
 	await _test_language_setting()
+	# --- Spent casings (Casings) ---
+	_test_casings_model()
+	_test_casings_hud()
+	await _test_casings_level()
 	print("%d checks, %d failed" % [_checks, _failures])
 	await _settle_audio(root)
 	quit(1 if _failures > 0 else 0)
@@ -7010,6 +7014,126 @@ func _test_street_ribbons() -> void:
 						worst = minf(worst, r._seg_dist(p, a, b) - float(c[3]))
 		_check(worst > -0.002, "Street Operative: his ribbons stay out of his head, neck and back, running and stopped (%.3f m)" % worst)
 	r.free()
+
+
+# --- Spent casings (Casings; the decision log's "Spent casings from the trigger") ---------------
+
+## The model: an 8-sided casing of 40 to 60 triangles, in the PS1 casing shader with its own
+## 32 x 16 brass texture.
+func _test_casings_model() -> void:
+	var tris: int = (Casings.mesh().surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	var tex := PsxTextures.casing()
+	_check(tris >= 40 and tris <= 60, "casings: the model is %d triangles (40 to 60)" % tris)
+	_check(tex.get_width() == 32 and tex.get_height() == 16 and Casings.material().shader == Casings.SHADER \
+			and Casings.material().get_shader_parameter("albedo_texture") == tex, "casings: a 32 x 16 brass texture, in the casing shader")
+
+
+## On the HUD: a shot throws one casing from behind the trigger (either TRIGGER side, in Safari and
+## from the Home Screen), up and in toward the middle; it falls off the bottom and is gone, with one
+## landing (the tink) each; no more than CAP in the air; none outside live play; still and hidden
+## under the pause menu.
+func _test_casings_hud() -> void:
+	var t := Tuning.new()
+	var hud = (load("res://game/ui/hud/hud.gd") as GDScript).new()  # (by path: it needs the autoloads)
+	root.add_child(hud)
+	hud.setup(t)
+	var cs: Casings = hud.casings()
+	var landed := [0]
+	hud.casing_landed.connect(func() -> void: landed[0] += 1)
+	var v: Vector2 = hud.get_viewport().get_visible_rect().size
+	var step := func(seconds: float) -> void:
+		for i in int(seconds * 60.0):
+			cs._process(1.0 / 60.0)
+	# Under the trigger (drawn before it, so it comes out from behind).
+	_check(cs.get_index() < hud._fire.get_index(), "casings: drawn under the FIRE trigger")
+	hud.set_playing(true)
+	var where_ok := true
+	var flight_ok := true
+	for home: bool in [false, true]:
+		SwipeInput.set_standalone_for_test(home)
+		for left: bool in [false, true]:
+			t.fire_on_left = left
+			landed[0] = 0
+			var b := SwipeInput.fire_button(v, t)
+			hud.fire_kick()
+			var at: Array[Vector2] = cs.positions()
+			where_ok = where_ok and cs.alive() == 1 and cs.visible and absf(at[0].x - b.x) < b.z and at[0].y < b.y and at[0].y > b.y - b.z
+			step.call(0.15)
+			var up: Vector2 = cs.positions()[0]
+			var inward := (up.x < at[0].x) if not left else (up.x > at[0].x)
+			step.call(2.0)
+			flight_ok = flight_ok and up.y < at[0].y and inward and cs.alive() == 0 and not cs.visible and landed[0] == 1
+	SwipeInput.set_standalone_for_test(null)
+	t.fire_on_left = false
+	_check(where_ok, "casings: a shot throws one, from behind the trigger, both TRIGGER sides, in Safari and from the Home Screen")
+	_check(flight_ok, "casings: up and in toward the middle, then off the bottom and gone, one tink each")
+	landed[0] = 0
+	for i in Casings.CAP + 4:
+		hud.fire_kick()
+	var capped := cs.alive() == Casings.CAP
+	step.call(2.0)
+	_check(capped and cs.alive() == 0 and landed[0] == Casings.CAP, "casings: no more than %d in the air (a shot past that throws none)" % Casings.CAP)
+	# Under the pause menu: hidden, where they were; none thrown; back as the run goes on.
+	hud.fire_kick()
+	var before: Vector2 = cs.positions()[0]
+	hud.set_paused(true)
+	hud.fire_kick()
+	var paused_ok := not cs.visible and cs.alive() == 1 and cs.positions()[0] == before
+	hud.set_paused(false)
+	paused_ok = paused_ok and cs.visible and cs.alive() == 1
+	_check(paused_ok, "casings: hidden under the pause menu (none thrown), still there after")
+	# Out of live play (the menus, the KO replay, the debrief): gone at once, with no tink, and none thrown.
+	landed[0] = 0
+	hud.set_playing(false)
+	hud.fire_kick()
+	step.call(2.0)
+	_check(cs.alive() == 0 and not cs.visible and landed[0] == 0, "casings: none out of live play (cleared, no tink)")
+	hud.free()
+	SwipeInput.set_standalone_for_test(null)
+
+
+## In the level: a shot fired throws one (as the trigger kicks), each one's landing plays the tink, on
+## the effects' volume and well under the shot; when the run's over, none is left.
+func _test_casings_level() -> void:
+	var gs := root.get_node("GameState")
+	var was_alert: int = gs.alert_level
+	var was_active: bool = gs.run_active
+	var level_script: GDScript = load("res://game/levels/prototype_slice/prototype_slice.gd")
+	level_script.route_path = MISSION_1
+	var level := await _locked_doors_level(gs, false)
+	var hud = level._hud
+	var cs: Casings = hud.casings()
+	gs.run_active = true
+	level._started = true
+	level._menu_open = false
+	hud.set_playing(true)
+	var p: Node3D = level._player
+	p.distance = 6.0
+	level._place_player()
+	level._shoot()
+	var one := cs.alive() == 1
+	var tinks := [0]
+	hud.casing_landed.connect(func() -> void: tinks[0] += 1)
+	for i in 120:
+		cs._process(1.0 / 60.0)
+	var tink := SoundBank.get_stream("casing_tink")
+	var playing := false
+	for a in level._audio._pool:
+		if (a as AudioStreamPlayer).stream == tink and (a as AudioStreamPlayer).playing:
+			playing = true
+	_check(one and cs.alive() == 0 and tinks[0] == 1 and playing, "casings in the level: a shot throws one; it lands with one tink")
+	_check(level.CASING_TINK_DB < -10.0, "casings in the level: the tink well under the shot (%s dB)" % level.CASING_TINK_DB)
+	level._shoot()
+	level._shoot()
+	var two := cs.alive() == 2
+	hud.show_end(&"extracted", "")
+	_check(two and cs.alive() == 0 and not cs.visible, "casings in the level: none left when the run's over")
+	gs.run_active = false
+	await _settle_audio(level)
+	level.queue_free()
+	await process_frame
+	gs.alert_level = was_alert
+	gs.run_active = was_active
 
 
 ## Toes kept above the floor (the decision log's "Toes kept above the floor"): through the whole run

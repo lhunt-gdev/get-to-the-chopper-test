@@ -153,6 +153,18 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Their colour:** each model's new hands take their colour from its own hands (bare skin, Future's fingerless gloves, Vesper's black gloves), not CROSS's black gloves.
 - **Replaces:** the skins' rounded curled fists (above) and Bishop's and Vesper's.
 
+### DECIDED — Toes kept above the floor (user, 2026-11-10: "tidy the toe dip for Cross and the two new characters")
+- **Why:** found while building Bishop and Vesper (V2): in CROSS's run the planted toe dips about 6 cm through the floor, and in the hands-up kneel the rear toe goes about 14 cm under it. It's the shared poses (SoldierRig), so the guards, Bishop and Vesper have it too.
+- **How:** the poses are adjusted (the run's foot roll and planted ankle, the kneel's rear foot) so no toe goes under the floor, on CROSS and on Bishop and Vesper, with the guards checked too; the look of the run and the kneel otherwise unchanged. A test checks the lowest toe in each stays at or above the floor. Made on the demo first, then brought into V2 on its own (the casings try-out stays out of V2 until the user approves it).
+
+### DECIDED — Spent casings from the trigger (user, 2026-11-03; approved 2026-11-12: "yes approved")
+- **Approved as built**, the tink with it and no on/off setting. It goes into V2 with the rest of the demo, and V2 takes the demo by merging it again.
+- **Why (user):** "have bullet shells pop out from behind the trigger button and fall off the bottom of the screen"; "lets put the tink in and see how it sounds." If it works it goes into V2 with the rest.
+- Each shot throws a spent pistol casing out from behind the FIRE trigger, on the trigger's side (TRIGGER), tumbling end over end with a little random spin, falling off the bottom of the screen: a small 3D model drawn over the game, in live play only.
+- The casing is made in code in the PS1 style: an 8–10-sided brass cylinder with a narrower neck, a rim and a silver primer, about 40–60 triangles, a small hand-made brass texture (scuffs, a darker rim band, a highlight), in the PS1 shader.
+- A faint "tink" as each one leaves the screen, made like the game's other sounds. No on/off setting yet; decided after the user hears it.
+- **Try-out as built:** game/rendering/casings.gd (Casings): 60 triangles, a 32x16 texture (PsxTextures.casing), its own PS1 shader (psx_casing: snapped to the screen's pixels, a fixed light of its own and a dithered glint, so it reads the same in any area). About 8x16 px on the 270-wide screen (first 6x11; user: "the cases can be a bigger in game"), drawn in a see-through layer under the trigger that is only drawn while one is in the air; at most 8 in the air. Thrown up and in toward the middle, end over end, off the bottom in about 0.7 s, where it tinks (casing_tink, about 16 dB under the shot, its pitch a little different each time). Hidden and still under the pause menu; gone in the menus, the KO replay and the debrief.
+
 ### DECIDED — Languages: Luxembourgish first (user, 2026-10-14)
 - **Why (user):** "I'd like to do some localisation, translation to other languages"; "I'd like to try Luxembourgish first, if that's possible?"; "I have someone who speaks Lëtzebuergesch and they can check."
 - All player-facing text (menus, settings, tips, HUD, debrief, scoreboard, credits, the briefing and end conversations) goes through Godot's translation system from one table, English the source and the fallback. In-world signs (EXIT and the like) stay in English as scenery. The cast's names (CROSS, ARDBALLS, VESPER...) stay as they are.

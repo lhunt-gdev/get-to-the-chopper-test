@@ -7,6 +7,8 @@ extends CanvasLayer
 
 ## Pause pressed (the level pauses the game and shows the pause menu).
 signal pause_pressed
+## A spent casing came off the bottom of the screen (Casings: the level plays its tink).
+signal casing_landed
 
 ## Each side of a fork has a colour. The road paint, sign and this prompt all use the same ones.
 const SIDE_COLORS := {"left": Color("d9a032"), "straight": Color("a8a898"), "right": Color("4f9fd0")}
@@ -28,6 +30,8 @@ var _title: Label
 var _hint: Label
 var _flash: ColorRect
 var _fire: TriggerButton
+## The spent casings thrown out from behind the trigger (live play only).
+var _casings: Casings
 var _clock: ClockDial
 var _pause: PauseButton
 ## The move buttons (MOVE: BUTTONS): shown in live play only, never under the pause menu.
@@ -781,6 +785,8 @@ func set_playing(on: bool) -> void:
 		if n:
 			n.visible = on and (n != _message or _message.text != "") and (n != _runner_bar or _runner_bar.fraction >= 0.0) \
 					and (n != _boss_bar or _boss_bar.fraction >= 0.0) and (n != _rear or _rear._picture.texture != null)
+	if _casings and not on:
+		_casings.clear()  # (none left over the menus, the KO replay or the debrief)
 	_show_pad()
 
 
@@ -854,6 +860,9 @@ func setup(tuning: Tuning) -> void:
 	_tuning = tuning
 	_rail = ProgressRail.new()
 	add_child(_rail)
+	_casings = Casings.new()  # (before the trigger, so they come out from behind it)
+	add_child(_casings)
+	_casings.landed.connect(func() -> void: casing_landed.emit())
 	_fire = TriggerButton.new()
 	_fire.tuning = tuning
 	add_child(_fire)
@@ -962,10 +971,17 @@ func redraw_fire() -> void:
 		_fire.queue_redraw()
 
 
-## A shot went off: kick the trigger.
+## A shot went off: kick the trigger, and a spent casing flies out from behind it (in live play).
 func fire_kick() -> void:
 	if _fire:
 		_fire.kick()
+		if _casings and _playing and not _paused:
+			_casings.eject(SwipeInput.fire_button(get_viewport().get_visible_rect().size, _fire.tuning))
+
+
+## The spent casings (Casings), for the tests.
+func casings() -> Casings:
+	return _casings
 
 
 ## A first-time tip (FirstTips id; "" hides it).
@@ -989,10 +1005,13 @@ func tip_shown() -> String:
 
 
 ## The pause menu up (or gone): a tip's card goes under it while it's up, and comes back as the run
-## goes on (the tip itself stays up: it's only hidden). The move buttons go too, and come back.
+## goes on (the tip itself stays up: it's only hidden). The move buttons go too, and come back; so do
+## the casings in the air (Casings.suspended: still, where they were).
 func set_paused(on: bool) -> void:
 	_paused = on
 	_show_pad()
+	if _casings:
+		_casings.suspended = on
 	if _tip_card:
 		_tip_card.visible = _tip_card.id != "" and not on
 
