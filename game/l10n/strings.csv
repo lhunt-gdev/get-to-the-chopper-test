@@ -9,7 +9,7 @@ MENU_SETTINGS,SETTINGS,"Main menu and pause menu button; the settings' title (bi
 MENU_CONTROLS,CONTROLS,"Main menu and pause menu button; the controls' title (big letters); a SETTINGS section",8:136,"LB, UNSURE: ""Steierung"" (controls) is not in lod.lu on its own (only ""Fernsteierung""); ""Bedienung"" would be the alternative. Also the name of a SETTINGS section."
 MENU_CREDITS,CREDITS,"Main menu: the small button under the others; the credits' title (big letters)",8:60,"LB, KEPT IN ENGLISH: CREDITS, as games and films in Luxembourg usually show it (only 10 letters of room)."
 MENU_UNLOCKS,UNLOCKS,"Main menu: a button; the skins screen's title (big letters)",8:150,"The screen where you pick the operative's look (his skins). LB: a suggestion, to check."
-UNLOCKS_SUB,PICK HIS LOOK AND CONFIRM,UNLOCKS: under the title,8:240,
+UNLOCKS_SUB,PICK YOUR LOOK AND CONFIRM,UNLOCKS: under the title,8:240,
 UNLOCKS_CONFIRM,CONFIRM,"UNLOCKS: a button (wear the one shown from now on)",8:150,
 UNLOCKS_ACTIVE,ACTIVE,"UNLOCKS: under the name of the one he wears now",8:240,
 UNLOCKS_HOW,ESCAPE MISSION {n} ON {setting} TO UNLOCK,"UNLOCKS: under a locked one's name (what opens it)",8:240x2,"{n}: a mission's number; {setting}: a difficulty (EASY)"
