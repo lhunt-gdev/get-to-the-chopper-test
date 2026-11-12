@@ -3,6 +3,9 @@ extends Node3D
 ## A wall-mounted alarm box (LOCKED recommendation): an environmental target with a short
 ## timing window as you run past. It blinks while it can be shot. A hit lowers alert by one
 ## level (not a full reset; the level applies it). Miss the window and it's behind you: no backtracking.
+## At the lowest alert there's nothing to lower, so it's off (the decision log's "Alarm boxes can't be
+## shot at the lowest alert"): it can't be shot, its beacon is dark and it doesn't beep; it wakes up if
+## the alert goes up before you reach it.
 
 ## Shot in its window. The level lowers alert (so this stays free of autoloads, for unit tests).
 signal destroyed
@@ -11,12 +14,16 @@ signal beeped(in_window: bool)
 
 const LIT := Color("ff3a2a")
 const DARK := Color("3a1a16")
+## The lowest alert (GameState.MIN_ALERT; kept here so this stays free of autoloads).
+const LOWEST_ALERT := 1
 
 ## Distance along the route.
 var at: float = 0.0
 ## Across the route (out on the kerb).
 var x: float = 0.0
 var in_window: bool = false
+## Off: the alert is at its lowest, so there's nothing for it to lower.
+var asleep: bool = false
 var _alive: bool = true
 var _light: MeshInstance3D
 ## A small beacon on top that blinks the whole time the box is live, so you spot it instantly.
@@ -52,8 +59,8 @@ func is_alive() -> bool:
 	return _alive
 
 
-func is_targetable(_alert: int) -> bool:
-	return _alive and in_window
+func is_targetable(alert: int) -> bool:
+	return _alive and in_window and alert > LOWEST_ALERT
 
 
 ## Auto-targeting: above an idle trooper, below one who is about to shoot.
@@ -61,10 +68,17 @@ func get_threat_priority() -> int:
 	return 20
 
 
-func update(delta: float, tuning: Tuning, player_d: float) -> void:
+func update(delta: float, tuning: Tuning, player_d: float, alert: int) -> void:
 	var ahead := at - player_d
-	in_window = _alive and ahead >= tuning.alarm_window_near and ahead <= tuning.alarm_window_far
+	asleep = alert <= LOWEST_ALERT
+	in_window = _alive and not asleep and ahead >= tuning.alarm_window_near and ahead <= tuning.alarm_window_far
 	if not _alive:
+		return
+	if asleep:
+		_blink = 0.0
+		_was_on = false
+		_beacon.material_override = PsxMaterials.flat(DARK)
+		_light.material_override = PsxMaterials.flat(DARK)
 		return
 	_blink += delta
 	# The beacon always blinks; it goes fast, with the face light, while the box can be shot.
@@ -79,7 +93,7 @@ func update(delta: float, tuning: Tuning, player_d: float) -> void:
 
 
 func hit() -> void:
-	if not is_targetable(0):
+	if not (_alive and in_window):
 		return
 	_alive = false
 	in_window = false

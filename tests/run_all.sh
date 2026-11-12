@@ -116,9 +116,12 @@ expect tips        "reason=extracted alert=1 route=$G | covers=1 hits=0" "$NONE"
 expect camper      "reason=chopper_left alert=1 route=MAIN FLOOR LOBBY | covers=1" "time=106.0" "talk=chopper_left/tapped/ok"
 # Both wires, no boxes: ALERT, and still no squad in mission 1.
 expect ground_loud "reason=extracted alert=3 route=$G | covers=0 hits=0" "$NONE" "boss=1/0/" "ko=3/0/ok"
-# Both wires, all three boxes on the way (MAIN FLOOR, WING, EXIT): back to SNEAKING.
-expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=3" "$NONE" "boss=1/0/" "ko=3/0/ok"
-expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=1" "boss=1/0/" "ko=3/0/ok"
+# Both wires, and the boxes on the way (MAIN FLOOR, WING, EXIT): back to SNEAKING. Two of them: the
+# third comes up at SNEAKING already, where a box can't be shot (nothing to lower, no points).
+expect ground_alarms "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=2" "$NONE" "boss=1/0/" "ko=3/0/ok"
+# One stumble is free (no HP); two in a row cost 1.
+expect stumble_once "reason=extracted alert=1 route=$G | covers=0 hits=0 missed=0 alarms=0 stumbles=1" "boss=1/0/" "ko=3/0/ok"
+expect stumble_twice "reason=extracted alert=1 route=$G | covers=0 hits=1 missed=0 alarms=0 stumbles=2" "boss=1/0/" "ko=3/0/ok"
 # Killed half way (it stops shooting, jumping and sliding in the SECURITY WING): about 390 m, a few
 # down, x2: a failed run's score, a fraction of any escape's.
 expect halfway "reason=killed alert=1 route=MAIN FLOOR LOBBY > BUILDING MAIN FLOOR > SECURITY WING | covers=0 hits=3" "setting=medium"

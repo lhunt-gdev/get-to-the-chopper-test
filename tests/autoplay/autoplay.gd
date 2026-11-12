@@ -63,9 +63,12 @@ extends Node
 ##   camper       - takes cover and never leaves it: the chopper should leave without us
 ##   ground_loud  - main route, runs through both wires and ignores the alarm boxes: Alert 3 (on
 ##                  the test range, the squad comes after us; mission 1 has none)
-##   ground_alarms - main route, runs through both wires, shoots every alarm box: back to Alert 1
-##   stumble_once - main route, but runs straight into the first barrier: a stumble (1 HP, a
-##                  little time), not the end of the run
+##   ground_alarms - main route, runs through both wires, shoots every alarm box it can (one at
+##                  Alert 1 can't be shot): back to Alert 1
+##   stumble_once - main route, but runs straight into the first barrier: a stumble (a little
+##                  time, no HP: the first is free), not the end of the run
+##   stumble_twice - main route, but runs into the first two obstacles it meets (jumps and slides),
+##                  one straight after the other: the second costs 1 HP
 ##   halfway      - main route, but from the SECURITY WING on it stops shooting, jumping and sliding:
 ##                  killed half way to the pad (the cast's "killed halfway" board entry)
 ##   scoreboard   - as ground (straight on, MEDIUM), SKIP in the end conversation, then the debrief:
@@ -465,11 +468,15 @@ func _physics_process(delta: float) -> void:
 				if scenario == "stumble_once" and (_fumble == null or _fumble == o):
 					_fumble = o  # run straight into this one
 					continue
+				if scenario == "stumble_twice" and _count("stumble") < 2:
+					continue  # (into this one too)
 				_swipe(Vector2i.UP)
 			"jump_or_alert":
 				if not _level._runner.current in _trip_in:
 					_swipe(Vector2i.UP)
 			"slide":
+				if scenario == "stumble_twice" and _count("stumble") < 2:
+					continue
 				_swipe(Vector2i.DOWN)
 
 
