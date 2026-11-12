@@ -4449,6 +4449,37 @@ func _test_settings() -> void:
 	boss.configure({})
 	_check(boss.health == 20, "settings: a setting without a boss leaves him as he is")
 	boss.free()
+	# (the decision log's "The boss at the chopper", 2026-11-12) MEDIUM quicker than EASY; HARD one
+	# free lane, never more than 2 lanes from where you stand, at MEDIUM's pace.
+	var pace := func(s: String) -> Array:
+		var b := Boss.new(t)
+		b.configure(g[s].mission()["boss"])
+		var out := [float(b._spinup[1]) + b._sweep_time + b._spindown_time, b._free_count]
+		b.free()
+		return out
+	var e: Array = pace.call("easy")
+	var m: Array = pace.call("medium")
+	var h: Array = pace.call("hard")
+	_check(m[0] < e[0] * 0.85 and h[0] <= m[0] and e[1] == 2 and m[1] == 2 and h[1] == 1,
+			"boss: MEDIUM attacks quicker than EASY (%.2f s vs %.2f), HARD as quick (%.2f) with one free lane" % [m[0], e[0], h[0]])
+	var near_ok := true
+	for at_lane in 5:
+		for k in 20:
+			var f := Boss.pick_free_lane_near((k + 0.5) / 20.0, at_lane, 2, 5)
+			near_ok = near_ok and f.size() == 1 and absi(f[0] - at_lane) <= 2 and f[0] >= 0 and f[0] <= 4
+	var hb := Boss.new(t)
+	hb.configure(g["hard"].mission()["boss"])
+	hb.set_seed(5)
+	var seen := {}
+	for at_lane in 5:
+		hb._last_player_x = hb.lane_x(at_lane)
+		for k in 12:
+			hb._spin_up(3)
+			near_ok = near_ok and hb.free_lanes.size() == 1 and absi(hb.free_lanes[0] - at_lane) <= 2
+			seen[hb.free_lanes[0]] = true
+	hb.free()
+	_check(near_ok and seen.size() == 5, "boss on HARD: one free lane, within 2 lanes of you, any lane over the fight")
+	_check(Boss.MARK.s < Boss.DANGER.s and Boss.MARK.v >= Boss.DANGER.v, "boss: the lane strips a lighter red than his danger red")
 
 
 ## The unlock rule (user): getting out of mission N on a setting opens mission N+1 on that setting and

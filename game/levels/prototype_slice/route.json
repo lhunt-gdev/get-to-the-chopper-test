@@ -4,8 +4,8 @@
   "authored_for_lanes": 5,
   "settings": {
     "easy": {"chopper": {"lands_at": 28, "lifts_at": 108, "gone_at": 118}, "boss": {"health": 20, "spinup": [1.4, 1.2, 1.0]}},
-    "medium": {"chopper": {"lands_at": 28, "lifts_at": 96, "gone_at": 106}, "boss": {"health": 30, "spinup": [1.1, 0.9, 0.75]}},
-    "hard": {"chopper": {"lands_at": 28, "lifts_at": 86, "gone_at": 96}, "boss": {"health": 40, "spinup": [1.0, 0.8, 0.7]}}
+    "medium": {"chopper": {"lands_at": 28, "lifts_at": 96, "gone_at": 106}, "boss": {"health": 30, "spinup": [0.9, 0.75, 0.6], "sweep": 1.0, "spindown": 0.9}},
+    "hard": {"chopper": {"lands_at": 28, "lifts_at": 86, "gone_at": 96}, "boss": {"health": 40, "spinup": [0.9, 0.75, 0.6], "sweep": 1.0, "spindown": 0.9, "free": 1, "free_reach": 2}}
   },
   "house": {
     "easy": [

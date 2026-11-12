@@ -33,6 +33,9 @@ const MODEL := preload("res://game/enemies/boss/boss.glb")
 ## A little bigger than the guards.
 const SCALE := 1.25
 const DANGER := Color(1.0, 0.12, 0.08)
+## The strips down the lanes he's about to sweep: a paler, softer red than DANGER (user: "the lines on
+## the floor indicating which lanes he shoots in should be lighter").
+const MARK := Color(1.0, 0.5, 0.44)
 const TRACER := Color("ffc24a")
 const TRACER_GLOW := Color(1.0, 0.55, 0.15, 0.9)
 const BRASS := Color("c9a043")
@@ -97,6 +100,10 @@ var _spindown_time := 1.2
 var _fire_rate := 40.0
 var _round_speed := 28.0
 var _hit_radius := 0.4
+## How many lanes he leaves free each sweep (2; HARD 1), and for one, how far (lanes) it can be from
+## the one you're standing in when he spins up (so you can always get there).
+var _free_count := 2
+var _free_reach := 2
 ## Which attack this is (rounds carry it), the last one whose rounds have hit you (once an attack at
 ## most), and where you were last frame.
 var _attack := 0
@@ -150,7 +157,7 @@ func _init(tuning: Tuning) -> void:
 	add_child(_shadow)
 	# The swept lanes' red strips on the floor (placed in world space each frame).
 	for i in _lane_count:
-		_markers.append(_loose_box(Vector3(0.3, 0.02, 1.0), DANGER))
+		_markers.append(_loose_box(Vector3(0.3, 0.02, 1.0), MARK))
 	# The rounds (tracers' streaks) and the cases: one draw each, every round and case an instance.
 	var streak := BoxMesh.new()
 	streak.size = Vector3(ROUND_THICK, ROUND_THICK, ROUND_LENGTH)
@@ -184,6 +191,13 @@ func configure(setting_boss: Dictionary) -> void:
 	var spin = setting_boss.get("spinup")
 	if spin is Array and spin.size() == 3:
 		_spinup = [float(spin[0]), float(spin[1]), float(spin[2])]
+	# (MEDIUM quicker, HARD one free lane: the decision log's "The boss at the chopper")
+	if float(setting_boss.get("sweep", 0.0)) > 0.0:
+		_sweep_time = float(setting_boss["sweep"])
+	if float(setting_boss.get("spindown", 0.0)) > 0.0:
+		_spindown_time = float(setting_boss["spindown"])
+	_free_count = clampi(int(setting_boss.get("free", 2)), 1, 2)
+	_free_reach = maxi(1, int(setting_boss.get("free_reach", 2)))
 
 
 func set_seed(s: int) -> void:
@@ -198,6 +212,14 @@ static func pick_free_lanes(a: float, b: float, lane_count: int) -> Array[int]:
 	if second >= first:
 		second += 1
 	return [first, second]
+
+
+## One lane out of `lane_count`, from a random number 0..1, no more than `reach` lanes from `near`
+## (HARD's one free lane: always reachable in the spin-up). Pure, unit-tested.
+static func pick_free_lane_near(a: float, near: int, reach: int, lane_count: int) -> Array[int]:
+	var lo := clampi(near - reach, 0, lane_count - 1)
+	var hi := clampi(near + reach, 0, lane_count - 1)
+	return [clampi(lo + int(a * (hi - lo + 1)), lo, hi)]
 
 
 ## Whether a round reaching your line at `x` hits you, as you moved from `p0` to `p1` this frame:
@@ -258,7 +280,8 @@ func cases_out() -> int:
 
 
 ## The fight starts (you've come within the standoff distance).
-func begin(alert: int) -> void:
+func begin(alert: int, player_x: float = 0.0) -> void:
+	_last_player_x = player_x
 	if state == State.WAITING:
 		_spin_up(alert)
 
@@ -410,7 +433,10 @@ func _sweep_half() -> float:
 func _spin_up(alert: int) -> void:
 	state = State.SPINUP
 	_timer = spinup_for(alert, _spinup)
-	free_lanes = pick_free_lanes(_rng.randf(), _rng.randf(), _lane_count)
+	if _free_count == 1:
+		free_lanes = pick_free_lane_near(_rng.randf(), lane_of(_last_player_x, _lane_width, _lane_count), _free_reach, _lane_count)
+	else:
+		free_lanes = pick_free_lanes(_rng.randf(), _rng.randf(), _lane_count)
 	sweep_dir = 1 if _rng.randf() < 0.5 else -1
 	_attack += 1
 	spinning_up.emit()
