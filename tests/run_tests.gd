@@ -67,6 +67,7 @@ func _run() -> void:
 	await _test_tips_setting()
 	await _test_demo_end()
 	await _test_credits()
+	await _test_unlocks()
 	await _test_ios_tip()
 	await _test_polish_menus()  # (demo polish, round 1)
 	_test_polish_saves()
@@ -5083,6 +5084,97 @@ func _test_scoreboard() -> void:
 		n.free()
 
 
+## UNLOCKS (V2; the decision log's "UNLOCKS: picking the operative's skin"): every skin's model and
+## portrait there; CROSS open from the start, the rest locked until their mission's escape; a locked
+## one can't be confirmed; the choice saved and read back (a locked or unknown one in a save is CROSS);
+## the screen: it opens on the active one, the arrows and a swipe move along (round the ends), a
+## locked one shown dark (skin_shown's locked) with no CONFIRM, CONFIRM wears the one shown and goes
+## back to the main menu, BACK puts the one before back on; a rig's silhouette on and off; on the
+## main menu, UNLOCKS under MISSION SELECT.
+func _test_unlocks() -> void:
+	var prog: Node = root.get_node("Progress")
+	var saved: Dictionary = prog.to_data()
+	var saved_path: String = prog.save_path
+	prog.load_from("")
+	var files := true
+	for id in Skins.ids():
+		files = files and ResourceLoader.exists(Skins.model_path(id)) and FileAccess.file_exists(Skins.lens_path(id)) \
+				and ResourceLoader.exists("res://assets/ui/skins/%s.png" % id)
+	_check(Skins.ids().size() == 12 and Skins.ids()[0] == "cross" and files, "unlocks: 12 to pick, CROSS first, each with its model, settings and portrait")
+	var locked_all := true
+	for id in Skins.ids().slice(1):
+		locked_all = locked_all and not prog.skin_unlocked(id)
+	_check(prog.skin == "cross" and prog.skin_unlocked("cross") and locked_all and not prog.choose_skin("shadow") and prog.skin == "cross",
+			"unlocks: a fresh save wears CROSS; the rest locked, and a locked one can't be picked")
+	prog.record_extraction(1, "easy")
+	_check(prog.skin_unlocked("shadow") and not prog.skin_unlocked("casual") and prog.choose_skin("shadow") and prog.skin == "shadow",
+			"unlocks: getting out of mission 1 on EASY opens SHADOW, and it can be picked")
+	var data: Dictionary = prog.to_data()
+	prog.from_data(data)
+	var kept: bool = prog.skin == "shadow"
+	data["skin"] = "vesper"
+	prog.from_data(data)
+	var locked_falls: bool = prog.skin == "cross"
+	data["skin"] = "nobody"
+	prog.from_data(data)
+	_check(kept and locked_falls and prog.skin == "cross", "unlocks: the pick saved and read back; a locked or unknown one in a save is CROSS")
+	# The screen.
+	prog.from_data({})
+	prog.record_extraction(1, "easy")
+	var FE: GDScript = load("res://game/ui/menu/frontend.gd")
+	var fe = FE.new()
+	root.add_child(fe)
+	var shown := []
+	fe.skin_shown.connect(func(id: String, locked: bool) -> void: shown.append([id, locked]))
+	fe.show_main()
+	await process_frame
+	var unl: Button = _menu_button(fe, L10n.t("MENU_UNLOCKS"))
+	var sel: Button = _menu_button(fe, L10n.t("MENU_MISSION_SELECT"))
+	_check(unl != null and sel != null and unl.get_global_rect().position.y > sel.get_global_rect().end.y, "unlocks: UNLOCKS on the main menu, under MISSION SELECT")
+	unl.pressed.emit()
+	await process_frame
+	_check(fe.in_unlocks() and fe.skin_showing() == "cross" and shown.back() == ["cross", false] and fe._skin_confirm.visible and not fe._skin_lock.visible,
+			"unlocks: opens on the one he wears, shown as he is, with CONFIRM")
+	fe.show_skin(fe._skin_at - 1)
+	_check(fe.skin_showing() == "vesper" and shown.back() == ["vesper", true] and not fe._skin_confirm.visible and fe._skin_lock.visible and fe._skin_line.text != "",
+			"unlocks: round the ends; a locked one shown dark, a padlock, no CONFIRM, what unlocks it")
+	var c = fe._carousel
+	var mid: Vector2 = c.size / 2.0
+	c.press(mid)
+	c.release(mid + Vector2(-40, 0))  # (a swipe left: the next one)
+	var swiped: bool = fe.skin_showing() == "cross"
+	c.press(c.centre(1))
+	c.release(c.centre(1))  # (a tap on the tile right of it)
+	_check(swiped and fe.skin_showing() == "shadow" and shown.back() == ["shadow", false], "unlocks: a swipe moves one along, a tap on a tile shows it")
+	fe.leave_unlocks()
+	await process_frame
+	_check(not fe.in_unlocks() and prog.skin == "cross" and shown.back() == ["cross", false], "unlocks: BACK without CONFIRM puts the one he had back on")
+	fe._open(FE.Screen["UNLOCKS"])
+	fe.show_skin(Skins.index_of("casual"))
+	fe.confirm_skin()
+	var stayed: bool = fe.in_unlocks() and prog.skin == "cross"
+	fe.show_skin(Skins.index_of("shadow"))
+	fe.confirm_skin()
+	await process_frame
+	_check(stayed and not fe.in_unlocks() and prog.skin == "shadow", "unlocks: CONFIRM does nothing on a locked one; on an open one it's his, back to the main menu")
+	fe.free()
+	# The model: dark and back.
+	var r := Skins.make_rig("street")
+	root.add_child(r)
+	r.silhouette(true)
+	var dark := true
+	for m: MeshInstance3D in r._meshes:
+		dark = dark and m.material_override == r._meshes[0].material_override
+	r.silhouette(false)
+	var back := true
+	for i in r._meshes.size():
+		back = back and r._meshes[i].material_override == r._materials[i]
+	_check(dark and back and r._meshes.size() == r._materials.size(), "unlocks: a locked one's model one dark colour, and back as it was")
+	r.free()
+	prog.from_data(saved)
+	prog.save_path = saved_path
+
+
 ## The scoreboard on screen: the debrief's SCORE line rolling up to the score, the multiplier, NEW
 ## BEST; the name entry after it (big keys, filled in with CROSS, DEL, OK; a computer's keyboard);
 ## then the board with the entry blinking, its EASY / MEDIUM / HARD switch, BACK to the debrief
@@ -5499,8 +5591,8 @@ func _test_credits() -> void:
 		for j in range(i + 1, rects.size()):
 			apart = apart and not (rects[i] as Rect2).grow(-0.5).intersects(rects[j] as Rect2)
 	var credits := _menu_button(fe, "CREDITS")
-	_check(credits != null and apart and credits.get_global_rect().end.y < 446.0 and credits.get_global_rect().position.y > _menu_button(fe, "CONTROLS").get_global_rect().end.y,
-			"credits: a small CREDITS button under CONTROLS, clear of the four and of DEMO")
+	_check(credits != null and apart and credits.get_global_rect().end.y < 459.0 and credits.get_global_rect().position.y > _menu_button(fe, "CONTROLS").get_global_rect().end.y,
+			"credits: a small CREDITS button under CONTROLS, clear of the five (UNLOCKS since 2026-11-12) and of DEMO")
 	credits.pressed.emit()
 	await process_frame
 	var says: bool = fe.in_credits() and _has_label(fe, "A GAME BY") and _has_label(fe, FE.MADE_BY) and FE.MADE_BY == "LUKE HUNT" and _has_label(fe, "GODOT ENGINE")

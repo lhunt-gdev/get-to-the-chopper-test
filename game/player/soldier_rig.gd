@@ -539,7 +539,6 @@ func _build_ribbons() -> void:
 	_rib_seg = float(r.get("length", 0.28)) / (RIBBON_POINTS - 1)
 	_rib_width = float(r.get("width", 0.035))
 	_rib_mat = PsxMaterials.figure(PsxMaterials.flat(Color(r.get("color", "c42a2a"))))
-	_materials.append(_rib_mat)
 	var head_at := _in_rig(head).origin
 	for side in [-1, 1]:
 		var root := _sk_xf * at + Vector3(side * gap * 0.5, 0.0, 0.0) - head_at
@@ -552,8 +551,10 @@ func _build_ribbons() -> void:
 		var mi := MeshInstance3D.new()
 		var im := ImmediateMesh.new()
 		mi.mesh = im
+		mi.material_override = _rib_mat
 		add_child(mi)
 		_meshes.append(mi)
+		_materials.append(_rib_mat)  # (one each, as every mesh has: the hit flash puts them back by it)
 		_rib_mesh.append(im)
 	_build_ribbon_colliders()
 
@@ -2274,6 +2275,25 @@ func keep_solid() -> void:
 	for mi: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
 		if not _meshes.has(mi):
 			mi.material_override = PsxMaterials.solid(mi.material_override)
+
+
+## UNLOCKS, a locked skin: the whole model one dark colour, a silhouette with none of the skin's
+## detail (on), or as it is (off).
+const SILHOUETTE := Color(0.035, 0.038, 0.045)
+var _dark := false
+
+
+func silhouette(on: bool) -> void:
+	_dark = on
+	var dark := PsxMaterials.figure(PsxMaterials.flat(SILHOUETTE))
+	if _solid:
+		dark = PsxMaterials.solid(dark)
+	for i in _meshes.size():
+		_meshes[i].material_override = dark if on else _materials[i]
+
+
+func is_silhouette() -> bool:
+	return _dark
 
 
 ## Hit: the whole model flashes red for a moment.

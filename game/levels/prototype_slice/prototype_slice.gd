@@ -560,6 +560,9 @@ func _ready() -> void:
 	_ambience.add_lamp(fill, Color(0.5, 0.58, 0.68) * 0.55, 6.5, {"alert": false})
 	# His muzzle flash lights him and what's round him for a moment (user: a cool looking flash).
 	_ambience.add_lamp(_player.muzzle_light(), SoldierRig.FLASH_LIGHT, SoldierRig.FLASH_LIGHT_RANGE, {"alert": false, "own_slot": true})
+	# (a skin put on in UNLOCKS: the new model's muzzle flash, the old one's gone with it)
+	_player.rig_changed.connect(func() -> void:
+		_ambience.add_lamp(_player.muzzle_light(), SoldierRig.FLASH_LIGHT, SoldierRig.FLASH_LIGHT_RANGE, {"alert": false, "own_slot": true}))
 	_clock = ExtractionClock.new()
 	_clock.name = "ExtractionClock"
 	_clock.tuning = tuning
@@ -622,6 +625,10 @@ func _ready() -> void:
 	_frontend.typed.connect(func() -> void: _audio.play("tick", -8.0, 0.05, "UI"))
 	_frontend.briefing_cue.connect(func(sound: String, db: float) -> void: _audio.play(sound, db, 0.0, "UI"))
 	_frontend.debrief_opened.connect(_on_debrief_opened)
+	# UNLOCKS: the skin shown, on him behind the menu (dark when it's a locked one).
+	_frontend.skin_shown.connect(func(id: String, locked: bool) -> void:
+		if not _started:
+			_player.wear(id, locked))
 	Settings.changed.connect(_apply_settings)
 	_apply_settings()
 	if _brief_on_load and not _skip_title:

@@ -30,6 +30,9 @@ signal debrief_opened(reason: StringName)
 ## stamped in ("new_best", "entry" or "best").
 signal score_multiplied
 signal score_stamped(kind: String)
+## UNLOCKS: the skin to show on the model behind now (Skins id), and whether it's a locked one (shown
+## dark). On BACK, the active one again.
+signal skin_shown(id: String, locked: bool)
 
 ## END_TALK: the end-of-mission conversation (a Briefing), between the run and the debrief (END).
 ## MISSIONS: the mission select, after MISSION SELECT; MISSION: one mission's screen after it (its
@@ -38,7 +41,8 @@ signal score_stamped(kind: String)
 ## CREDITS: from the main menu (the maker, the engine, how it was made); LICENCES: the Godot Engine's
 ## licence and its third parties' notices, scrolling (from CREDITS); DEMO_END: the end-of-demo screen
 ## (once, after his first escape's debrief, between it and RETRY or MAIN MENU; from CREDITS after that).
-enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION, NAME, BOARD, CREDITS, LICENCES, DEMO_END }
+## UNLOCKS: picking the operative's skin, over the menu's scene (the decision log's "UNLOCKS").
+enum Screen { NONE, MAIN, SETTINGS, CONTROLS, PAUSE, END, BRIEFING, END_TALK, MISSIONS, MISSION, NAME, BOARD, CREDITS, LICENCES, DEMO_END, UNLOCKS }
 
 ## Where to follow the game, for the end-of-demo screen (user: fill it in, e.g. "ITCH.IO/HOT-EXFIL" or a
 ## social handle; nothing shows while it's empty).
@@ -95,6 +99,13 @@ var _screen := Screen.NONE
 var _mission := 1
 ## Where SETTINGS / CONTROLS go back to.
 var _back_to := Screen.MAIN
+## UNLOCKS: the one shown (Skins.LIST's index), and the parts of the screen that change with it.
+var _skin_at := 0
+var _skin_name: Label
+var _skin_line: Label
+var _skin_confirm: Button
+var _skin_lock: Control
+var _carousel: Control
 ## The scoreboard shown (or last shown): its mission and setting, where its BACK goes, and his entry
 ## to blink on it (its seq; 0: none).
 var _board_mission := 1
@@ -394,6 +405,8 @@ func _show(s: Screen) -> void:
 	# (The briefing darkens the screen behind itself as it opens, from the main menu's dim; the end
 	# conversation the same, over the run's last moment.)
 	_dim.color = Color(0.0, 0.02, 0.03, 0.35 if s in [Screen.MAIN, Screen.BRIEFING, Screen.END_TALK] else 0.7)
+	if s == Screen.UNLOCKS:
+		_dim.color = Color(0.0, 0.02, 0.03, 0.12)  # (he's what you're looking at)
 	match s:
 		Screen.MAIN:
 			_build_main()
@@ -421,6 +434,8 @@ func _show(s: Screen) -> void:
 			_build_licences()
 		Screen.DEMO_END:
 			_build_demo_end()
+		Screen.UNLOCKS:
+			_build_unlocks()
 	_fit_hits()
 
 
@@ -461,20 +476,22 @@ func _build_main() -> void:
 	Reticle.ring_y = roundf(logo_top() + Logo.height() / 2.0)
 	# (30 px apart, CREDITS a little further: each one's tap area 30 px tall, clear of the next: MIN_TAP)
 	var first := _button(L10n.t("MENU_MISSION_SELECT"), 290, func() -> void: _open(Screen.MISSIONS))
+	# UNLOCKS: his skins (the decision log's "UNLOCKS").
+	_button(L10n.t("MENU_UNLOCKS"), 320, func() -> void: _open(Screen.UNLOCKS))
 	# HIGH SCORES: the scoreboard of the mission and setting last picked.
-	_button(L10n.t("MENU_HIGH_SCORES"), 320, func() -> void:
+	_button(L10n.t("MENU_HIGH_SCORES"), 350, func() -> void:
 		var n := int(Progress.last.get_slice(":", 0))
 		open_board(n if Progress.is_built(n) else 1, Progress.last.get_slice(":", 1), Screen.MAIN))
-	_button(L10n.t("MENU_SETTINGS"), 350, func() -> void: _open(Screen.SETTINGS))
-	_button(L10n.t("MENU_CONTROLS"), 380, func() -> void: _open(Screen.CONTROLS))
-	# CREDITS: a small text button under the four (user: keep the menu uncrowded).
-	var credits := _button(L10n.t("MENU_CREDITS"), 415, func() -> void: _open(Screen.CREDITS))
+	_button(L10n.t("MENU_SETTINGS"), 380, func() -> void: _open(Screen.SETTINGS))
+	_button(L10n.t("MENU_CONTROLS"), 410, func() -> void: _open(Screen.CONTROLS))
+	# CREDITS: a small text button under the five (user: keep the menu uncrowded).
+	var credits := _button(L10n.t("MENU_CREDITS"), 443, func() -> void: _open(Screen.CREDITS))
 	credits.theme_type_variation = "CompactButton"
 	credits.offset_left = -36
 	credits.offset_right = 36
-	credits.offset_bottom = 415 + 15
-	_place_wide(UiKit.label(L10n.t("MENU_DEMO"), 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 446)
-	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 458)
+	credits.offset_bottom = 443 + 15
+	_place_wide(UiKit.label(L10n.t("MENU_DEMO"), 8, Color(UiKit.DIM, 0.7), HORIZONTAL_ALIGNMENT_CENTER), 459)
+	_place_wide(UiKit.label(build_label(), 8, Color(UiKit.DIM, 0.55), HORIZONTAL_ALIGNMENT_CENTER), 469)
 	_ios_tip = null
 	if not Progress.ios_tip_seen and (force_ios_tip or ios_tip_here()):
 		# Once (user: the first time the menu shows in Safari on an iPhone), then remembered.
@@ -1208,6 +1225,95 @@ func _build_credits() -> void:
 	_button(L10n.t("CREDITS_LICENCES"), y + 6.0, func() -> void: _open(Screen.LICENCES))
 	_button(L10n.t("CREDITS_ABOUT"), y + 36.0, func() -> void: open_demo_end())
 	_button(L10n.t("COMMON_BACK"), y + 66.0, func() -> void: _open(Screen.MAIN)).grab_focus()
+
+
+## UNLOCKS (the decision log's "UNLOCKS: picking the operative's skin"): over the menu's scene, his
+## model behind in full view; the carousel of skins along the bottom (UnlockCarousel), the name of the
+## one shown over it, and under it CONFIRM (an unlocked one) or what unlocks it (a locked one, shown
+## dark with a padlock in front of him); BACK. Opens on the active one.
+func _build_unlocks() -> void:
+	_back_to = Screen.MAIN
+	var v := _root.get_viewport_rect().size
+	_header(L10n.t("MENU_UNLOCKS"), L10n.t("UNLOCKS_SUB"))
+	_skin_at = Skins.index_of(Progress.skin)
+	_skin_lock = Padlock.new()
+	_root.add_child(_skin_lock)
+	_skin_name = UiKit.label("", 16, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER)
+	_place_wide(_skin_name, v.y - UNLOCKS_NAME_UP)
+	_skin_line = UiKit.label("", 8, UiKit.DIM, HORIZONTAL_ALIGNMENT_CENTER)
+	_skin_line.add_theme_constant_override("line_spacing", 0)
+	_place_wide(_skin_line, v.y - UNLOCKS_NAME_UP + 20.0)
+	_carousel = UnlockCarousel.new(self)
+	_root.add_child(_carousel)
+	var left := _button("<", 0.0, func() -> void: show_skin(_skin_at - 1))
+	left.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	left.offset_left = 6
+	left.offset_right = 30
+	left.offset_top = v.y - UNLOCKS_TILES_UP + 14.0
+	left.offset_bottom = left.offset_top + 20
+	var right := _button(">", 0.0, func() -> void: show_skin(_skin_at + 1))
+	right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	right.offset_left = -30
+	right.offset_right = -6
+	right.offset_top = v.y - UNLOCKS_TILES_UP + 14.0
+	right.offset_bottom = right.offset_top + 20
+	_skin_confirm = _button(L10n.t("UNLOCKS_CONFIRM"), v.y - 66.0, confirm_skin)
+	_button(L10n.t("COMMON_BACK"), v.y - 34.0, leave_unlocks).grab_focus()
+	show_skin(_skin_at)
+
+
+## UNLOCKS, from the bottom of the screen up (px): the name's line, and the carousel's top.
+const UNLOCKS_NAME_UP := 152.0
+const UNLOCKS_TILES_UP := 116.0
+
+
+func in_unlocks() -> bool:
+	return _screen == Screen.UNLOCKS
+
+
+## UNLOCKS: shows the `i`th (round the ends): on the model (skin_shown), its name, CONFIRM or what
+## unlocks it, the padlock.
+func show_skin(i: int) -> void:
+	if _screen != Screen.UNLOCKS:
+		return
+	var n := Skins.LIST.size()
+	_skin_at = ((i % n) + n) % n
+	var id := String(Skins.LIST[_skin_at]["id"])
+	var open := Progress.skin_unlocked(id)
+	_skin_name.text = String(Skins.LIST[_skin_at]["name"])
+	if open:
+		_skin_line.text = L10n.t("UNLOCKS_ACTIVE") if id == Progress.skin else ""
+		_skin_line.add_theme_color_override("font_color", UiKit.GREEN)
+	else:
+		var u := Skins.unlock_of(id)
+		_skin_line.text = "
+".join(UiKit.wrap(L10n.f("UNLOCKS_HOW", {"n": int(u[0]), "setting": L10n.t("SETTING_" + String(u[1]).to_upper())}), 240.0))
+		_skin_line.add_theme_color_override("font_color", UiKit.AMBER)
+	_skin_confirm.visible = open
+	_skin_lock.visible = not open
+	_carousel.queue_redraw()
+	skin_shown.emit(id, not open)
+	_fit_hits()
+
+
+## The one shown in UNLOCKS (its Skins id).
+func skin_showing() -> String:
+	return String(Skins.LIST[_skin_at]["id"])
+
+
+## UNLOCKS' CONFIRM: the one shown is his from now on (saved), back to the main menu.
+func confirm_skin() -> void:
+	if _screen != Screen.UNLOCKS or not Progress.choose_skin(skin_showing()):
+		return
+	_open(Screen.MAIN)
+
+
+## UNLOCKS' BACK: the one he had on before, back on him, and the main menu.
+func leave_unlocks() -> void:
+	if _screen != Screen.UNLOCKS:
+		return
+	skin_shown.emit(Progress.skin, false)
+	_open(Screen.MAIN)
 
 
 ## What CREDITS says, a block at a time: [its label, its headline, any lines under it].
@@ -2145,6 +2251,139 @@ class Column extends Control:
 		var v := get_viewport_rect().size
 		position = Vector2(maxf(0.0, floorf((v.x - Frontend.COLUMN_W) / 2.0)), 0.0)
 		size = Vector2(Frontend.COLUMN_W, v.y)
+
+
+## UNLOCKS' carousel (the decision log's "UNLOCKS"): a row of tiles along the bottom of the screen,
+## each a small portrait of one (assets/ui/skins/<id>.png, made by art_source/operative/tools/
+## skin_portraits.gd), the one shown in the middle, bigger and outlined; locked ones dark with a
+## padlock. A tap on a tile shows it; a swipe across moves one along.
+class UnlockCarousel extends Control:
+	const TILE := 36.0
+	const BIG := 48.0
+	const STEP := 44.0
+	var _fe: Frontend
+	var _press := Vector2.ZERO
+	var _down := false
+	var _pics: Array[Texture2D] = []
+
+	func _init(fe: Frontend) -> void:
+		_fe = fe
+		for s: Dictionary in Skins.LIST:
+			_pics.append(load("res://assets/ui/skins/%s.png" % s["id"]) as Texture2D)
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		var v := get_viewport_rect().size
+		position = Vector2(34.0, v.y - Frontend.UNLOCKS_TILES_UP - 2.0)
+		size = Vector2(v.x - 68.0, BIG + 4.0)
+		clip_contents = true
+
+	## Where the `k`th tile from the shown one (0) is centred, in its own pixels.
+	func centre(k: int) -> Vector2:
+		return Vector2(size.x / 2.0 + k * STEP + signf(k) * (BIG - TILE) / 2.0, size.y / 2.0)
+
+	func _draw() -> void:
+		var n := Skins.LIST.size()
+		var reach := int(ceilf(size.x / 2.0 / STEP)) + 1
+		for k in range(-reach, reach + 1):
+			var i := ((_fe._skin_at + k) % n + n) % n
+			var id := String(Skins.LIST[i]["id"])
+			var open := Progress.skin_unlocked(id)
+			var s := BIG if k == 0 else TILE
+			var c := centre(k)
+			var r := Rect2(c - Vector2(s, s) / 2.0, Vector2(s, s))
+			draw_rect(r.grow(1.0), UiKit.INK)
+			draw_rect(r, Color(0.09, 0.11, 0.13))
+			var tint := Color.WHITE if open else Color(0.09, 0.1, 0.12)
+			if k != 0:
+				tint = tint * Color(0.75, 0.75, 0.75)
+			draw_texture_rect(_pics[i], r, false, tint)
+			if not open:
+				Padlock.draw_lock(self, c + Vector2(0, 2), 0.5 if k != 0 else 0.7, UiKit.AMBER if k == 0 else UiKit.DIM)
+			if k == 0:
+				draw_rect(r.grow(1.0), UiKit.TEAL, false, 2.0)
+			if id == Progress.skin:
+				draw_rect(Rect2(r.position + Vector2(2, s - 5), Vector2(s - 4, 3)), UiKit.GREEN)
+
+	func _gui_input(event: InputEvent) -> void:
+		var p := Vector2.ZERO
+		var pressed := false
+		var touch := false
+		if event is InputEventScreenTouch:
+			p = (event as InputEventScreenTouch).position
+			pressed = (event as InputEventScreenTouch).pressed
+			touch = true
+		elif event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			p = (event as InputEventMouseButton).position
+			pressed = (event as InputEventMouseButton).pressed
+			touch = true
+		if not touch:
+			return
+		accept_event()
+		if pressed:
+			_press = p
+			_down = true
+			return
+		if not _down:
+			return
+		_down = false
+		release(p)
+
+	## A press let go at `p` (its own pixels): a swipe across moves one along (left: the next); a tap
+	## on a tile shows it.
+	func release(p: Vector2) -> void:
+		var dx := p.x - _press.x
+		if absf(dx) >= 16.0:
+			_fe.clicked.emit()
+			_fe.show_skin(_fe._skin_at + (1 if dx < 0.0 else -1))
+			return
+		var best := 0
+		var near := INF
+		for k in range(-4, 5):
+			var d := absf(centre(k).x - p.x)
+			if d < near:
+				near = d
+				best = k
+		if best != 0 and near <= TILE / 2.0 + 2.0:
+			_fe.clicked.emit()
+			_fe.show_skin(_fe._skin_at + best)
+
+	## A press at `p` (tests).
+	func press(p: Vector2) -> void:
+		_press = p
+		_down = true
+
+
+## UNLOCKS: the padlock in front of a locked skin's dark model (and on its tile: draw_lock).
+class Padlock extends Control:
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		var v := get_viewport_rect().size
+		# (in front of his chest under the menu, between the title and the name)
+		draw_lock(self, Vector2(v.x / 2.0, minf(250.0, v.y - Frontend.UNLOCKS_NAME_UP - 50.0)), 1.6, UiKit.AMBER)
+
+	## A pixel padlock centred on `c`, `k` times its 20 x 24 size: the shackle, the body, the keyhole.
+	static func draw_lock(ci: CanvasItem, c: Vector2, k: float, col: Color) -> void:
+		var body := Rect2(c + Vector2(-10, -2) * k, Vector2(20, 14) * k)
+		var w := maxf(2.0, roundf(3.0 * k))
+		var h := 11.0 * k
+		var lx := c.x - 7.0 * k
+		var rx := c.x + 7.0 * k - w
+		var top := c.y - 12.0 * k
+		for pass_ in 2:
+			var g := 1.0 if pass_ == 0 else 0.0
+			var col_ := UiKit.INK if pass_ == 0 else col
+			ci.draw_rect(Rect2(lx - g, top - g, w + 2.0 * g, h + 2.0 * g), col_)
+			ci.draw_rect(Rect2(rx - g, top - g, w + 2.0 * g, h + 2.0 * g), col_)
+			ci.draw_rect(Rect2(lx - g, top - g, rx + w - lx + 2.0 * g, w + 2.0 * g), col_)
+		ci.draw_rect(body.grow(1.0), UiKit.INK)
+		ci.draw_rect(body, col)
+		ci.draw_rect(Rect2(body.position, Vector2(body.size.x, maxf(1.0, 2.0 * k))), col.lightened(0.35))
+		ci.draw_rect(Rect2(c + Vector2(-1.5, 2.0) * k, Vector2(3.0, 3.0) * k), UiKit.INK)
+		ci.draw_rect(Rect2(c + Vector2(-0.75, 4.5) * k, Vector2(1.5, 4.0) * k), UiKit.INK)
 
 
 ## A plain codec panel (the end-of-demo screen's list of the jobs to come).

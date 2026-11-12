@@ -123,3 +123,13 @@ Three of his own settings:
   on his torso only, not his arms hanging beside it, nor the open front of his jacket.
 - `HAND_FLAT=1` (stage 4): each face of CROSS's hands one even colour, from only clear leather or clear
   skin on his own hand, so where his gloves end follows the fist's faces cleanly, no specks either way.
+
+## In the game: UNLOCKS
+
+The skins are picked on the main menu's UNLOCKS screen (game/player/skins.gd lists them, in order, with what
+unlocks each). Its carousel shows a small portrait of each, made from the models:
+
+    godot --path . -s art_source/operative/tools/skin_portraits.gd [-- <id> ...]
+
+which writes assets/ui/skins/<id>.png (48 x 48). Run it again after a skin is rebuilt, or one is added
+(add it to Skins.LIST first).

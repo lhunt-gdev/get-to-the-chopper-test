@@ -49,6 +49,9 @@ signal died
 signal death_beat(beat: String)
 ## A sound in his ready stance's gun check (user: "add them"; its name: SoldierRig.IDLE_SOUNDS).
 signal ready_beat(sound: String)
+## His model was swapped for another skin (wear): whatever hangs on the old one (his muzzle flash's
+## lamp) goes with it, so the level takes the new one's.
+signal rig_changed
 ## Killed: his death's clock (s; slowed at first), how it started, whether he's down and whether
 ## it's over, and his pool of blood.
 var dying := false
@@ -70,11 +73,8 @@ func _ready() -> void:
 	lane = tuning.lane_count / 2
 	track_x = lane_x(lane)
 	hits_left = tuning.player_hits
-	_rig = SoldierRig.new()
-	add_child(_rig)
-	_rig.keep_solid()  # (never dissolved by the cutout: Cutout)
+	_put_on(Progress.skin)
 	_rig.pose_set()  # (the set he springs into the run from: Retry and the bots, with no menu, too)
-	_rig.idle_beat.connect(func(sound: String) -> void: ready_beat.emit(sound))
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Shadow"
 	_shadow.mesh = PsxMaterials.shadow_mesh(Vector2(tuning.player_shadow_size, tuning.player_shadow_size * 0.8))
@@ -82,6 +82,40 @@ func _ready() -> void:
 	_shadow.position.y = 0.03
 	add_child(_shadow)
 	_update_visuals()
+
+
+## The skin he's wearing now (Skins: the active one, or the one UNLOCKS is showing).
+var skin := ""
+
+
+func _put_on(id: String) -> void:
+	var old := _rig
+	_rig = Skins.make_rig(id)
+	skin = id if Skins.has(id) else Skins.DEFAULT
+	add_child(_rig)
+	if old != null:
+		move_child(_rig, old.get_index())
+		_rig.position = old.position
+		_rig.rotation = old.rotation
+		remove_child(old)
+		old.queue_free()
+	_rig.keep_solid()  # (never dissolved by the cutout: Cutout)
+	_rig.idle_beat.connect(func(sound: String) -> void: ready_beat.emit(sound))
+
+
+## UNLOCKS (the decision log's "UNLOCKS: picking the operative's skin"): the model swapped for `id`'s
+## at once, in his pose as it is (under the menu, his ready stance), and dark (a silhouette) when
+## it's a locked one. Only before the run.
+func wear(id: String, dark: bool = false) -> void:
+	if id != skin:
+		_put_on(id)
+		_rig.animate(0.0, {"ready": not _ran, "pan": intro_pan})
+		rig_changed.emit()
+	_rig.silhouette(dark)
+
+
+func is_dark() -> bool:
+	return _rig.is_silhouette()
 
 
 func _physics_process(delta: float) -> void:

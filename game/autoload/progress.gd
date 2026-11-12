@@ -73,6 +73,8 @@ var _house_cache := {}
 var _tips_seen := {}
 var demo_end_seen := false
 var ios_tip_seen := false
+## The operative's skin (Skins: UNLOCKS' CONFIRM), one that's unlocked.
+var skin := Skins.DEFAULT
 ## The save loaded is from a newer version of the game (its "version" above VERSION): it's played
 ## from as far as this version can read it, but never saved over (save() leaves it as it is).
 var newer_save := false
@@ -410,6 +412,24 @@ func mark_ios_tip() -> void:
 		save()
 
 
+## Whether a skin is open (Skins.LIST): always, or once he's got out of its mission on its setting.
+func skin_unlocked(id: String) -> bool:
+	if not Skins.has(id):
+		return false
+	var u := Skins.unlock_of(id)
+	return u.is_empty() or _cleared.has(key(int(u[0]), String(u[1])))
+
+
+## UNLOCKS' CONFIRM: wears `id` from now on (saved at once). Not a locked one.
+func choose_skin(id: String) -> bool:
+	if not skin_unlocked(id):
+		return false
+	if skin != id:
+		skin = id
+		save()
+	return true
+
+
 ## A fresh start: only mission 1 EASY.
 func reset() -> void:
 	from_data({})
@@ -429,7 +449,7 @@ func to_data() -> Dictionary:
 		if not _boards[k].is_empty():
 			boards[k] = _boards[k].duplicate(true)
 	return {"version": VERSION, "unlocked": u, "cleared": c, "best": b, "last": last, "boards": boards, "name": last_name, "seq": _seq,
-			"tips": tips_seen(), "demo_end": demo_end_seen, "ios_tip": ios_tip_seen}
+			"tips": tips_seen(), "demo_end": demo_end_seen, "ios_tip": ios_tip_seen, "skin": skin}
 
 
 ## From a save (as to_data gives it). Anything it can't read (a missing or broken file, a key that
@@ -449,6 +469,7 @@ func from_data(data: Variant) -> void:
 	_tips_seen.clear()
 	demo_end_seen = false
 	ios_tip_seen = false
+	skin = Skins.DEFAULT
 	if data is Dictionary:
 		# (the demo pass's, version 4; an older save has none: every tip still to show)
 		var tips = data.get("tips")
@@ -495,6 +516,9 @@ func from_data(data: Variant) -> void:
 	_unlocked[FIRST] = true
 	for k in _cleared:  # (got out of it, so it was open)
 		_unlocked[k] = true
+	# (a skin he's chosen, if it's one there is and it's open: an older save has none)
+	if data is Dictionary and (data.get("skin") is String or data.get("skin") is StringName) and skin_unlocked(String(data["skin"])):
+		skin = String(data["skin"])
 
 
 static func _valid_key(k: Variant) -> bool:
