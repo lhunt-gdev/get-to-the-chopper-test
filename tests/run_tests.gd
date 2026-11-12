@@ -4375,8 +4375,8 @@ func _test_settings() -> void:
 	var spin := func(s: String) -> Array: return g[s].mission()["boss"]["spinup"]
 	var slower := true
 	for i in 3:
-		slower = slower and float(spin.call("easy")[i]) > float(spin.call("medium")[i]) and float(spin.call("hard")[i]) <= float(spin.call("medium")[i])
-	_check(slower, "settings: EASY's boss spins up slower than MEDIUM's, HARD's no slower")
+		slower = slower and float(spin.call("easy")[i]) > float(spin.call("medium")[i]) and float(spin.call("hard")[i]) <= float(spin.call("easy")[i]) 				and float(spin.call("hard")[i]) > float(spin.call("medium")[i])
+	_check(slower, "settings: EASY's boss spins up slower than MEDIUM's; HARD's (one free lane, anywhere) between them")
 	_check(RouteGraph.from_dict(data).setting == RouteGraph.DEFAULT_SETTING and RouteGraph.from_json_file(TEST_RANGE).setting == "",
 			"settings: a route with settings is read as MEDIUM unless one is asked; the test range has none")
 	# EASY is today's layout (user: "So this would be mission 1 easy") and MEDIUM the same; HARD adds a
@@ -4424,8 +4424,12 @@ func _test_settings() -> void:
 			"settings: a harder setting never gives more time")
 	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["medium"]["boss"]["health"] = 10).contains("medium: the boss takes fewer hits than on easy"),
 			"settings: a harder setting's boss never takes fewer hits")
-	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["hard"]["boss"]["spinup"] = [2.0, 0.8, 0.7]).contains("hard: the boss spins up slower than on medium"),
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["medium"]["boss"]["spinup"] = [2.0, 0.8, 0.7]).contains("medium: the boss spins up slower than on easy"),
 			"settings: a harder setting's boss never spins up slower")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["hard"]["boss"]["spinup"] = [2.0, 0.8, 0.7]).contains("hard: the boss spins up slower than on easy"),
+			"settings: one leaving fewer lanes free may spin up longer, but never longer than EASY's")
+	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["hard"]["boss"]["free"] = 2).contains("hard: the boss spins up slower than on medium"),
+			"settings: with as many lanes free, never longer than the setting before")
 	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["easy"]["chopper"]["gone_at"] = 50).contains("easy: its chopper times must be"),
 			"settings: each one's chopper times in order")
 	_check(broken.call(func(d: Dictionary) -> void: d["settings"]["easy"]["boss"].erase("spinup")).contains("easy: the boss needs"), "settings: each has its boss")
@@ -4462,25 +4466,27 @@ func _test_settings() -> void:
 	var e: Array = pace.call("easy")
 	var m: Array = pace.call("medium")
 	var h: Array = pace.call("hard")
-	_check(m[0] < e[0] * 0.85 and h[0] <= m[0] and e[1] == 2 and m[1] == 2 and h[1] == 1,
-			"boss: MEDIUM attacks quicker than EASY (%.2f s vs %.2f), HARD as quick (%.2f) with one free lane" % [m[0], e[0], h[0]])
+	_check(m[0] < e[0] * 0.85 and h[0] < e[0] and e[1] == 2 and m[1] == 2 and h[1] == 1,
+			"boss: MEDIUM attacks quicker than EASY (%.2f s vs %.2f), HARD quicker than EASY (%.2f) with one free lane" % [m[0], e[0], h[0]])
 	var near_ok := true
 	for at_lane in 5:
 		for k in 20:
 			var f := Boss.pick_free_lane_near((k + 0.5) / 20.0, at_lane, 2, 5)
 			near_ok = near_ok and f.size() == 1 and absi(f[0] - at_lane) <= 2 and f[0] >= 0 and f[0] <= 4
+	_check(near_ok, "boss: a free lane kept near you (free_reach) is never further than that")
 	var hb := Boss.new(t)
 	hb.configure(g["hard"].mission()["boss"])
 	hb.set_seed(5)
-	var seen := {}
-	for at_lane in 5:
+	var one := true
+	var far := false
+	for at_lane in [0, 4]:
 		hb._last_player_x = hb.lane_x(at_lane)
-		for k in 12:
+		for k in 30:
 			hb._spin_up(3)
-			near_ok = near_ok and hb.free_lanes.size() == 1 and absi(hb.free_lanes[0] - at_lane) <= 2
-			seen[hb.free_lanes[0]] = true
+			one = one and hb.free_lanes.size() == 1
+			far = far or absi(hb.free_lanes[0] - at_lane) == 4
 	hb.free()
-	_check(near_ok and seen.size() == 5, "boss on HARD: one free lane, within 2 lanes of you, any lane over the fight")
+	_check(one and far, "boss on HARD: one free lane, and it can be anywhere (even four lanes over)")
 	_check(Boss.MARK.s < Boss.DANGER.s and Boss.MARK.v >= Boss.DANGER.v, "boss: the lane strips a lighter red than his danger red")
 
 

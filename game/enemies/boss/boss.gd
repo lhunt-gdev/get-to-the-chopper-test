@@ -101,9 +101,9 @@ var _fire_rate := 40.0
 var _round_speed := 28.0
 var _hit_radius := 0.4
 ## How many lanes he leaves free each sweep (2; HARD 1), and for one, how far (lanes) it can be from
-## the one you're standing in when he spins up (so you can always get there).
+## the one you're standing in when he spins up (any, unless the setting says).
 var _free_count := 2
-var _free_reach := 2
+var _free_reach := 99
 ## Which attack this is (rounds carry it), the last one whose rounds have hit you (once an attack at
 ## most), and where you were last frame.
 var _attack := 0
@@ -197,7 +197,7 @@ func configure(setting_boss: Dictionary) -> void:
 	if float(setting_boss.get("spindown", 0.0)) > 0.0:
 		_spindown_time = float(setting_boss["spindown"])
 	_free_count = clampi(int(setting_boss.get("free", 2)), 1, 2)
-	_free_reach = maxi(1, int(setting_boss.get("free_reach", 2)))
+	_free_reach = maxi(1, int(setting_boss.get("free_reach", 99)))
 
 
 func set_seed(s: int) -> void:

@@ -217,6 +217,7 @@ static func _settings_problems(data: Dictionary) -> PackedStringArray:
 		if not which in SETTINGS:
 			problems.append("unknown setting '%s' (easy, medium or hard)" % which)
 	var last := {}
+	var first := {}
 	for which: String in SETTINGS:
 		if not blocks.has(which) or not blocks[which] is Dictionary:
 			problems.append("the %s setting is missing" % which)
@@ -237,11 +238,16 @@ static func _settings_problems(data: Dictionary) -> PackedStringArray:
 				problems.append("%s: the chopper waits longer than on %s" % [which, last["name"]])
 			if int(boss.get("health", 0)) < int(last["health"]):
 				problems.append("%s: the boss takes fewer hits than on %s" % [which, last["name"]])
-			for i in mini(spin.size(), last["spin"].size()):
-				if float(spin[i]) > float(last["spin"][i]):
-					problems.append("%s: the boss spins up slower than on %s" % [which, last["name"]])
+			# (a boss leaving fewer lanes free may spin up longer, to reach the one: no longer than EASY's)
+			var fewer := int(boss.get("free", 2)) < int(last["free"])
+			var than: Dictionary = first if fewer else last
+			for i in mini(spin.size(), than["spin"].size()):
+				if float(spin[i]) > float(than["spin"][i]):
+					problems.append("%s: the boss spins up slower than on %s" % [which, than["name"]])
 					break
-		last = {"name": which, "lifts": t1, "gone": t2, "health": int(boss.get("health", 0)), "spin": spin}
+		last = {"name": which, "lifts": t1, "gone": t2, "health": int(boss.get("health", 0)), "spin": spin, "free": int(boss.get("free", 2))}
+		if first.is_empty():
+			first = last
 	for n: Dictionary in data.get("nodes", []):
 		for list in BY_SETTING:
 			for thing in n.get(list, []):
