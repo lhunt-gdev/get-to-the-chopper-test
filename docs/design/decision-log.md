@@ -160,11 +160,17 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - **Phone:** tap areas of at least 30 px (the pause button about 36x30) with the same look; the status bar set to black and a bottom margin in Home Screen mode so FIRE stays clear of the home swipe; SETTINGS and CONTROLS centred on wider screens; a turn-to-portrait message when held sideways; a broken save kept as a .bad copy and settings values type-checked on load.
 - **Words:** CONTROLS drops the dogs line and the AIM wording follows the AIM setting; the cover tips come in order; one wording per ending (debrief and board); PICK YOUR DIFFICULTY; ABOUT THE DEMO; the end-of-demo screen only after an escape's debrief. The follow link waits for the user.
 
-### PROPOSED — The chopper given a boost (user, 2026-10-11)
+### DECIDED — The chopper given a boost (user, 2026-10-11; approved 2026-11-12)
+- **Approved (user, 2026-11-12):** "The chopper boost ... Approved."
 - **Why (user):** "I'd like you to make the chopper looks better, maybe give it a ps1 texture keep the model in a ps1 style just give it an overall boost."
 - The extraction chopper (built in code, _build_chopper_model) keeps its size, its place on the pad, the open cabin door you run into, its lights and everything it does (landing, the rotor, lifting off, the KO replay shots, the sounds), and stays low-poly. It gets a better PS1 shape (a shaped nose and canopy, cabin, tail boom, sponsons or stub wings, skids, engine intakes and exhausts, rotor hub) and a hand-made PS1 texture made in code: military olive or dark grey paint with panel lines, rivets, weathering and soot, a CONDOR marking and tail number, warning stripes, a lit cockpit glass and cabin, so it reads at phone size. Mission 9's VORHALT gold chopper can reuse it as a repaint later.
 
-### PROPOSED — Scoring and the scoreboard (user, 2026-10-10; Point: scoring)
+### DECIDED — Alarm boxes can't be shot at the lowest alert (user, 2026-11-12)
+- **Why (user):** "if the alarm is already on the lowest level and i shoot an alarm box do i get points? i should not get points because the alarm is already as low as it can go. Maybe it should not be targetable if the lowest alarm is still active?" It did score: a box could be shot at SNEAKING, lowering nothing, for 500.
+- **What:** while the alert is at its lowest (SNEAKING), an alarm box can't be shot: auto-aim passes it over and a tap on it does nothing; its beacon is dark and it doesn't beep, so it reads as off. If the alert goes up before you reach it, it wakes up (blinks, beeps in its window, can be shot) as before. A box only scores when it lowers the alert.
+
+### DECIDED — Scoring and the scoreboard (user, 2026-10-10; approved 2026-11-12)
+- **Approved (user, 2026-11-12):** the escape bonus, the setting's multiplier and the board as they are; the points "approved once" the alarm boxes are fixed ("if the alarm is already on the lowest level and i shoot an alarm box do i get points? i should not"): see "Alarm boxes can't be shot at the lowest alert". A stumble that costs no HP (see "Obstacles stun instead of kill") isn't a hit taken, so it costs no score.
 - **Why (user):** "The scoring for easy, medium and hard should be taken from the scores the player gets at the end or death of a run." Then: "Ok let's work on the score board."
 - **The score:** every run scores, whatever the ending: 10 a metre run, 250 an enemy down, 500 an alarm stopped, minus 500 an alarm set off; only an escape adds 50,000 less 5,000 a hit taken, and 1,000 a second of chopper time to spare; then x the setting (user: EASY x1, MEDIUM x2, HARD x3); never below 0. Any escape beats any failed run (a test proves it from route.json). Not scored: run time, stumbles (each is already a hit), the alert level, new areas found. Captured scores the same way as killed (user).
 - **On the debrief:** a DISTANCE row, a SCORE line rolling up as the tally lands, the setting's multiplier, NEW BEST.
@@ -316,7 +322,8 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - The map and tally replace the end screen's list of area names; RETRY and MAIN MENU stay. The run already logs everything they need (RunLog's events and discovery).
 - **Review fixes (2026-10-03):** the tap to skip didn't work (its area had no size); a death a little past a stairwell was drawn on the stairs (they're drawn wider than they are: a death is now placed by the real stairs' length); an area only partly seen on an earlier run was drawn whole with locks on exits never reached; ALARMS STOPPED counted runners dropped after raising the alarm; the longest route ran into its label (it now drops the spaces round its arrows); 1:59.97 read 1:60.0; the end mark now moves under the line rather than cover a lock.
 
-### PROPOSED — Chopper countdown (Point 9 / extraction pressure; user direction)
+### DECIDED — Chopper countdown (Point 9 / extraction pressure; user direction; approved 2026-11-12)
+- **Approved (user, 2026-11-12):** "The chopper countdown. All approved."
 - **Clock (user decision):** an old-style analog timer dial, top centre. The hand sweeps round as the chopper's window runs out, and the last stretch of the dial is red. This replaces the handover's "no big HUD timer" working direction (which was never locked). It stays small.
 - **Messages (user decision):** centred just under the clock, short and readable: CHOPPER INBOUND → LANDED → LIFTING OFF. Each shows for a few seconds when its stage starts; LIFTING OFF stays up and blinks.
 - **Rules:** the stages run on game time from the start of the run (`chopper_*` in `Tuning`). You can extract any time before the chopper is gone; arriving during LIFTING OFF still counts. When it's gone, the run ends THE CHOPPER LEFT, wherever you are. The helicopter on the helipad starts lifting during LIFTING OFF.
@@ -334,13 +341,15 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 - Note: the test level has only one tripwire, so Alert 3 can't be reached yet. The Alert 3 troopers are authored, ready for a second alert trigger.
 - **Superseded by "Alert tiers" below (2026-10-01):** Alert 1 is sparser than 1 per segment now.
 
-### PROPOSED — Alert tiers (user direction, 2026-10-01; stage 2 of the UI / alert / squad plan)
+### DECIDED — Alert tiers (user direction, 2026-10-01; approved 2026-11-12)
+- **Approved (user, 2026-11-12)**, Alert 2 and 3 as they are; Alert 1 with one change: **alarm runners by setting** (user: "I think 1 or 2 alarm runners is ok, maybe easy level has 1, and then add one for each difficulty?"): EASY 1, MEDIUM 2, HARD 3 per run, in the missions that have the runner. Mission 1 has none (its approved layout keeps to the basics; the runner first comes in mission 2), so this is laid out with mission 2 onward and the TEST RANGE keeps its one.
 - **Alert 1 (SNEAKING) is sparse (user):** 1 or 2 rifle guards dotted around a section, and some sections have none (on the ground; the roofs have more, see "Longer level"). No dogs. Plus one alarm runner (the Security Trooper, below) per run.
 - **Alert 2 (CAUTION) is busier (user):** more rifle guards than at Alert 1, and the dogs come out. Dogs appear only from Alert 2 up (the lobby dog moves from Alert 1 to 2; a new one guards the MAIN FLOOR EXIT).
 - **Alert 3 (ALERT):** at least as many guards as Alert 2, plus dogs. The chasing squad and rear-view CCTV come in stage 3.
 - Test level, rifle guards at Alert 1 / 2 / 3: LOBBY 1/2/3, MAIN FLOOR 2/3/3, EXIT 0/2/3, ROOFTOPS 1/2/3, ROOFTOPS (far) 0/2/3, TUNNEL 1/2/3. A unit test holds the rules: Alert 1 has at most 2 per section and at least one section has none; Alert 2 has more than Alert 1, Alert 3 no fewer than Alert 2; dogs only from Alert 2; one alarm runner, Alert 1 only.
 
-### PROPOSED — Alert 3 pursuit squad and rear-view CCTV (user direction, 2026-10-01; stage 3)
+### DECIDED — Alert 3 pursuit squad and rear-view CCTV (user direction, 2026-10-01; approved 2026-11-12)
+- **Approved (user, 2026-11-12):** "Alert 2 and 3 are approved."
 - **A squad chases you at Alert 3 (user):** when alert reaches 3, a squad comes after you from behind, one guard in each lane (5), starting `squad_start_gap` (25 m) back. A radio squelch and "SQUAD ON YOUR TAIL".
 - **They gain only when you slow down (user decision):** they run at your normal run speed. Cover, stumbles and dog bites let them close the gap; run clean and they never catch you. At Alert 3, stopping in cover is a risk.
 - **Caught means CAPTURED (user decision):** if any of them reaches you, they grab you and the run ends CAPTURED. This resolves "Who captures the player?".
@@ -694,7 +703,8 @@ Behaviour by alert level: see the table in the Point 2 discussion. It's also sum
 ### OPEN — FIRE button position setting (later)
 - User wants a player setting to put FIRE on the left, the right or in the middle. Build it when there's a settings screen. The button's position is already one function (`SwipeInput.fire_button`), so it's a small change.
 
-### PROPOSED — Obstacles stun instead of kill (user decision; part of the OPEN damage model, Point 4)
+### DECIDED — Obstacles stun instead of kill (user decision; approved 2026-11-12 with one change)
+- **Approved (user, 2026-11-12), with a change:** "you only lose 1 HP if you run into 2 consecutive obstacles". The first stumble costs no HP, only the stun and the slowdown (the chopper clock and, at Alert 3, the squad still make it cost). Run into the very next jump or slide obstacle you meet as well, without getting over one cleanly in between, and that one costs 1 HP, as does each one after it until you clear one cleanly (a tripwire jumped counts as clearing one). Stumbles inside the grace after one still don't count. `obstacle_damage` is the HP a consecutive stumble costs. The tally's RUN INTO still counts every stumble.
 - Running into a jump or slide obstacle no longer ends the run. You **stumble**: a short stun (`obstacle_stun_time`, no swipes), your speed drops (`obstacle_slow_factor`) and recovers over `obstacle_slow_recover`, and you lose `obstacle_damage` HP (default 1, from the same pool as trooper hits; set 0 to try "time cost only").
 - Why HP as well: without it, a player could shrug off obstacles and just take the time hit, and jumping and sliding would stop mattering. Obstacles and troopers share one health pool, so a messy run is what fails.
 - A short grace after a stumble (`obstacle_grace`) so one fumble can't chain straight into another.
