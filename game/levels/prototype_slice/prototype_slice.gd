@@ -9850,7 +9850,7 @@ func _start_boss_fight(boss: Boss) -> void:
 	_hud.show_runner(-1.0)
 	_hud.show_boss(1.0)
 	RunLog.record_event("boss_fight", {"node": _runner.current})
-	boss.begin(GameState.alert_level)
+	boss.begin(GameState.alert_level, _player.track_x)
 
 
 ## The boss's KO replay (user: Tekken-style; KoReplay): the moment he's killed the game cuts close
