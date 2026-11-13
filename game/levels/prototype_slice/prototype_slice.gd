@@ -745,7 +745,7 @@ func _apply_settings() -> void:
 	tuning.swipe_min_fraction = _swipe_base * {"low": 1.4, "medium": 1.0, "high": 0.7}.get(String(Settings.get_value("swipe")), 1.0)
 	_ambience.brightness_scale = float(Settings.get_value("brightness")) / 100.0
 	_shake_on = bool(Settings.get_value("screen_shake"))
-	_hud.set_retro_filter(bool(Settings.get_value("retro_filter")))
+	_hud.set_retro_filter(bool(Settings.get_value("retro_filter")), bool(Settings.get_value("crt")))
 	_hud.redraw_fire()
 	_hud.redraw_buttons()
 

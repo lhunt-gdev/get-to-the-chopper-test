@@ -11,7 +11,7 @@ extends RefCounted
 ## high (user: "zoomed in on Cross a bit more ... moved down a little more so he is clear of the
 ## text"): a quarter bigger than at 3.3 m and 1.25 m, his head under the title's red rule.
 const SWAY := 0.7
-const SWAY_RATE := 0.22
+const SWAY_RATE := 0.15  # (0.22 until the decision log's "Less texture flicker": slower, so the room crawls less)
 const MENU_R := 2.75
 const MENU_EYE := 1.55
 const MENU_LOOK := 1.58

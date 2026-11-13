@@ -15,6 +15,7 @@ const DEFAULTS := {
 	"brightness": 100,      # percent of normal
 	"screen_shake": true,
 	"retro_filter": true,
+	"crt": true,            # the CRT EFFECT: the old-TV picture over the game view (hud.gd set_retro_filter); RETRO FILTER's row
 	"blood": true,          # blood effects (Blood): the mist and the pools
 	"aim": "auto_tap",      # "auto" | "auto_tap" | "tap"
 	"fire_side": "right",   # "right" | "left"
