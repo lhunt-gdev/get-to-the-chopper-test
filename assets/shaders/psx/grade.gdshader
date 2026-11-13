@@ -1,7 +1,7 @@
 // The whole game view, MGS1-style: cold teal shadows, a little less colour, a soft vignette,
 // and PS1 15-bit colour with an ordered dither. At CAUTION / ALERT the screen edges throb
 // amber / red. Sits under the HUD (see hud.gd set_grade).
-// And the CRT EFFECT setting: the view as an old TV over a composite cable showed it (each pixel a
+// And the CRT effect (SETTINGS' RETRO FILTER row: ON or CRT): the view as an old TV over a composite cable showed it (each pixel a
 // little blended with its neighbours across, the colour more than the brightness, and faint
 // scanlines), which also calms the textures' crawl. Under the HUD and the menus, so their text
 // stays sharp. The two are separate settings: either on without the other.
@@ -15,7 +15,7 @@ uniform float vignette = 0.38;
 // 0..1 (already pulsing): how red / amber the screen edges are.
 uniform float alert = 0.0;
 uniform float caution = 0.0;
-// RETRO FILTER (the grade and dither) and CRT EFFECT.
+// The grade and dither (RETRO FILTER: ON or COLOUR) and the CRT effect (ON or CRT).
 uniform bool grade_on = true;
 uniform bool crt = true;
 // How dark every other line is (1: no scanlines).
