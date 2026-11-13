@@ -63,6 +63,7 @@ func _run() -> void:
 	_test_cross_death()
 	await _test_blood_setting()
 	await _test_settings_screen()
+	await _test_retro_crt()
 	_test_first_tips()
 	await _test_tips_setting()
 	await _test_demo_end()
@@ -618,6 +619,55 @@ func _test_blood_setting() -> void:
 	_check(spreading.visible and pools_in.call(mid) == 1 and mists_in.call(mid) == 0 and Blood.pool_at(mid, Vector3.ZERO, 1.0, 4) == null,
 			"blood: switched off mid-run, the pool already there goes on, the next effect doesn't come")
 	mid.free()
+	settings._values = saved
+
+
+## The decision log's "Less texture flicker": the CRT effect on by default; SETTINGS' RETRO FILTER row
+## steps through ON (both), COLOUR, CRT, OFF and round again, setting retro_filter and crt; the HUD's
+## grade draws the grade and the CRT as set, there while either is on and gone with both off; the PS1
+## surfaces read their textures half a mip coarser; the menu camera's sway slower.
+func _test_retro_crt() -> void:
+	var settings: Node = root.get_node("Settings")
+	var saved: Dictionary = settings._values.duplicate()
+	_check(bool(settings.DEFAULTS["crt"]) and bool(settings.DEFAULTS["retro_filter"]), "crt: on by default, with the colour filter")
+	settings._values["retro_filter"] = true
+	settings._values["crt"] = true
+	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
+	root.add_child(fe)
+	fe.show_main()
+	await process_frame
+	_menu_button(fe, "SETTINGS").pressed.emit()
+	await process_frame
+	var row: Button = null
+	var label_y := -1.0
+	for l in fe.find_children("*", "Label", true, false):
+		if (l as Label).text == "RETRO FILTER":
+			label_y = (l as Label).position.y
+	for b in fe.find_children("*", "Button", true, false):
+		if absf((b as Button).position.y + 1.0 - label_y + 3.0) < 1.0:
+			row = b
+	var seen := []
+	if row != null:
+		seen.append([row.text, settings._values["retro_filter"], settings._values["crt"]])
+		for i in 4:
+			row.pressed.emit()
+			seen.append([row.text, settings._values["retro_filter"], settings._values["crt"]])
+	_check(seen == [["< ON >", true, true], ["< COLOUR >", true, false], ["< CRT >", false, true], ["< OFF >", false, false], ["< ON >", true, true]],
+			"crt: RETRO FILTER steps ON, COLOUR, CRT, OFF, round again, each setting both (%s)" % [seen])
+	fe.free()
+	var hud = (load("res://game/ui/hud/hud.gd") as GDScript).new()
+	root.add_child(hud)
+	hud.set_grade(0.0, 0.0)
+	var states := []
+	for c: Array in [[true, true], [true, false], [false, true], [false, false]]:
+		hud.set_retro_filter(c[0], c[1])
+		states.append([hud._grade.visible, hud._grade_mat.get_shader_parameter("grade_on"), hud._grade_mat.get_shader_parameter("crt")])
+	_check(states == [[true, true, true], [true, true, false], [true, false, true], [false, false, false]],
+			"crt: the grade draws the colour filter and the CRT as set, gone with both off (%s)" % [states])
+	hud.free()
+	var lit: Shader = load("res://assets/shaders/psx/psx_lit.gdshader")
+	_check(lit.code.contains("MIP_BIAS = 0.5") and lit.code.contains("texture(albedo_texture, uv, MIP_BIAS)") and IntroCamera.SWAY_RATE < 0.22,
+			"crt: PS1 surfaces read their textures half a mip coarser, and the menu camera sways slower")
 	settings._values = saved
 
 

@@ -16,6 +16,7 @@ uniform float snap_resolution = 90.0;
 uniform bool affine_mapping = true;
 // Gives off its own light (lit windows, the skyline): ignores the lighting.
 uniform bool unlit = false;
+const float MIP_BIAS = 0.5;
 varying vec3 affine_uv_w;
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -79,7 +80,10 @@ vec3 lamp(vec4 pos, vec4 col, vec3 p, vec3 n) {
 
 void fragment() {
 	vec2 uv = (affine_mapping ? affine_uv_w.xy / affine_uv_w.z : UV * uv_scale) + uv_offset;
-	vec3 base = albedo.rgb * texture(albedo_texture, uv).rgb;
+	// Half a mip level coarser than the screen asks for: further off, the detail the 270x480 screen
+	// can't hold goes a little sooner, so textures crawl less as the camera moves (still nearest-
+	// filtered: hard pixels up close). See the decision log's "Less texture flicker".
+	vec3 base = albedo.rgb * texture(albedo_texture, uv, MIP_BIAS).rgb;
 	if (unlit) {
 		ALBEDO = base;
 	} else {

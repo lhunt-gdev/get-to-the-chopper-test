@@ -60,7 +60,9 @@ SETTINGS_EFFECTS,EFFECTS,SETTINGS: a volume slider's row (sound effects),8:108,
 SETTINGS_AMBIENCE,AMBIENCE,SETTINGS: a volume slider's row (background sound),8:108,
 SETTINGS_BRIGHTNESS,BRIGHTNESS,SETTINGS: a slider's row,8:108,"LB, UNSURE: ""Hellegkeet"" is not in lod.lu; please check (or ""Liicht"")."
 SETTINGS_SCREEN_SHAKE,SCREEN SHAKE,SETTINGS: a row (ON / OFF),8:160,
-SETTINGS_RETRO_FILTER,RETRO FILTER,SETTINGS: a row (ON / OFF; the old-TV colour filter),8:160,
+SETTINGS_RETRO_FILTER,RETRO FILTER,"SETTINGS: a row (ON, COLOUR, CRT, OFF: the old-TV colour filter and picture; ON is both)",8:108,The row's name and its choice share the row
+RETRO_COLOUR,COLOUR,"SETTINGS' RETRO FILTER row: a choice (only the colour filter)",8:96,
+RETRO_CRT,CRT,"SETTINGS' RETRO FILTER row: a choice (only the old-TV picture: soft across, faint scanlines)",8:96,"CRT: an old TV (cathode-ray tube); keep it as CRT."
 SETTINGS_BLOOD,BLOOD,SETTINGS: a row (ON / OFF),8:160,
 SETTINGS_AIM,AIM,"SETTINGS: a row (AUTO, AUTO + TAP, TAP ONLY)",8:108,The row's name and its choice share the row
 SETTINGS_TRIGGER,TRIGGER,"SETTINGS: a row (which side the FIRE trigger is on)",8:108,The row's name and its choice share the row

@@ -244,7 +244,10 @@ static func rust_pipe() -> Texture2D:
 
 
 ## Office / complex wall (MGS PS1 style): blue-grey panels with recessed seams and screws, a dado
-## rail, a darker kick panel scuffed by feet, a power socket, and dirt along the floor.
+## rail, a darker kick panel scuffed by feet, a power socket, and dirt along the floor. The seams,
+## rail and screws in softer steps than the other walls': this wall fills the menu's view, and bright
+## and dark 1-px lines side by side crawled as its camera swayed (the decision log's "Less texture
+## flicker").
 static func office_wall() -> Texture2D:
 	if _cache.has("office_wall"):
 		return _cache["office_wall"]
@@ -256,16 +259,17 @@ static func office_wall() -> Texture2D:
 		for y in range(46, SIZE):
 			_put(img, x, y, img.get_pixel(x, y).darkened(0.3))
 	for y in range(0, 46):
-		_groove_v(img, 0, y, y + 1)
-		_groove_v(img, 32, y, y + 1)
-	_groove_h(img, 0, 0, SIZE)
+		_groove_v(img, 0, y, y + 1, 0.72, 1.1)
+		_groove_v(img, 32, y, y + 1, 0.72, 1.1)
+	_groove_h(img, 0, 0, SIZE, 0.72, 1.1)
 	for x in SIZE:
-		_put(img, x, 42, Color("a8b4bc"))
-		_put(img, x, 43, Color("8e9aa2"))
-		_put(img, x, 44, Color("5a646c"))
-		_put(img, x, 45, Color("3e464c"))
+		_put(img, x, 42, Color("939fa7"))
+		_put(img, x, 43, Color("86919a"))
+		_put(img, x, 44, Color("67717a"))
+		_put(img, x, 45, Color("535c63"))
 	for p in [Vector2i(4, 4), Vector2i(28, 4), Vector2i(36, 4), Vector2i(60, 4), Vector2i(4, 38), Vector2i(28, 38), Vector2i(36, 38), Vector2i(60, 38)]:
-		_rivet(img, p.x, p.y)
+		_shade(img, p.x, p.y, 1.25)
+		_shade(img, p.x + 1, p.y + 1, 0.8)
 	_bevel(img, Rect2i(0, 46, 32, 18), 1.15, 0.75)
 	_bevel(img, Rect2i(32, 46, 32, 18), 1.15, 0.75)
 	# A power socket on the kick panel.
@@ -312,13 +316,15 @@ static func office_ceiling() -> Texture2D:
 	for y in range(2, SIZE, 3):
 		for x in range(2, SIZE, 3):
 			if rng.randf() < 0.55:
-				_shade(img, x + rng.randi_range(-1, 0), y, 0.8)
+				_shade(img, x + rng.randi_range(-1, 0), y, 0.9)
+	# (the grid and the perforations in softer steps: the ceiling crawled as the menu's camera
+	# swayed; the decision log's "Less texture flicker")
 	for i in SIZE:
 		for j in [0, 32]:
-			_put(img, i, j, Color("b4b8b4"))
-			_put(img, j, i, Color("b4b8b4"))
-			_shade(img, i, j + 1, 0.65)
-			_shade(img, j + 1, i, 0.7)
+			_put(img, i, j, Color("a2a6a2"))
+			_put(img, j, i, Color("a2a6a2"))
+			_shade(img, i, j + 1, 0.8)
+			_shade(img, j + 1, i, 0.82)
 	# A brown water stain on one tile, a vent grille in another.
 	_blotches(img, "office_ceiling_stain", 1, 6, 8, Color("7a6a4c"), 0.35, Rect2i(36, 36, 24, 24))
 	_fill(img, Rect2i(8, 40, 16, 14), Color("6a6e6c"))
@@ -1706,16 +1712,16 @@ static func _frame(img: Image, w: int, color: Color = Color(0, 0, 0, 0)) -> void
 
 
 ## A recessed seam: a dark line with a light line after it.
-static func _groove_h(img: Image, y: int, x0: int, x1: int) -> void:
+static func _groove_h(img: Image, y: int, x0: int, x1: int, dark := 0.55, light := 1.2) -> void:
 	for x in range(x0, x1):
-		_shade(img, x, y, 0.55)
-		_shade(img, x, y + 1, 1.2)
+		_shade(img, x, y, dark)
+		_shade(img, x, y + 1, light)
 
 
-static func _groove_v(img: Image, x: int, y0: int, y1: int) -> void:
+static func _groove_v(img: Image, x: int, y0: int, y1: int, dark := 0.55, light := 1.2) -> void:
 	for y in range(y0, y1):
-		_shade(img, x, y, 0.55)
-		_shade(img, x + 1, y, 1.2)
+		_shade(img, x, y, dark)
+		_shade(img, x + 1, y, light)
 
 
 ## A rivet or screw head: lit on top, shadow below right.
