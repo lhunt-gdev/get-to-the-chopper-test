@@ -2065,17 +2065,16 @@ static func _frame(a: Vector3, b: Vector3) -> Basis:
 
 
 ## Never dissolved by the cutout (Cutout) from now on: CROSS (the player sets it: his body, his pistol
-## and his hit flash), and a guard once he's down (GuardRig.fall, GuardRig.death_start), so his body
-## never melts away as you run past it. Their own copies of their materials, so the others keep
-## theirs. Whatever else in the PS1 shader hangs on him (a guard's radio) goes solid too, and so does
-## a hit flash showing now.
+## and his hit flash), and every guard and the boss from the start (GuardRig; the decision log's "The
+## enemies never dissolve in the camera cutout"). Their own copies of their materials, so the level
+## keeps its own. Whatever else in the PS1 shader hangs on him by now (a guard's radio) goes solid too
+## (again each time: a fall and a death call it), and so does a hit flash showing now.
 func keep_solid() -> void:
-	if _solid:
-		return
-	_solid = true
-	for i in _meshes.size():
-		_materials[i] = PsxMaterials.solid(_materials[i])
-		_meshes[i].material_override = PsxMaterials.solid(_meshes[i].material_override)
+	if not _solid:
+		_solid = true
+		for i in _meshes.size():
+			_materials[i] = PsxMaterials.solid(_materials[i])
+			_meshes[i].material_override = PsxMaterials.solid(_meshes[i].material_override)
 	for mi: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
 		if not _meshes.has(mi):
 			mi.material_override = PsxMaterials.solid(mi.material_override)

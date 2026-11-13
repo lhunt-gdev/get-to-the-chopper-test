@@ -1,14 +1,14 @@
 class_name Cutout
 extends RefCounted
 ## The cutout (user: "anything in front of the camera between the lens and Cross is faded/dissolved
-## out"): walls, furniture, cover, pillars, guards and glass between the camera and CROSS dissolve,
+## out"): walls, furniture, cover, pillars and glass between the camera and CROSS dissolve,
 ## PS1 screen-door style (psx_lit.gdshader and psx_glass.gdshader drop their pixels on a 4x4 ordered
 ## dither, the same hole: psx_cutout.gdshaderinc), so the camera can go anywhere and he always shows.
 ## CROSS himself never does (his materials opt out, his pistol and his hit flash too:
-## SoldierRig.keep_solid), nor a guard's or a dog's body once he's down (SoldierRig.keep_solid,
-## DogRig.keep_solid: it doesn't melt away as you run past it), nor the floor under him (the level's
-## surfaces keep FLOOR; a guard or a dog standing between dissolves boots and all, with no floor rule
-## for him: PsxMaterials.figure), nor anything beyond him, nor anything drawn in neither (the
+## SoldierRig.keep_solid), nor the enemies, on their feet or down (the guards, the boss, the dogs:
+## SoldierRig.keep_solid, DogRig.keep_solid; user, 2026-11-13: "for the enemies its not necessary for
+## them to also disappear"), nor the floor under him (the level's surfaces keep FLOOR), nor anything
+## beyond him, nor anything drawn in neither (the
 ## sky, glows, the stairs doors' arrows and padlock, Label3D, the UI). On under the
 ## menu, through the opening pan and on the play camera; off on the stairwells' security cameras and
 ## just out of a stairwell (the play camera is still back in it then, and leaving the stairwell out
