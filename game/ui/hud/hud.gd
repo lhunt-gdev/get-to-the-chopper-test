@@ -717,7 +717,7 @@ func set_grade(alert: float, caution: float) -> void:
 	_grade_mat.set_shader_parameter("caution", caution)
 
 
-## The RETRO FILTER setting (the colour grade and dither) and the CRT EFFECT one (the old-TV
+## The RETRO FILTER setting (the colour grade and dither) and the CRT effect (the old-TV
 ## picture: the decision log's "Less texture flicker"), each on or off.
 func set_retro_filter(on: bool, crt := _crt) -> void:
 	_retro = on

@@ -1489,7 +1489,7 @@ func _toggle_row(text: String, key: String, y: float) -> float:
 	return y + ROW_STEP[_roomy]
 
 
-## SETTINGS' RETRO FILTER row: the colour grade and dither ("retro_filter") and the CRT EFFECT
+## SETTINGS' RETRO FILTER row: the colour grade and dither ("retro_filter") and the CRT effect
 ## ("crt": the decision log's "Less texture flicker"), as one choice so the screen keeps its rows:
 ## ON (both), COLOUR (the grade only), CRT (the old-TV picture only), OFF, round again.
 const RETRO_CHOICES := [[true, true, "SETTINGS_ON"], [true, false, "RETRO_COLOUR"], [false, true, "RETRO_CRT"], [false, false, "SETTINGS_OFF"]]
