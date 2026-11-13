@@ -619,55 +619,32 @@ func _test_blood_setting() -> void:
 	settings._values = saved
 
 
-## The decision log's "Less texture flicker": the CRT effect on by default; SETTINGS' RETRO FILTER row
-## steps through ON (both), COLOUR, CRT, OFF and round again, setting retro_filter and crt; the CRT a
-## lens over the camera's view focused on CROSS (crt_focus.gdshader); the PS1 surfaces read their
-## textures half a mip coarser; the menu camera's sway slower.
+## The decision log's "The CRT effect removed, and the colour filter always on": no RETRO FILTER row
+## (nor the retro_filter or crt settings), nothing over the camera's view, the colour filter there in
+## the level; and from "Less texture flicker", the PS1 surfaces read their textures half a mip
+## coarser and the menu camera's sway is slower.
 func _test_retro_crt() -> void:
 	var settings: Node = root.get_node("Settings")
 	var saved: Dictionary = settings._values.duplicate()
-	_check(bool(settings.DEFAULTS["crt"]) and bool(settings.DEFAULTS["retro_filter"]), "crt: on by default, with the colour filter")
-	settings._values["retro_filter"] = true
-	settings._values["crt"] = true
+	var no_settings: bool = not settings.DEFAULTS.has("crt") and not settings.DEFAULTS.has("retro_filter")
 	var fe: CanvasLayer = load("res://game/ui/menu/frontend.gd").new()
 	root.add_child(fe)
 	fe.show_main()
 	await process_frame
 	_menu_button(fe, "SETTINGS").pressed.emit()
 	await process_frame
-	var row: Button = null
-	var label_y := -1.0
-	for l in fe.find_children("*", "Label", true, false):
-		if (l as Label).text == "RETRO FILTER":
-			label_y = (l as Label).position.y
-	for b in fe.find_children("*", "Button", true, false):
-		if absf((b as Button).position.y + 1.0 - label_y + 3.0) < 1.0:
-			row = b
-	var seen := []
-	if row != null:
-		seen.append([row.text, settings._values["retro_filter"], settings._values["crt"]])
-		for i in 4:
-			row.pressed.emit()
-			seen.append([row.text, settings._values["retro_filter"], settings._values["crt"]])
-	_check(seen == [["< ON >", true, true], ["< COLOUR >", true, false], ["< CRT >", false, true], ["< OFF >", false, false], ["< ON >", true, true]],
-			"crt: RETRO FILTER steps ON, COLOUR, CRT, OFF, round again, each setting both (%s)" % [seen])
+	var no_row := not _has_label(fe, "RETRO FILTER") and _has_label(fe, "BLOOD")
 	fe.free()
-	# The lens: a quad over the camera's view, there while CRT is on (and gone with it off), focused
-	# on him (his distance from the camera), reading the depth.
+	_check(no_settings and no_row and not ResourceLoader.exists("res://assets/shaders/psx/crt_focus.gdshader"),
+			"crt: gone, and the colour filter can't be turned off (no RETRO FILTER row, no crt or retro_filter setting)")
 	var gs := root.get_node("GameState")
 	var was_alert: int = gs.alert_level
 	var was_active: bool = gs.run_active
 	var level := await _locked_doors_level(gs, false)
 	level._process(1.0 / 30.0)
-	var lens: MeshInstance3D = level._crt
-	var mat: ShaderMaterial = level._crt_mat
-	var on_ok: bool = lens != null and lens.visible and lens.get_parent() == level._camera and mat.shader.code.contains("hint_depth_texture") 			and mat.render_priority == Material.RENDER_PRIORITY_MIN
-	var want: float = level._camera.global_position.distance_to(level._player.global_position + Vector3.UP * level.CRT_FOCUS_Y)
-	var focus_ok := is_equal_approx(float(mat.get_shader_parameter("focus")), want)
-	settings._values["crt"] = false
 	level._apply_settings()
-	var off_ok: bool = not lens.visible and level._hud._grade != null and level._hud._grade.visible
-	_check(on_ok and focus_ok and off_ok, "crt: a lens over the camera's view, focused on him (%.2f m), the depth read; gone with CRT off, the colour filter still on" % want)
+	var lens := level.find_child("CrtLens", true, false)
+	_check(lens == null and level._hud._grade != null and level._hud._grade.visible, "crt: nothing over the camera's view; the colour filter on in the level")
 	level.queue_free()
 	await process_frame
 	gs.alert_level = was_alert
@@ -697,7 +674,7 @@ func _test_settings_screen() -> void:
 		if not l.is_queued_for_deletion():
 			labels[(l as Label).text] = l
 	var y_of := func(t: String) -> float: return (labels[t] as Label).position.y if labels.has(t) else -1.0
-	_check(y_of.call("BLOOD") > y_of.call("RETRO FILTER") and y_of.call("BLOOD") < y_of.call("CONTROLS"), "settings: BLOOD is in DISPLAY, under RETRO FILTER")
+	_check(y_of.call("BLOOD") > y_of.call("SCREEN SHAKE") and y_of.call("BLOOD") < y_of.call("CONTROLS"), "settings: BLOOD is in DISPLAY, under SCREEN SHAKE")
 	_check(y_of.call("TRIGGER") > y_of.call("AIM") and y_of.call("TRIGGER") < y_of.call("SWIPE SPEED"), "settings: TRIGGER is under CONTROLS, where FIRE BUTTON was")
 	# BLOOD's ON / OFF button, level with its label: a press switches it.
 	var blood_btn: Button = null
@@ -6748,7 +6725,7 @@ func _l10n_shared_room(lang: String, args: Dictionary) -> void:
 	if 26.0 + UiKit.text_w(L10n.t("SETTINGS_LANGUAGE")) + FE.ROW_GAP > FE.ROW_END - FE.row_button_w(langs, 94.0):
 		bad.append("settings row LANGUAGE")
 	var on_w: float = FE.row_button_w([FE.on_off(true), FE.on_off(false)], 48.0)
-	for id in ["SETTINGS_SOUND", "SETTINGS_SCREEN_SHAKE", "SETTINGS_RETRO_FILTER", "SETTINGS_BLOOD"]:
+	for id in ["SETTINGS_SOUND", "SETTINGS_SCREEN_SHAKE", "SETTINGS_BLOOD"]:
 		if 26.0 + UiKit.text_w(L10n.t(id)) + FE.ROW_GAP > FE.ROW_END - on_w:
 			bad.append("settings row " + id)
 	var again_w: float = FE.row_button_w([L10n.t("SETTINGS_SHOW_AGAIN"), L10n.t("SETTINGS_DONE")], 80.0)

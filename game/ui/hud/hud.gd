@@ -676,7 +676,7 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 	_cctv_label.visible = on
 	_cctv_rec.visible = on
 	if _grade:
-		_grade.visible = not on and _retro
+		_grade.visible = not on
 	if not on:
 		return
 	_cctv_mat.set_shader_parameter("amount", 1.0)
@@ -688,7 +688,6 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 
 var _grade: ColorRect
 var _grade_mat: ShaderMaterial
-var _retro := true
 var _bars: Array[ColorRect] = []
 var _bars_tween: Tween
 ## The boss's KO replay: REPLAY (blinking, in the top bar) and TAP TO SKIP (in the bottom one).
@@ -711,13 +710,6 @@ func set_grade(alert: float, caution: float) -> void:
 		move_child(_grade, 0)
 	_grade_mat.set_shader_parameter("alert", alert)
 	_grade_mat.set_shader_parameter("caution", caution)
-
-
-## The RETRO FILTER setting: the colour grade and dither on or off.
-func set_retro_filter(on: bool) -> void:
-	_retro = on
-	if _grade:
-		_grade.visible = on and not (_cctv != null and _cctv.visible)
 
 
 ## Cinema bars top and bottom (the opening pan, the boss's KO replay); they slide in and away on

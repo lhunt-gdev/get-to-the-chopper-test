@@ -487,33 +487,6 @@ var _squad_caught := false
 var _squad_shaken := false
 var _rear_vp: SubViewport
 var _rear_cam: Camera3D
-## The CRT effect, focused like a lens on CROSS (the decision log's "Less texture flicker"): a quad over
-## the camera's view (crt_focus.gdshader), the effect growing with each pixel's distance behind him.
-## His height (m) the focus is measured to (his chest).
-const CRT_FOCUS_Y := 1.2
-var _crt: MeshInstance3D
-var _crt_mat: ShaderMaterial
-
-
-func _crt_lens() -> MeshInstance3D:
-	if _crt == null:
-		_crt_mat = ShaderMaterial.new()
-		_crt_mat.shader = preload("res://assets/shaders/psx/crt_focus.gdshader")
-		# First of the see-through things: after the solid world (whose depth it reads), and before
-		# glass, beams and sparks, so they're drawn over it as they are.
-		_crt_mat.render_priority = Material.RENDER_PRIORITY_MIN
-		var q := QuadMesh.new()
-		_crt = MeshInstance3D.new()
-		_crt.name = "CrtLens"
-		_crt.mesh = q
-		_crt.material_override = _crt_mat
-		_crt.extra_cull_margin = 16384.0  # (it fills the view wherever the camera looks)
-		_crt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_crt.position = Vector3(0, 0, -0.5)
-		_camera.add_child(_crt)
-	return _crt
-
-
 ## The stairs doors' arrow meshes, one per width (_arrow_mesh).
 var _arrow_meshes := {}
 ## The textures to make ahead of time (_warm_textures), and the next one's place in the list.
@@ -772,8 +745,6 @@ func _apply_settings() -> void:
 	tuning.swipe_min_fraction = _swipe_base * {"low": 1.4, "medium": 1.0, "high": 0.7}.get(String(Settings.get_value("swipe")), 1.0)
 	_ambience.brightness_scale = float(Settings.get_value("brightness")) / 100.0
 	_shake_on = bool(Settings.get_value("screen_shake"))
-	_hud.set_retro_filter(bool(Settings.get_value("retro_filter")))
-	_crt_lens().visible = bool(Settings.get_value("crt"))
 	_hud.redraw_fire()
 	_hud.redraw_buttons()
 
@@ -1024,8 +995,6 @@ func _update_environment(delta: float) -> void:
 	_ambience.update(delta, _camera, GameState.alert_level if GameState.run_active else START_ALERT, rear)
 	var edges := _ambience.screen_alert()
 	_hud.set_grade(edges.x, edges.y)
-	if _crt != null and _crt.visible:
-		_crt_mat.set_shader_parameter("focus", _camera.global_position.distance_to(_player.global_position + Vector3.UP * CRT_FOCUS_Y))
 	_snow.emitting = theme.get("snow", false)
 	_snow.visible = not in_stairwell()  # it follows the camera: none inside, in front of the security camera
 	_snow.global_position = _camera.global_position - _camera.global_basis.z * 6.0 + Vector3(0, 5.0, 0)
