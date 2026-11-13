@@ -745,7 +745,6 @@ func _build_settings() -> void:
 	y = _language_row(y)
 	y = _slider_row(L10n.t("SETTINGS_BRIGHTNESS"), "brightness", y, 50, 150)
 	y = _toggle_row(L10n.t("SETTINGS_SCREEN_SHAKE"), "screen_shake", y)
-	y = _retro_row(y)
 	y = _toggle_row(L10n.t("SETTINGS_BLOOD"), "blood", y)
 	y = _section(L10n.t("MENU_CONTROLS"), y + gap)
 	y = _choice_row(L10n.t("SETTINGS_AIM"), "aim", AIM_NAMES, y)
@@ -1592,32 +1591,6 @@ func _toggle_row(text: String, key: String, y: float) -> float:
 		clicked.emit()
 		Settings.set_value(key, not bool(Settings.get_value(key)))
 		b.text = on_off(Settings.get_value(key)))
-	return y + ROW_STEP[_roomy]
-
-
-## SETTINGS' RETRO FILTER row: the colour grade and dither ("retro_filter") and the CRT effect
-## ("crt": the decision log's "Less texture flicker"), as one choice so the screen keeps its rows:
-## ON (both), COLOUR (the grade only), CRT (the old-TV picture only), OFF, round again.
-const RETRO_CHOICES := [[true, true, "SETTINGS_ON"], [true, false, "RETRO_COLOUR"], [false, true, "RETRO_CRT"], [false, false, "SETTINGS_OFF"]]
-
-
-static func retro_choice() -> int:
-	for i in RETRO_CHOICES.size():
-		if RETRO_CHOICES[i][0] == bool(Settings.get_value("retro_filter")) and RETRO_CHOICES[i][1] == bool(Settings.get_value("crt")):
-			return i
-	return 0
-
-
-func _retro_row(y: float) -> float:
-	_row_label(L10n.t("SETTINGS_RETRO_FILTER"), y)
-	var words := RETRO_CHOICES.map(func(c: Array) -> String: return choice_text(L10n.t(c[2])))
-	var b := _row_button(words[retro_choice()], y, row_button_w(words, 94.0))
-	b.pressed.connect(func() -> void:
-		clicked.emit()
-		var c: Array = RETRO_CHOICES[(retro_choice() + 1) % RETRO_CHOICES.size()]
-		Settings.set_value("retro_filter", c[0])
-		Settings.set_value("crt", c[1])
-		b.text = choice_text(L10n.t(c[2])))
 	return y + ROW_STEP[_roomy]
 
 
