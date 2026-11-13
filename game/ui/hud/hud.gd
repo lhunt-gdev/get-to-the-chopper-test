@@ -676,7 +676,7 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 	_cctv_label.visible = on
 	_cctv_rec.visible = on
 	if _grade:
-		_grade.visible = not on and (_retro or _crt)
+		_grade.visible = not on and _retro
 	if not on:
 		return
 	_cctv_mat.set_shader_parameter("amount", 1.0)
@@ -689,7 +689,6 @@ func set_cctv(on: bool, cam: String, seconds: float) -> void:
 var _grade: ColorRect
 var _grade_mat: ShaderMaterial
 var _retro := true
-var _crt := true
 var _bars: Array[ColorRect] = []
 var _bars_tween: Tween
 ## The boss's KO replay: REPLAY (blinking, in the top bar) and TAP TO SKIP (in the bottom one).
@@ -710,26 +709,15 @@ func set_grade(alert: float, caution: float) -> void:
 		_grade.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(_grade)
 		move_child(_grade, 0)
-		_grade_mat.set_shader_parameter("grade_on", _retro)
-		_grade_mat.set_shader_parameter("crt", _crt)
-		_grade.visible = (_retro or _crt) and not (_cctv != null and _cctv.visible)
 	_grade_mat.set_shader_parameter("alert", alert)
 	_grade_mat.set_shader_parameter("caution", caution)
 
 
-## The RETRO FILTER setting (the colour grade and dither) and the CRT effect (the old-TV
-## picture: the decision log's "Less texture flicker"), each on or off.
-func set_retro_filter(on: bool, crt := _crt) -> void:
+## The RETRO FILTER setting: the colour grade and dither on or off.
+func set_retro_filter(on: bool) -> void:
 	_retro = on
-	_crt = crt
 	if _grade:
-		_grade_mat.set_shader_parameter("grade_on", _retro)
-		_grade_mat.set_shader_parameter("crt", _crt)
-		_grade.visible = (_retro or _crt) and not (_cctv != null and _cctv.visible)
-
-
-func is_crt() -> bool:
-	return _crt and _grade != null and _grade.visible
+		_grade.visible = on and not (_cctv != null and _cctv.visible)
 
 
 ## Cinema bars top and bottom (the opening pan, the boss's KO replay); they slide in and away on
