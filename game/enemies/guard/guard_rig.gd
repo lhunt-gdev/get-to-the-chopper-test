@@ -165,6 +165,7 @@ func _init(rifle_kind: GuardRifle.Kind = GuardRifle.Kind.CARBINE, model: PackedS
 	if armed:
 		_build_rifle()
 	animate(0.0, {})
+	keep_solid()  # (never dissolved by the cutout, on his feet or down: the decision log's "The enemies never dissolve in the camera cutout")
 
 
 ## A pose given before he's in the scene doesn't reach his skeleton: give it again now.

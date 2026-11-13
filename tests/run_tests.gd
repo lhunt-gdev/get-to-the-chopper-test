@@ -2177,7 +2177,7 @@ func _test_cutout() -> void:
 		if _psx(mi.material_override) and not _cut_solid(mi.material_override):
 			guard_cut += 1
 	var level_cut := not _cut_solid(PsxMaterials.flat(Color("d83a2a"))) and not _cut_solid(PsxMaterials.flat(Color("1c1c1e")))
-	_check(solid > 0 and pistol >= 5 and all_solid and guard_cut > 0 and level_cut, "the cutout: CROSS never dissolves (%d of his materials, %d of them his pistol's, and his hit flash); a guard's (%d) and the level's do" % [solid, pistol, guard_cut])
+	_check(solid > 0 and pistol >= 5 and all_solid and guard_cut == 0 and level_cut, "the cutout: CROSS never dissolves (%d of his materials, %d of them his pistol's, and his hit flash), nor a guard on his feet (%d dissolving); the level does" % [solid, pistol, guard_cut])
 	_test_cutout_figures(guard, eye, feet)
 	cross.free()
 	guard.free()
@@ -2190,21 +2190,31 @@ func _test_cutout() -> void:
 	_check(same, "the cutout: glass dissolves as the PS1 surfaces round it do (the same hole on the same dither, from one shared include), so a pane never hangs over CROSS once its frame has gone")
 
 
-## The cutout and the guards (and the dogs): one standing between the camera and CROSS dissolves all
-## the way down, boots and all (his materials have no floor rule: PsxMaterials.figure), while the
-## level keeps it (the floor under him stays); once he's down his body never dissolves (a guard who
-## falls, the boss killed, a dog shot: SoldierRig.keep_solid, DogRig.keep_solid), what hangs on him
-## too (a radio), so it doesn't melt away as you run past it; one still on his feet keeps
-## dissolving. `live`: a guard on his feet; `eye` and `feet`: the play camera and CROSS, as aimed.
+## The cutout and the enemies (user, 2026-11-13: "for the enemies its not necessary for them to also
+## disappear"; the decision log's "The enemies never dissolve in the camera cutout"): a guard, the
+## scout and his radio, the boss and a dog never dissolve, on their feet or down (SoldierRig.keep_solid,
+## DogRig.keep_solid), while the level does, keeping the floor under him. The shader's figure rule
+## (no floor rule, all at once inside the hole: PsxMaterials.figure) stays for anything given it.
+## `live`: a guard on his feet; `eye` and `feet`: the play camera and CROSS, as aimed.
 func _test_cutout_figures(live: GuardRig, eye: Vector3, feet: Vector3) -> void:
 	var guard := GuardRig.new(GuardRifle.Kind.CARBINE)
 	var dog := DogRig.new()
 	var figures := 0
-	var to_floor := true
+	var live_solid := true
 	for mi: MeshInstance3D in live._meshes + dog._meshes:
 		if _psx(mi.material_override):
 			figures += 1
-			to_floor = to_floor and _cut_to_floor(mi.material_override) and not _cut_solid(mi.material_override)
+			live_solid = live_solid and _cut_solid(mi.material_override)
+	var scout := GuardRig.new(GuardRifle.Kind.CARBINE, SecurityTrooper.SCOUT, "SCOUT", false)
+	for mi: MeshInstance3D in scout.find_children("*", "MeshInstance3D", true, false):
+		if _psx(mi.material_override):
+			figures += 1
+			live_solid = live_solid and _cut_solid(mi.material_override)
+	scout.free()
+	var to_floor := _cut_to_floor(PsxMaterials.figure(PsxMaterials.flat(Color("1c1c1a"))))
+	var radio_src := FileAccess.get_file_as_string("res://game/enemies/security_trooper/security_trooper.gd")
+	live_solid = live_solid and radio_src.contains("PsxMaterials.solid(PsxMaterials.flat(color))") and radio_src.contains("PsxMaterials.solid(PsxMaterials.glow(AMBER))")
+	_check(figures >= 3 and live_solid, "the cutout: the enemies on their feet never dissolve (%d materials: a guard, the scout, a dog; the scout's radio made solid)" % figures)
 	var tile := ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGB8))
 	var level_floor := not _cut_to_floor(PsxMaterials.flat(Color("1c1c1e"))) and not _cut_to_floor(PsxMaterials.textured(tile))
 	# The boots of a guard 1.4 m in front of him, toward the camera: 2 cm over the floor.
@@ -2215,8 +2225,8 @@ func _test_cutout_figures(live: GuardRig, eye: Vector3, feet: Vector3) -> void:
 	var lit_code: String = PsxMaterials.SHADER.code
 	var inc := FileAccess.get_file_as_string("res://assets/shaders/psx/psx_cutout.gdshaderinc")
 	var shader := lit_code.contains("uniform bool cutout_floor = true;") and lit_code.contains("FRAGCOORD.xy, cutout_floor)") 			and inc.contains("(keep_floor && at.y <= cutout_misc.x)") and PsxMaterials.GLASS_SHADER.code.contains("FRAGCOORD.xy, true)")
-	_check(figures >= 3 and to_floor and level_floor and boot_cut > 0.5 and floor_kept == 0.0 and shader,
-			"the cutout: a guard or a dog between the camera and CROSS dissolves all the way down (%d materials, boots and paws: %.2f of a boot cut), while the level's floor under him stays (%.2f)" % [figures, boot_cut, floor_kept])
+	_check(to_floor and level_floor and boot_cut > 0.5 and floor_kept == 0.0 and shader,
+			"the cutout: the figure rule (no floor rule: %.2f of a boot cut) for anything given it, while the level's floor under him stays (%.2f)" % [boot_cut, floor_kept])
 	# The rim (user: the dissolve left faint dithered legs of a live guard at the rim near the lens): a
 	# figure goes all at once inside the hole, its dithered rim and the fade near his depth included,
 	# and is whole outside it; the level's surfaces (walls, props) keep the dithered edge as they were.
@@ -2254,8 +2264,8 @@ func _test_cutout_figures(live: GuardRig, eye: Vector3, feet: Vector3) -> void:
 	for mi: MeshInstance3D in live._meshes:
 		if _psx(mi.material_override) and not _cut_solid(mi.material_override):
 			still_cut += 1
-	_check(down >= 7 and all_down and still_cut == figures - dog._meshes.size(),
-			"the cutout: once down, a body never dissolves (%d materials: a guard who fell, his rifle and his radio, the boss killed, a dog shot), and one still on his feet still does (%d)" % [down, still_cut])
+	_check(down >= 7 and all_down and still_cut == 0,
+			"the cutout: once down, a body never dissolves either (%d materials: a guard who fell, his rifle and his radio, the boss killed, a dog shot), nor one still on his feet (%d dissolving)" % [down, still_cut])
 	guard.free()
 	boss.free()
 	dog.free()

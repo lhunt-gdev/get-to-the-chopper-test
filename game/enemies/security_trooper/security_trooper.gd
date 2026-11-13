@@ -99,7 +99,7 @@ func _init(tuning: Tuning) -> void:
 	var bm := BoxMesh.new()
 	bm.size = Vector3(0.1, 0.06, 0.05)
 	_beacon.mesh = bm
-	_beacon.material_override = PsxMaterials.glow(AMBER)
+	_beacon.material_override = PsxMaterials.solid(PsxMaterials.glow(AMBER))
 	_beacon.position = Vector3(-0.01, 0.12, 0.01)
 	radio.add_child(_beacon)
 	var shadow := MeshInstance3D.new()
@@ -369,6 +369,6 @@ func _part(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	m.mesh = mesh
-	m.material_override = PsxMaterials.flat(color)
+	m.material_override = PsxMaterials.solid(PsxMaterials.flat(color))  # (never dissolved, like him)
 	m.position = pos
 	parent.add_child(m)

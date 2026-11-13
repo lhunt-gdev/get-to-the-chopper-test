@@ -87,12 +87,14 @@ static func textured(tex: Texture2D, uv_scale: Vector2 = Vector2.ONE, unlit: boo
 	return _cache[key]
 
 
-## The same PS1 material, but never dissolved by the cutout (Cutout): CROSS's own, and a guard's or a
-## dog's once he's down (SoldierRig.keep_solid, DogRig.keep_solid), so the live guards and the level
-## keep theirs. Anything not drawn in the PS1 shader (the glow of his goggles) never is anyway, so it
-## comes back as it is.
+## The same PS1 material, but never dissolved by the cutout (Cutout): CROSS's own, and the enemies'
+## (the guards, the boss, the dogs: SoldierRig.keep_solid, DogRig.keep_solid; the decision log's "The
+## enemies never dissolve in the camera cutout"), so the level keeps its own. Anything not drawn in
+## the PS1 shader (the glow of his goggles), or already solid, comes back as it is.
 static func solid(m: Material) -> Material:
 	if not (m is ShaderMaterial and (m as ShaderMaterial).shader == SHADER):
+		return m
+	if (m as ShaderMaterial).get_shader_parameter("cutout") == false:
 		return m
 	var key := "solid_%d" % m.get_instance_id()
 	if not _cache.has(key):

@@ -63,6 +63,7 @@ var _solid := false
 func _init() -> void:
 	name = "DOG"
 	_build()
+	keep_solid()  # (never dissolved by the cutout, on his feet or down: the decision log's "The enemies never dissolve in the camera cutout")
 
 
 func _ready() -> void:
@@ -81,8 +82,8 @@ func fall() -> void:
 	set_process(true)
 
 
-## Never dissolved by the cutout from now on (Cutout; he's down): his own copies of his materials
-## (PsxMaterials.solid), so the live dogs keep theirs.
+## Never dissolved by the cutout (Cutout): set as he's made (the decision log's "The enemies never
+## dissolve in the camera cutout"); his own copies of his materials (PsxMaterials.solid).
 func keep_solid() -> void:
 	if _solid:
 		return
