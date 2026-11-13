@@ -620,9 +620,9 @@ func _test_blood_setting() -> void:
 
 
 ## The decision log's "Less texture flicker": the CRT effect on by default; SETTINGS' RETRO FILTER row
-## steps through ON (both), COLOUR, CRT, OFF and round again, setting retro_filter and crt; the HUD's
-## grade draws the grade and the CRT as set, there while either is on and gone with both off; the PS1
-## surfaces read their textures half a mip coarser; the menu camera's sway slower.
+## steps through ON (both), COLOUR, CRT, OFF and round again, setting retro_filter and crt; the CRT a
+## lens over the camera's view focused on CROSS (crt_focus.gdshader); the PS1 surfaces read their
+## textures half a mip coarser; the menu camera's sway slower.
 func _test_retro_crt() -> void:
 	var settings: Node = root.get_node("Settings")
 	var saved: Dictionary = settings._values.duplicate()
@@ -652,16 +652,26 @@ func _test_retro_crt() -> void:
 	_check(seen == [["< ON >", true, true], ["< COLOUR >", true, false], ["< CRT >", false, true], ["< OFF >", false, false], ["< ON >", true, true]],
 			"crt: RETRO FILTER steps ON, COLOUR, CRT, OFF, round again, each setting both (%s)" % [seen])
 	fe.free()
-	var hud = (load("res://game/ui/hud/hud.gd") as GDScript).new()
-	root.add_child(hud)
-	hud.set_grade(0.0, 0.0)
-	var states := []
-	for c: Array in [[true, true], [true, false], [false, true], [false, false]]:
-		hud.set_retro_filter(c[0], c[1])
-		states.append([hud._grade.visible, hud._grade_mat.get_shader_parameter("grade_on"), hud._grade_mat.get_shader_parameter("crt")])
-	_check(states == [[true, true, true], [true, true, false], [true, false, true], [false, false, false]],
-			"crt: the grade draws the colour filter and the CRT as set, gone with both off (%s)" % [states])
-	hud.free()
+	# The lens: a quad over the camera's view, there while CRT is on (and gone with it off), focused
+	# on him (his distance from the camera), reading the depth.
+	var gs := root.get_node("GameState")
+	var was_alert: int = gs.alert_level
+	var was_active: bool = gs.run_active
+	var level := await _locked_doors_level(gs, false)
+	level._process(1.0 / 30.0)
+	var lens: MeshInstance3D = level._crt
+	var mat: ShaderMaterial = level._crt_mat
+	var on_ok: bool = lens != null and lens.visible and lens.get_parent() == level._camera and mat.shader.code.contains("hint_depth_texture") 			and mat.render_priority == Material.RENDER_PRIORITY_MIN
+	var want: float = level._camera.global_position.distance_to(level._player.global_position + Vector3.UP * level.CRT_FOCUS_Y)
+	var focus_ok := is_equal_approx(float(mat.get_shader_parameter("focus")), want)
+	settings._values["crt"] = false
+	level._apply_settings()
+	var off_ok: bool = not lens.visible and level._hud._grade != null and level._hud._grade.visible
+	_check(on_ok and focus_ok and off_ok, "crt: a lens over the camera's view, focused on him (%.2f m), the depth read; gone with CRT off, the colour filter still on" % want)
+	level.queue_free()
+	await process_frame
+	gs.alert_level = was_alert
+	gs.run_active = was_active
 	var lit: Shader = load("res://assets/shaders/psx/psx_lit.gdshader")
 	_check(lit.code.contains("MIP_BIAS = 0.5") and lit.code.contains("texture(albedo_texture, uv, MIP_BIAS)") and IntroCamera.SWAY_RATE < 0.22,
 			"crt: PS1 surfaces read their textures half a mip coarser, and the menu camera sways slower")
