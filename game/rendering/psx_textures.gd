@@ -1180,24 +1180,26 @@ static func lobby_column() -> Texture2D:
 	return _finish("lobby_column", img)
 
 
-## MAIN FLOOR LOBBY floor (user reference): big polished tiles, dark and light in a checker, with a
-## glossy reflection streak. One tile per lane: alternate lanes come out dark and light.
+## MAIN FLOOR LOBBY floor: big tiles of dark polished stone (user, 2026-11-16, the decision log's
+## "The lobby floor: dark polished stone"; it was a black-and-white checker, too distracting behind
+## CROSS), each a shade off the next, thin dark joints, a light speckle and a faint glossy streak.
+## One tile per lane.
 static func lobby_floor() -> Texture2D:
 	if _cache.has("lobby_floor"):
 		return _cache["lobby_floor"]
-	var img := _start("lobby_floor", Color("7c7e80"), 0.03)
+	var img := _start("lobby_floor", Color("3b3e41"), 0.03)
 	for y in SIZE:
 		for x in SIZE:
 			if (x < 32) == (y < 32):
-				_put(img, x, y, Color("2e3034"))
-	_aggregate(img, "lobby_floor_flecks", 140, 0.08)
+				_put(img, x, y, Color("35383b"))
+	_aggregate(img, "lobby_floor_flecks", 140, 0.1)
 	for i in SIZE:
-		_put(img, i, 0, Color("1e2022"))
-		_put(img, 0, i, Color("1e2022"))
-		_put(img, i, 32, Color("26282a"))
-		_put(img, 32, i, Color("26282a"))
+		_put(img, i, 0, Color("26282a"))
+		_put(img, 0, i, Color("26282a"))
+		_put(img, i, 32, Color("2a2c2e"))
+		_put(img, 32, i, Color("2a2c2e"))
 	for i in 28:
-		_blend(img, 18 + i / 2, 4 + i, Color("c8ccd0"), 0.22)  # a glossy reflection
+		_blend(img, 18 + i / 2, 4 + i, Color("c8ccd0"), 0.1)  # a faint glossy streak
 	return _finish("lobby_floor", img)
 
 

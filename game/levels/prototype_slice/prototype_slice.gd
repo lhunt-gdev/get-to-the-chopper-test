@@ -227,7 +227,7 @@ const THEMES := {
 					"wall": "dock_wall"}},
 	# MAIN FLOOR LOBBY (user reference): a tall two-storey atrium (a 9 m ceiling) with a mezzanine and
 	# glass balustrades along both sides, a decorative grand staircase up one wall, dark granite,
-	# the company logo lit on its wall, lifts, plants, sofas and a polished checker floor; the
+	# the company logo lit on its wall, lifts, plants, sofas and a dark polished stone floor; the
 	# reception desk across two lanes and planters / sofas for box cover, speed gates to jump,
 	# a hanging banner to duck under, stone columns for cover walls.
 	"lobby": {"wall": "office", "wall_tex": "lobby_wall", "ceiling_tex": "lobby_ceiling", "ceiling_y": 9.0, "ambient": Color(0.38, 0.38, 0.43),
